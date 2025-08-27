@@ -1,0 +1,13 @@
+Test Case Title,Description,Test Steps,Expected Result,Module,Priority,Status,Tags,Ticket ID,Enhancement,Epic,Feature,QA Notes,Remarks
+Login with valid credentials,Verify user can login with valid username and password,"1. Navigate to login page
+2. Enter valid username
+3. Enter valid password
+4. Click login button",User should be logged in successfully and redirected to dashboard,Authentication,High,Draft,"login,security,authentication",TICKET-001,ENH-001,User Management,Login System,Test with different browsers,Critical path test case
+Login with invalid credentials,Verify error handling for invalid login attempts,"1. Navigate to login page
+2. Enter invalid username
+3. Enter valid password
+4. Click login button",Error message should be displayed and user remains on login page,Authentication,Medium,Draft,"login,negative,error-handling",TICKET-002,ENH-001,User Management,Login System,Test various invalid combinations,Edge case testing
+Password reset functionality,Verify user can reset password via email,"1. Navigate to password reset page
+2. Enter registered email address
+3. Click reset password button
+4. Check email for reset link",Password reset email should be sent with secure link,Authentication,High,Draft,"password-reset,email,security",TICKET-003,ENH-002,User Management,Password Management,Verify email delivery in different email clients,User experience critical 

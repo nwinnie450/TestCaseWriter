@@ -1,8 +1,8 @@
-# Test Case Writer Agent - Design Specification
+# Test Case Manager - Design Specification
 
 ## 1. Executive Summary
 
-This design specification outlines the complete user experience and interface design for the Test Case Writer Agent, an enterprise-grade tool for QA teams to generate, manage, and export test cases through AI-powered automation and flexible template systems.
+This design specification outlines the complete user experience and interface design for the Test Case Manager, an enterprise-grade tool for QA teams to generate, manage, and export test cases through AI-powered automation and flexible template systems.
 
 ### 1.1 Design Philosophy
 - **Enterprise-First**: Clean, professional interfaces optimized for productivity
@@ -22,7 +22,7 @@ This design specification outlines the complete user experience and interface de
 
 ### 2.1 Site Map
 ```
-Test Case Writer Agent
+Test Case Manager
 ├── Dashboard (Home)
 ├── Template Editor
 │   ├── Template Library
@@ -811,7 +811,7 @@ Profile Settings
 
 ## Conclusion
 
-This design specification provides a comprehensive blueprint for building a professional, enterprise-grade Test Case Writer Agent. The design prioritizes user efficiency, data management capabilities, and seamless integration workflows while maintaining accessibility and performance standards.
+This design specification provides a comprehensive blueprint for building a professional, enterprise-grade Test Case Manager. The design prioritizes user efficiency, data management capabilities, and seamless integration workflows while maintaining accessibility and performance standards.
 
 The modular component approach ensures maintainable code, while the responsive design strategy accommodates diverse user environments from mobile QA testing to desktop bulk operations.
 

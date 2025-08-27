@@ -23,7 +23,9 @@ import {
   LogOut,
   UserIcon,
   SettingsIcon,
-  Folder
+  Folder,
+  Book,
+  GitPullRequest
 } from 'lucide-react'
 import { useState } from 'react'
 import { NotificationDropdown } from '@/components/notifications/NotificationDropdown'
@@ -35,6 +37,8 @@ const navigationItems = [
   { name: 'Generate', href: '/generate', icon: Wand2 },
   { name: 'Library', href: '/library', icon: Database },
   { name: 'Export', href: '/export', icon: Download },
+  { name: 'Management', href: '/management', icon: GitPullRequest },
+  { name: 'Docs', href: '/docs', icon: Book },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
@@ -100,7 +104,7 @@ export function Header() {
               <div className="h-10 w-10 bg-primary-600 rounded-lg flex items-center justify-center">
                 <Wand2 className="h-6 w-6 text-white" />
               </div>
-              <span className="text-2xl font-bold text-gray-900">Test Case Writer</span>
+              <span className="text-2xl font-bold text-gray-900">Test Case Manager</span>
             </button>
           </div>
 
@@ -136,7 +140,7 @@ export function Header() {
                 <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search test cases..."
+                  placeholder="Search test cases, projects, templates..."
                   className="w-80 pl-12 pr-6 py-3 border border-gray-300 rounded-md text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
               </div>

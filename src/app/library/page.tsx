@@ -12,6 +12,8 @@ import { exportTestCases, quickExportCSV, quickExportJSON } from '@/lib/export-u
 import { TestCaseDetailModal } from '@/components/library/TestCaseDetailModal'
 import { TestCaseEditModal } from '@/components/library/TestCaseEditModal'
 import { BulkEditModal } from '@/components/library/BulkEditModal'
+import { ImportModal } from '@/components/import/ImportModal'
+import { VersionHistoryModal } from '@/components/library/VersionHistoryModal'
 import { 
   Plus, 
   Upload, 
@@ -34,9 +36,13 @@ export default function TestCaseLibrary() {
   const [editingTestCase, setEditingTestCase] = useState<TestCase | null>(null)
   const [groupBy, setGroupBy] = useState<string>('none')
   const [showBulkEditModal, setShowBulkEditModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [showVersionHistoryModal, setShowVersionHistoryModal] = useState(false)
+  const [selectedVersionTestCase, setSelectedVersionTestCase] = useState<TestCase | null>(null)
   const [projects, setProjects] = useState<Array<{id: string, name: string}>>([])
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>('')
   const [filteredTestCases, setFilteredTestCases] = useState<TestCase[]>([])
+  const [templates, setTemplates] = useState<Array<{id: string, name: string, fields: any[]}>>([])
 
   // Load test cases from localStorage on component mount
   useEffect(() => {
@@ -100,6 +106,32 @@ export default function TestCaseLibrary() {
     } catch (error) {
       console.error('🔍 Projects Debug - Failed to load projects:', error)
       setProjects([])
+    }
+  }, [])
+
+  // Load templates from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('testCaseWriter_templates')
+      if (stored) {
+        const parsedTemplates = JSON.parse(stored)
+        setTemplates(parsedTemplates)
+      } else {
+        // Create default template if none exist
+        const defaultTemplate = {
+          id: 'default-template',
+          name: 'Default Template',
+          fields: [
+            { id: 'title', label: 'Title', type: 'text', required: true },
+            { id: 'description', label: 'Description', type: 'textarea', required: false },
+            { id: 'priority', label: 'Priority', type: 'select', required: false }
+          ]
+        }
+        setTemplates([defaultTemplate])
+      }
+    } catch (error) {
+      console.error('Failed to load templates:', error)
+      setTemplates([])
     }
   }, [])
 
@@ -265,6 +297,11 @@ export default function TestCaseLibrary() {
     setShowBulkEditModal(true)
   }
 
+  const handleOpenVersionHistory = (testCase: TestCase) => {
+    setSelectedVersionTestCase(testCase)
+    setShowVersionHistoryModal(true)
+  }
+
   const handleBulkSave = async (updates: Partial<TestCase>) => {
     try {
       console.log('Bulk updating test cases:', selectedIds, updates)
@@ -379,8 +416,36 @@ export default function TestCaseLibrary() {
   }
 
   const handleBulkImport = () => {
-    console.log('Bulk import test cases')
-    alert('Bulk import feature coming soon!')
+    setShowImportModal(true)
+  }
+
+  const handleImportTestCases = (importedTestCases: any[]) => {
+    try {
+      // Import storage functions
+      const { saveTestCases, getAllStoredTestCases, getStorageStats } = require('@/lib/test-case-storage')
+      
+      // Save imported test cases
+      const sessionId = saveTestCases(
+        importedTestCases,
+        [`imported-${Date.now()}`],
+        'import',
+        selectedProjectFilter || projects[0]?.id || 'default-project',
+        projects.find(p => p.id === (selectedProjectFilter || projects[0]?.id))?.name || 'Default Project'
+      )
+      
+      // Refresh the UI
+      const updatedTestCases = getAllStoredTestCases()
+      const updatedStats = getStorageStats()
+      
+      setTestCases(updatedTestCases)
+      setStorageStats(updatedStats)
+      
+      alert(`✅ Successfully imported ${importedTestCases.length} test cases!`)
+      
+    } catch (error) {
+      console.error('Failed to import test cases:', error)
+      alert('❌ Failed to import test cases. Please try again.')
+    }
   }
 
   const handleGenerateAI = () => {
@@ -782,6 +847,7 @@ export default function TestCaseLibrary() {
                 onDelete={handleDelete}
                 onExport={handleExport}
                 onBulkEdit={handleBulkEdit}
+                onVersionHistory={handleOpenVersionHistory}
                 loading={loading}
                 projects={projects.reduce((acc, project) => {
                   acc[project.id] = project.name
@@ -805,6 +871,7 @@ export default function TestCaseLibrary() {
                       onDelete={handleDelete}
                       onExport={handleExport}
                       onBulkEdit={handleBulkEdit}
+                      onVersionHistory={handleOpenVersionHistory}
                       loading={false}
                       projects={projects.reduce((acc, project) => {
                         acc[project.id] = project.name
@@ -904,6 +971,28 @@ export default function TestCaseLibrary() {
         selectedTestCases={filteredTestCases.filter(tc => selectedIds.includes(tc.id))}
         onSave={handleBulkSave}
       />
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImportTestCases}
+        templates={templates}
+        projects={projects}
+        currentProjectId={selectedProjectFilter}
+      />
+
+      {/* Version History Modal */}
+      {selectedVersionTestCase && (
+        <VersionHistoryModal
+          isOpen={showVersionHistoryModal}
+          onClose={() => {
+            setShowVersionHistoryModal(false)
+            setSelectedVersionTestCase(null)
+          }}
+          testCase={selectedVersionTestCase}
+        />
+      )}
     </Layout>
   )
 }

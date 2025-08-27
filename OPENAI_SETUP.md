@@ -1,7 +1,7 @@
 # OpenAI Integration Setup Guide
 
 ## Overview
-The Test Case Writer now supports real AI-powered test case generation using OpenAI's GPT models. Users can configure their API keys and generate intelligent, context-aware test cases from requirements documents.
+The Test Case Manager now supports real AI-powered test case generation using OpenAI's GPT models. Users can configure their API keys and generate intelligent, context-aware test cases from requirements documents.
 
 ## Features
 

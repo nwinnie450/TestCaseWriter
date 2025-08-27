@@ -27,6 +27,20 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.production
+.env.development
+.env.test
+
+# API Keys and Sensitive Configuration
+api-keys.json
+api-keys.local.json
+config/secrets.json
+config/api-keys.json
+secrets/
+*.key
+*.pem
+*.p12
+*.pfx
 
 # vercel
 .vercel
@@ -61,3 +75,36 @@ temp/
 # Cache
 .cache/
 .parcel-cache/
+
+# Security and Credentials
+credentials/
+auth/
+tokens/
+*.token
+*.secret
+secrets.json
+secrets.local.json
+
+# User-specific configuration
+user-config.json
+user-settings.json
+local-settings.json
+
+# Additional security patterns
+**/secrets/
+**/credentials/
+**/auth/
+**/tokens/
+**/*.key
+**/*.secret
+**/*.token
+**/*.pem
+**/*.p12
+**/*.pfx
+
+# Backup and temporary files
+*.bak
+*.backup
+*.tmp
+*.temp
+*~

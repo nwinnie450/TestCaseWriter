@@ -1249,35 +1249,6 @@ Template: ${selectedTemplate.description}`
           setShowAPIKeyModal(false)
         }}
       />
-      {/* Test Tag Generation Button - Remove after debugging */}
-      <div className="mt-4 p-4 border border-yellow-300 bg-yellow-50 rounded-lg">
-        <h3 className="text-lg font-semibold text-yellow-800 mb-2">🔍 Debug: Test Tag Generation</h3>
-        <p className="text-sm text-yellow-700 mb-3">Current tags: {tags.join(', ') || 'None'}</p>
-        <div className="flex space-x-2">
-          <Button 
-            variant="secondary" 
-            size="sm"
-            onClick={() => {
-              const testTags = ['test-tag-1', 'debug-tag', 'sample-tag']
-              console.log('🔍 Test: Setting test tags:', testTags)
-              setTags(testTags)
-            }}
-          >
-            Set Test Tags
-          </Button>
-          <Button 
-            variant="secondary" 
-            size="sm"
-            onClick={() => {
-              console.log('🔍 Test: Current tags state:', tags)
-              console.log('🔍 Test: Tags length:', tags.length)
-              console.log('🔍 Test: Tags content:', tags.join(', '))
-            }}
-          >
-            Log Tags State
-          </Button>
-        </div>
-      </div>
     </Layout>
   )
 }

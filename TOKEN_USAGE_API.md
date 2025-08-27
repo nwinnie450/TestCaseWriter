@@ -192,7 +192,7 @@ export function Header() {
   
   return (
     <header className="flex justify-between items-center">
-      <h1>Test Case Writer</h1>
+      <h1>Test Case Manager</h1>
       
       <div className="flex items-center space-x-4">
         {/* Today's usage indicator */}

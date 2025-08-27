@@ -55,7 +55,7 @@ export default function RegisterPage() {
         // Auto-login the newly registered user
         const loggedInUser = loginUser(formData.email, formData.password)
         if (loggedInUser) {
-          alert('✅ Registration successful!\n\nWelcome to Test Case Writer! You are now logged in.')
+          alert('✅ Registration successful!\n\nWelcome to Test Case Manager! You are now logged in.')
           window.location.href = '/'
         } else {
           alert('✅ Registration successful!\n\nPlease login with your new account.')
@@ -92,7 +92,7 @@ export default function RegisterPage() {
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Get started with{' '}
-          <span className="font-medium text-primary-600">Test Case Writer</span>
+                          <span className="font-medium text-primary-600">Test Case Manager</span>
         </p>
       </div>
 

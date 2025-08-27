@@ -94,6 +94,7 @@ export interface TestCase {
   lastModifiedBy?: string
   estimatedTime?: number // in minutes
   actualTime?: number // in minutes
+  version: number // Current version number
   
   // Grouping and organization fields
   enhancement?: string // Enhancement ID or name
@@ -108,6 +109,58 @@ export interface TestCase {
   testResult?: string // Test result
   qa?: string // QA notes
   remarks?: string // Additional remarks
+}
+
+// Test Case Versioning Types
+export interface TestCaseVersion {
+  id: string
+  testCaseId: string
+  version: number
+  data: Record<string, any> // field values at this version
+  status: 'draft' | 'active' | 'deprecated' | 'review'
+  priority: 'low' | 'medium' | 'high' | 'critical'
+  tags: string[]
+  testSteps?: TestStep[]
+  testResult?: string
+  changelog: string // What changed in this version
+  changeType: 'create' | 'update' | 'revert' | 'status_change' | 'priority_change'
+  changedFields: string[] // List of fields that were modified
+  createdAt: Date
+  createdBy: string
+  approvedBy?: string
+  approvalDate?: Date
+  isApproved: boolean
+  comments?: VersionComment[]
+}
+
+export interface VersionComment {
+  id: string
+  userId: string
+  userName: string
+  comment: string
+  createdAt: Date
+  isResolved: boolean
+  resolvedAt?: Date
+  resolvedBy?: string
+}
+
+export interface TestCaseChangeRequest {
+  id: string
+  testCaseId: string
+  requestedBy: string
+  requestedAt: Date
+  currentVersion: number
+  proposedChanges: {
+    field: string
+    oldValue: any
+    newValue: any
+    reason: string
+  }[]
+  status: 'pending' | 'approved' | 'rejected' | 'merged'
+  reviewedBy?: string
+  reviewedAt?: Date
+  reviewComments?: string
+  priority: 'low' | 'medium' | 'high'
 }
 
 export interface TestStep {

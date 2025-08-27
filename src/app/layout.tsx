@@ -6,8 +6,8 @@ import UserInitializer from '@/components/UserInitializer'
 import { ClientOnly } from '@/components/ui/ClientOnly'
 
 export const metadata: Metadata = {
-  title: 'Test Case Writer Agent',
-  description: 'Enterprise-grade Test Case Writer Agent for QA teams',
+  title: 'Test Case Manager',
+  description: 'Enterprise-grade Test Case Management System for QA teams - AI Generation, Import/Export, and Comprehensive Management',
 }
 
 export default function RootLayout({

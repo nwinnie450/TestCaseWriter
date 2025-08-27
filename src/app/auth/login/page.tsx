@@ -52,7 +52,7 @@ export default function LoginPage() {
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Welcome back to{' '}
-          <span className="font-medium text-primary-600">Test Case Writer</span>
+                          <span className="font-medium text-primary-600">Test Case Manager</span>
         </p>
       </div>
 

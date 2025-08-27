@@ -1,4 +1,4 @@
-# Test Case Writer Agent - User Guide
+# Test Case Manager - User Guide
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -15,7 +15,7 @@
 
 ## Introduction
 
-The **Test Case Writer Agent** is an enterprise-grade web application designed to revolutionize how QA teams create, manage, and export test cases. By combining AI-powered generation with customizable templates and flexible export options, it streamlines the entire test case lifecycle.
+The **Test Case Manager** is an enterprise-grade web application designed to revolutionize how QA teams create, manage, and export test cases. By combining AI-powered generation with customizable templates and flexible export options, it streamlines the entire test case lifecycle.
 
 ### Key Benefits
 - **80% reduction** in manual test case creation time
@@ -544,7 +544,7 @@ Every generated test case includes:
 
 ---
 
-*This user guide provides comprehensive information for getting the most out of your Test Case Writer Agent. For additional support or questions not covered here, please contact our support team.*
+*This user guide provides comprehensive information for getting the most out of your Test Case Manager. For additional support or questions not covered here, please contact our support team.*
 
 **Version:** 1.0  
 **Last Updated:** August 2025  

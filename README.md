@@ -1,8 +1,8 @@
-# Test Case Writer Agent
+# Test Case Manager
 
 A comprehensive, enterprise-grade web application for QA teams to generate, manage, and export test cases through AI-powered automation and flexible template systems.
 
-![Test Case Writer Agent](https://via.placeholder.com/800x400/0066CC/FFFFFF?text=Test+Case+Writer+Agent)
+![Test Case Manager](https://via.placeholder.com/800x400/0066CC/FFFFFF?text=Test+Case+Manager)
 
 ## 🌟 Features
 
@@ -20,6 +20,15 @@ A comprehensive, enterprise-grade web application for QA teams to generate, mana
 - **Seamless integration with existing testing tools**
 - **AI-powered test coverage analysis**
 - **Enterprise-grade data management**
+
+## 🔒 Security
+
+**IMPORTANT**: Never commit API keys or sensitive information to version control. See [SECURITY_GUIDE.md](./SECURITY_GUIDE.md) for detailed security best practices.
+
+### Quick Security Setup
+1. Create `.env.local` file (automatically ignored by Git)
+2. Add your API keys as environment variables
+3. Never commit `.env` files or configuration with secrets
 
 ## 🚀 Quick Start
 

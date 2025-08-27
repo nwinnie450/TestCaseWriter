@@ -85,32 +85,31 @@ function exportToExcel(testCases: TestCase[], filename: string): void {
     throw new Error('No test cases to export')
   }
   
-  // Create Excel-compatible CSV with tab separators
+  // Create Excel-compatible CSV headers
   const headers = [
-    'Test Case ID',
-    'Module', 
-    'Test Case Description',
-    'Test Steps (Step | Description | Test Data | Expected Result)',
-    'Final Expected Result',
-    'Test Result',
-    'QA Notes',
-    'Remarks'
+    'Test Steps', // Number column (defaults to 1)
+    'Test Case',  // Contains only test steps
+    'Test Result' // Contains only results
   ]
   
   const rows = testCases.map(testCase => {
-    const formattedSteps = testCase.testSteps
-      ?.map(step => `Step ${step.step}: ${step.description} | Test Data: ${step.testData} | Expected: ${step.expectedResult}`)
-      .join('\n') || 'No steps defined'
+    // Default test step number to 1
+    const testStepNumber = 1
+    
+    // Test case column contains only the test steps (clean format)
+    const testCaseSteps = testCase.testSteps
+      ?.map(step => step.description)
+      .join('\n') || testCase.testCase || 'No test steps defined'
+    
+    // Test result column contains only the expected results
+    const testResults = testCase.testSteps
+      ?.map(step => step.expectedResult)
+      .join('\n') || testCase.testResult || ''
       
     return [
-      testCase.id,
-      testCase.module,
-      testCase.testCase,
-      formattedSteps,
-      testCase.testSteps?.map(s => s.expectedResult).join('\n') || 'Not specified',
-      testCase.testResult,
-      testCase.qa,
-      testCase.remarks
+      testStepNumber,
+      testCaseSteps,
+      testResults
     ].map(cell => `"${String(cell).replace(/"/g, '""')}"`) // Escape quotes for Excel
   })
   

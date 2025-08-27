@@ -53,17 +53,17 @@ export default function Dashboard() {
   // Show different content based on authentication
   if (!currentUser) {
     return (
-      <Layout title="Welcome to Test Case Writer">
+              <Layout title="Welcome to Test Case Manager">
         <div className="space-y-8">
           {/* Welcome Section for Non-Authenticated Users */}
           <div className="text-center py-12">
             <div className="max-w-3xl mx-auto">
               <h1 className="text-4xl font-bold text-gray-900 mb-4">
-                Welcome to Test Case Writer
+                Welcome to Test Case Manager
               </h1>
               <p className="text-xl text-gray-600 mb-8">
-                AI-powered test case generation for modern QA teams. 
-                Generate comprehensive test cases from your requirements documents in minutes.
+                AI-powered test case generation and comprehensive management for modern QA teams. 
+                Generate, import, export, and manage test cases with enterprise-grade tools.
               </p>
               <div className="flex justify-center space-x-4">
                 <Link href="/auth/register">
@@ -89,13 +89,13 @@ export default function Dashboard() {
             </div>
             <div className="text-center p-6 bg-white rounded-lg shadow-sm border">
               <FileText className="h-12 w-12 text-green-600 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Multiple Formats</h3>
-              <p className="text-gray-600">Export to Excel, CSV, Jira, TestRail and more with customizable templates</p>
+              <h3 className="text-lg font-semibold mb-2">Import & Export</h3>
+              <p className="text-gray-600">Import from CSV/JSON, export to Excel, CSV, Jira, TestRail with smart field mapping</p>
             </div>
             <div className="text-center p-6 bg-white rounded-lg shadow-sm border">
               <FolderOpen className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Team Collaboration</h3>
-              <p className="text-gray-600">Organize test cases in projects and collaborate with your QA team</p>
+              <h3 className="text-lg font-semibold mb-2">Enterprise Management</h3>
+              <p className="text-gray-600">Organize test cases in projects, templates, and collaborate with your QA team</p>
             </div>
           </div>
         </div>

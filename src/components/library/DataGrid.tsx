@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { TestCase, TableColumn } from '@/types'
+import { ExpandableRow } from './ExpandableRow'
 import { 
   ChevronUp, 
   ChevronDown, 
@@ -45,6 +46,7 @@ interface DataGridProps {
   onDelete?: (testCaseIds: string[]) => void
   onExport?: (testCaseIds: string[]) => void
   onBulkEdit?: (testCaseIds: string[]) => void
+  onVersionHistory?: (testCase: TestCase) => void
   loading?: boolean
   projects?: Record<string, string>
 }
@@ -66,10 +68,11 @@ const statusColors = {
 const columnHelper = createColumnHelper<TestCase>()
 
 // Completely isolated ActionButtons component
-function ActionButtons({ testCase, onEdit, onView }: { 
+function ActionButtons({ testCase, onEdit, onView, onVersionHistory }: { 
   testCase: TestCase, 
   onEdit?: (testCase: TestCase) => void,
-  onView?: (testCase: TestCase) => void 
+  onView?: (testCase: TestCase) => void,
+  onVersionHistory?: (testCase: TestCase) => void
 }) {
   const [showDropdown, setShowDropdown] = React.useState(false)
   
@@ -304,6 +307,23 @@ function ActionButtons({ testCase, onEdit, onView }: {
               <button
                 className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
                 onClick={(e) => {
+                  console.log('🟡 Version History menu item clicked')
+                  setShowDropdown(false)
+                  if (onVersionHistory) {
+                    onVersionHistory(testCase)
+                  }
+                }}
+                title="View complete version history - See all changes, updates, and modifications made to this test case over time"
+              >
+                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Version History
+              </button>
+              
+              <button
+                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
+                onClick={(e) => {
                   console.log('🟡 Export menu item clicked')
                   setShowDropdown(false)
                   handleExportSingle(e)
@@ -342,6 +362,7 @@ export function DataGrid({
   onDelete, 
   onExport, 
   onBulkEdit, 
+  onVersionHistory,
   loading = false,
   projects = {}
 }: DataGridProps) {
@@ -359,23 +380,34 @@ export function DataGrid({
     console.log('🔵 DataGrid - expandedRows state changed:', Array.from(expandedRows))
   }, [expandedRows])
 
-  // Add missing expandAll and collapseAll functions
-  const expandAll = () => {
-    const allIds = new Set(data.map(tc => tc.id))
-    console.log('🔴 DataGrid - Expanding all rows:', { 
-      totalRows: data.length, 
-      allIds: Array.from(allIds),
-      currentExpandedRows: Array.from(expandedRows)
+  // Debug logging for data changes
+  useEffect(() => {
+    console.log('🔵 DataGrid - data changed:', {
+      length: data.length,
+      ids: data.map(tc => tc.id).slice(0, 5),
+      hasTestSteps: data.filter(tc => tc.testSteps && tc.testSteps.length > 0).length
     })
-    setExpandedRows(allIds)
-  }
+    
+    // Log actual data structure for first few test cases
+    if (data.length > 0) {
+      console.log('🔵 DataGrid - First test case full structure:', data[0])
+      console.log('🔵 DataGrid - Sample data structures:', data.slice(0, 3).map(tc => ({
+        id: tc.id,
+        enhancement: tc.enhancement,
+        ticketId: tc.ticketId,
+        tags: tc.tags,
+        projectId: tc.projectId,
+        data: tc.data ? {
+          enhancement: tc.data.enhancement,
+          ticketId: tc.data.ticketId,
+          tags: tc.data.tags,
+          projectId: tc.data.projectId
+        } : null,
+        allKeys: Object.keys(tc)
+      })))
+    }
+  }, [data])
 
-  const collapseAll = () => {
-    console.log('🔴 DataGrid - Collapsing all rows:', {
-      currentExpandedRows: Array.from(expandedRows)
-    })
-    setExpandedRows(new Set())
-  }
 
   const columns = useMemo(() => [
     columnHelper.display({
@@ -413,148 +445,26 @@ export function DataGrid({
       header: 'Test Case Details',
       cell: (info) => {
         const testCase = info.row.original
-        const title = testCase.data?.title || testCase.testCase || 'Test Case'
-        const description = testCase.data?.description || testCase.testCase || 'No description'
-        const steps = testCase.testSteps || []
-        const stepCount = steps.length
         const isExpanded = expandedRows.has(testCase.id)
         
-        // Debug logging for test case data
-        console.log('🔍 DataGrid - Test case data:', {
-          id: testCase.id,
-          title,
-          description,
-          stepsLength: steps.length,
-          testSteps: testCase.testSteps,
-          hasTestSteps: !!testCase.testSteps,
-          isExpanded
-        })
-        
-        const toggleExpanded = (e: React.MouseEvent) => {
-          e.stopPropagation()
-          e.preventDefault()
-          console.log('🔵 DataGrid - toggleExpanded called for:', testCase.id, 'Current expanded:', Array.from(expandedRows))
-          
-          const newExpanded = new Set(expandedRows)
-          if (isExpanded) {
-            console.log('🔵 DataGrid - Collapsing row:', testCase.id)
-            newExpanded.delete(testCase.id)
-          } else {
-            console.log('🔵 DataGrid - Expanding row:', testCase.id)
-            newExpanded.add(testCase.id)
-          }
-          
-          console.log('🔵 DataGrid - New expanded set:', Array.from(newExpanded))
-          setExpandedRows(newExpanded)
-        }
-        
         return (
-          <div className="max-w-2xl space-y-2">
-            {/* Header with Title and Toggle Button */}
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <p className={cn("font-medium text-gray-900", isExpanded ? "" : "line-clamp-2")}>
-                  {title}
-                </p>
-                <p className={cn("text-sm text-gray-600", isExpanded ? "" : "line-clamp-1")}>
-                  {description}
-                </p>
-              </div>
-              
-              {/* Toggle Button */}
-              <button
-                onClick={toggleExpanded}
-                className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                title={isExpanded ? "Collapse" : "Expand"}
-              >
-                {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </button>
-            </div>
-            
-            {/* Steps - Always show in collapsed state, show all when expanded */}
-            {stepCount > 0 && (
-              <div className="bg-gray-50 p-2 rounded text-xs">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="font-medium text-gray-700">
-                    {stepCount} Test Step{stepCount !== 1 ? 's' : ''}:
-                  </p>
-                  {!isExpanded && stepCount > 2 && (
-                    <button
-                      onClick={(e) => {
-                        console.log('🟡 View All button clicked for:', testCase.id)
-                        e.stopPropagation()
-                        e.preventDefault()
-                        console.log('🟡 About to call toggleExpanded() from View All')
-                        toggleExpanded(e)
-                        console.log('🟡 toggleExpanded() from View All called successfully')
-                      }}
-                      className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                    >
-                      View All
-                    </button>
-                  )}
-                </div>
-                
-                <div className="space-y-1">
-                  {(isExpanded ? steps : steps.slice(0, 2)).map((step, index) => (
-                    <div key={index} className="text-gray-600">
-                      <p className={isExpanded ? "" : "line-clamp-1"}>
-                        <span className="font-medium">{step.step}.</span> {step.description}
-                      </p>
-                      
-                      {/* Show test data and expected result when expanded */}
-                      {isExpanded && (
-                        <div className="ml-4 mt-1 space-y-1">
-                          {step.testData && (
-                            <p className="text-xs text-gray-500">
-                              <span className="font-medium">Test Data:</span> {step.testData}
-                            </p>
-                          )}
-                          <p className="text-xs text-green-600">
-                            <span className="font-medium">Expected:</span> {step.expectedResult}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  
-                  {!isExpanded && stepCount > 2 && (
-                    <p className="text-gray-500 italic">
-                      +{stepCount - 2} more steps...
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-            
-            {/* Expected Result Summary (only show when collapsed) */}
-            {!isExpanded && testCase.testSteps?.[0]?.expectedResult && (
-              <div className="text-xs">
-                <span className="font-medium text-green-700">Expected: </span>
-                <span className="text-green-600 line-clamp-1">
-                  {testCase.testSteps[0].expectedResult}
-                </span>
-              </div>
-            )}
-            
-            {/* Additional info when expanded */}
-            {isExpanded && (
-              <div className="space-y-2 text-xs border-t border-gray-200 pt-2">
-                {testCase.qa && (
-                  <div>
-                    <span className="font-medium text-yellow-700">QA Notes: </span>
-                    <span className="text-yellow-600">{testCase.qa}</span>
-                  </div>
-                )}
-                {testCase.remarks && (
-                  <div>
-                    <span className="font-medium text-gray-700">Remarks: </span>
-                    <span className="text-gray-600">{testCase.remarks}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <ExpandableRow 
+            testCase={testCase}
+            forceExpanded={isExpanded}
+            onToggle={(id, expanded) => {
+              console.log('🔵 ExpandableRow onToggle:', id, expanded)
+              setExpandedRows(prev => {
+                const newExpanded = new Set(prev)
+                if (expanded) {
+                  newExpanded.add(id)
+                } else {
+                  newExpanded.delete(id)
+                }
+                console.log('🔵 New expanded state:', Array.from(newExpanded))
+                return newExpanded
+              })
+            }}
+          />
         )
       },
       size: 500
@@ -569,6 +479,12 @@ export function DataGrid({
           {info.getValue()}
         </span>
       ),
+      filterFn: (row, columnId, value) => {
+        const testCase = row.original
+        const priority = testCase.priority || testCase.data?.priority || 'medium'
+        console.log('🔍 Priority filter check:', { testCaseId: testCase.id, priority, filterValue: value, matches: priority.toLowerCase() === value.toLowerCase() })
+        return priority.toLowerCase() === value.toLowerCase()
+      },
       size: 100
     }),
     columnHelper.accessor('status', {
@@ -581,9 +497,16 @@ export function DataGrid({
           {info.getValue()}
         </span>
       ),
+      filterFn: (row, columnId, value) => {
+        const testCase = row.original
+        const status = testCase.status || testCase.data?.status || 'draft'
+        console.log('🔍 Status filter check:', { testCaseId: testCase.id, status, filterValue: value, matches: status.toLowerCase() === value.toLowerCase() })
+        return status.toLowerCase() === value.toLowerCase()
+      },
       size: 100
     }),
     columnHelper.accessor((row) => row.data?.feature || row.feature || row.module || 'General', {
+      id: 'feature',
       header: 'Feature',
       cell: (info) => {
         const feature = info.getValue()
@@ -593,9 +516,17 @@ export function DataGrid({
           </span>
         )
       },
+      filterFn: (row, columnId, value) => {
+        const testCase = row.original
+        const feature = testCase.data?.feature || testCase.feature || testCase.module || 'General'
+        const matches = feature.toLowerCase().includes(value.toLowerCase())
+        console.log('🔍 Feature filter check:', { testCaseId: testCase.id, feature, filterValue: value, matches })
+        return matches
+      },
       size: 120
     }),
     columnHelper.accessor((row) => row.data?.projectId || row.projectId, {
+      id: 'projectId',
       header: 'Project',
       cell: (info) => {
         const projectId = info.getValue()
@@ -612,9 +543,17 @@ export function DataGrid({
           <span className="text-xs text-gray-400">-</span>
         )
       },
+      filterFn: (row, columnId, value) => {
+        const testCase = row.original
+        const projectId = testCase.data?.projectId || testCase.projectId
+        const matches = projectId === value
+        console.log('🔍 Project filter check:', { testCaseId: testCase.id, projectId, filterValue: value, matches })
+        return matches
+      },
       size: 120
     }),
     columnHelper.accessor((row) => row.data?.enhancement || row.enhancement, {
+      id: 'enhancement',
       header: 'Enhancement',
       cell: (info) => {
         const enhancement = info.getValue()
@@ -626,9 +565,17 @@ export function DataGrid({
           <span className="text-xs text-gray-400">-</span>
         )
       },
+      filterFn: (row, columnId, value) => {
+        const testCase = row.original
+        const enhancement = testCase.data?.enhancement || testCase.enhancement || ''
+        const matches = enhancement.toLowerCase().includes(value.toLowerCase())
+        console.log('🔍 Enhancement filter check:', { testCaseId: testCase.id, enhancement, filterValue: value, matches })
+        return matches
+      },
       size: 120
     }),
     columnHelper.accessor((row) => row.data?.ticketId || row.ticketId, {
+      id: 'ticketId',
       header: 'Ticket',
       cell: (info) => {
         const ticketId = info.getValue()
@@ -640,21 +587,20 @@ export function DataGrid({
           <span className="text-xs text-gray-400">-</span>
         )
       },
+      filterFn: (row, columnId, value) => {
+        const testCase = row.original
+        const ticketId = testCase.data?.ticketId || testCase.ticketId || ''
+        const matches = ticketId.toLowerCase().includes(value.toLowerCase())
+        console.log('🔍 Ticket filter check:', { testCaseId: testCase.id, ticketId, filterValue: value, matches })
+        return matches
+      },
       size: 100
     }),
     columnHelper.accessor((row) => row.data?.tags || row.tags, {
+      id: 'tags',
       header: 'Tags',
       cell: (info) => {
         const tags = info.getValue() || []
-        
-        // Debug logging for tags
-        console.log('🔍 Tags Column Debug:', {
-          testCaseId: info.row.original.id,
-          rootTags: info.row.original.tags,
-          dataTags: info.row.original.data?.tags,
-          finalTags: tags,
-          tagsLength: tags.length
-        })
         
         return (
           <div className="flex flex-wrap gap-1">
@@ -674,8 +620,46 @@ export function DataGrid({
           </div>
         )
       },
+      filterFn: (row, columnId, value) => {
+        const testCase = row.original
+        const tags = testCase.data?.tags || testCase.tags || []
+        const tagString = tags.join(' ').toLowerCase()
+        const matches = tagString.includes(value.toLowerCase())
+        console.log('🔍 Tags filter check:', { testCaseId: testCase.id, tags, filterValue: value, matches })
+        return matches
+      },
       enableSorting: false,
       size: 200
+    }),
+    columnHelper.accessor((row) => row.version || 1, {
+      id: 'version',
+      header: 'Version',
+      cell: (info) => {
+        const version = info.getValue()
+        return (
+          <div className="flex items-center space-x-2">
+            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
+              v{version}
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                e.preventDefault()
+                if (onVersionHistory) {
+                  onVersionHistory(info.row.original)
+                }
+              }}
+              className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+              title="View version history - See all changes and updates made to this test case over time"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+          </div>
+        )
+      },
+      size: 100
     }),
     columnHelper.accessor('updatedAt', {
       header: 'Last Modified',
@@ -696,6 +680,7 @@ export function DataGrid({
               testCase={row.original}
               onEdit={onEdit}
               onView={onView}
+              onVersionHistory={onVersionHistory}
             />
           </div>
         )
@@ -724,7 +709,54 @@ export function DataGrid({
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    globalFilterFn: 'includesString',
+    globalFilterFn: (row, columnId, value) => {
+      if (!value || value.trim() === '') return true
+      
+      const searchTerm = value.toLowerCase().trim()
+      const testCase = row.original
+      
+      // Function to safely extract all possible values from nested objects
+      const getAllValues = (obj, visited = new Set()) => {
+        if (!obj || visited.has(obj)) return []
+        visited.add(obj)
+        
+        const values = []
+        
+        if (typeof obj === 'string' || typeof obj === 'number') {
+          values.push(String(obj))
+        } else if (Array.isArray(obj)) {
+          obj.forEach(item => values.push(...getAllValues(item, visited)))
+        } else if (typeof obj === 'object') {
+          Object.values(obj).forEach(value => values.push(...getAllValues(value, visited)))
+        }
+        
+        return values
+      }
+      
+      // Get all searchable text from the entire test case object
+      const allValues = getAllValues(testCase)
+      const searchableText = allValues
+        .filter(val => val && val.trim() !== '')
+        .join(' ')
+        .toLowerCase()
+      
+      const matches = searchableText.includes(searchTerm)
+      
+      // Only log when searching to reduce console spam
+      if (searchTerm.length > 2) {
+        console.log('🔍 Global search for "' + searchTerm + '":', {
+          testCaseId: testCase.id,
+          found: matches,
+          sampleText: searchableText.substring(0, 300) + '...',
+          enhancement: testCase.enhancement || testCase.data?.enhancement || 'none',
+          ticketId: testCase.ticketId || testCase.data?.ticketId || 'none',
+          tags: testCase.tags || testCase.data?.tags || 'none',
+          projectId: testCase.projectId || testCase.data?.projectId || 'none'
+        })
+      }
+      
+      return matches
+    },
     initialState: {
       pagination: {
         pageSize: 25,
@@ -820,15 +852,41 @@ export function DataGrid({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
-              placeholder="Search test cases..."
+              placeholder="Search test cases... (ID, title, enhancement, ticket, etc.)"
               value={globalFilter}
               onChange={(e) => {
-                console.log('🔍 Search input changed:', e.target.value)
-                setGlobalFilter(e.target.value)
-                console.log('🔍 Global filter set to:', e.target.value)
+                const searchValue = e.target.value
+                console.log('🔍 Search input changed:', searchValue)
+                
+                // Clear column filters when doing global search to avoid conflicts
+                if (searchValue.trim() && columnFilters.length > 0) {
+                  console.log('🔍 Clearing column filters for global search')
+                  setColumnFilters([])
+                }
+                
+                setGlobalFilter(searchValue)
+                console.log('🔍 Global filter set to:', searchValue)
+                console.log('🔍 Current column filters:', columnFilters)
+                
+                setTimeout(() => {
+                  console.log('🔍 Table filter state after update:', table.getState().globalFilter)
+                  console.log('🔍 Filtered rows count after update:', table.getFilteredRowModel().rows.length)
+                }, 100)
               }}
-              className="pl-10 w-64"
+              className="pl-10 pr-10 w-80"
             />
+            {globalFilter && (
+              <button
+                onClick={() => {
+                  setGlobalFilter('')
+                  console.log('🔍 Search cleared')
+                }}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 hover:text-gray-600"
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
           </div>
           
           <Button 
@@ -857,40 +915,6 @@ export function DataGrid({
             Columns
           </Button>
           
-          <div className="flex items-center space-x-1 border-l border-gray-200 pl-4">
-            <button 
-              className="inline-flex items-center px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 hover:text-gray-900 focus:z-10 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              onClick={(e) => {
-                console.log('🟡 Expand All button clicked!')
-                e.preventDefault()
-                e.stopPropagation()
-                console.log('🟡 About to call expandAll()')
-                expandAll()
-                console.log('🟡 expandAll() called successfully')
-              }}
-              title="Expand all test cases"
-              type="button"
-            >
-              <Maximize2 className="h-3 w-3 mr-1" />
-              Expand All
-            </button>
-            <button 
-              className="inline-flex items-center px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 hover:text-gray-900 focus:z-10 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              onClick={(e) => {
-                console.log('🟡 Collapse All button clicked!')
-                e.preventDefault()
-                e.stopPropagation()
-                console.log('🟡 About to call collapseAll()')
-                collapseAll()
-                console.log('🟡 collapseAll() called successfully')
-              }}
-              title="Collapse all test cases"
-              type="button"
-            >
-              <Minimize2 className="h-3 w-3 mr-1" />
-              Collapse All
-            </button>
-          </div>
         </div>
         
         <div className="flex items-center space-x-2">
