@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Library Functionality Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6">Library Functionality Test</h1>
+        
+        <!-- Test Expand All Buttons -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Expand/Collapse Test</h2>
+            <div class="flex gap-4 mb-4">
+                <button id="expandAll" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    Expand All
+                </button>
+                <button id="collapseAll" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                    Collapse All
+                </button>
+            </div>
+            
+            <div id="testItems">
+                <!-- Test items will be generated here -->
+            </div>
+        </div>
+        
+        <!-- Test Filter Dropdown -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Filter Test</h2>
+            <div class="flex gap-4">
+                <select id="projectFilter" class="border border-gray-300 rounded px-3 py-2">
+                    <option value="">All Projects</option>
+                    <option value="project1">Project 1</option>
+                    <option value="project2">Project 2</option>
+                    <option value="project3">Project 3</option>
+                </select>
+                
+                <select id="groupByFilter" class="border border-gray-300 rounded px-3 py-2">
+                    <option value="none">None</option>
+                    <option value="feature">Feature</option>
+                    <option value="priority">Priority</option>
+                    <option value="status">Status</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Test Three-Dot Menu -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">Three-Dot Menu Test</h2>
+            <div class="relative inline-block">
+                <button id="moreOptions" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">
+                    More Options (⋯)
+                </button>
+                <div id="dropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10">
+                    <div class="py-1">
+                        <a href="#" class="dropdown-item block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Copy ID</a>
+                        <a href="#" class="dropdown-item block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Duplicate</a>
+                        <a href="#" class="dropdown-item block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export</a>
+                        <div class="border-t border-gray-100 my-1"></div>
+                        <a href="#" class="dropdown-item block px-4 py-2 text-sm text-red-700 hover:bg-red-50">Delete</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Test data
+        const testCases = [
+            { id: 'TC001', title: 'Login Test', expanded: false },
+            { id: 'TC002', title: 'Registration Test', expanded: false },
+            { id: 'TC003', title: 'Password Reset Test', expanded: false }
+        ];
+
+        // Generate test items
+        function generateTestItems() {
+            const container = document.getElementById('testItems');
+            container.innerHTML = '';
+            
+            testCases.forEach(tc => {
+                const item = document.createElement('div');
+                item.className = 'border border-gray-200 rounded p-4 mb-2';
+                item.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="font-medium">${tc.title}</h3>
+                            <p class="text-sm text-gray-600">ID: ${tc.id}</p>
+                            ${tc.expanded ? '<div class="mt-2 text-sm bg-gray-50 p-2 rounded">Expanded content for ' + tc.title + '</div>' : ''}
+                        </div>
+                        <button class="toggle-btn text-blue-500 hover:text-blue-700" data-id="${tc.id}">
+                            ${tc.expanded ? 'Collapse' : 'Expand'}
+                        </button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        // Initialize
+        generateTestItems();
+
+        // Expand All button
+        document.getElementById('expandAll').addEventListener('click', () => {
+            console.log('🟡 Expand All clicked');
+            testCases.forEach(tc => tc.expanded = true);
+            generateTestItems();
+        });
+
+        // Collapse All button
+        document.getElementById('collapseAll').addEventListener('click', () => {
+            console.log('🟡 Collapse All clicked');
+            testCases.forEach(tc => tc.expanded = false);
+            generateTestItems();
+        });
+
+        // Individual toggle buttons
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('toggle-btn')) {
+                const id = e.target.getAttribute('data-id');
+                console.log('🟡 Individual toggle clicked for:', id);
+                const tc = testCases.find(t => t.id === id);
+                if (tc) {
+                    tc.expanded = !tc.expanded;
+                    generateTestItems();
+                }
+            }
+        });
+
+        // Project filter
+        document.getElementById('projectFilter').addEventListener('change', (e) => {
+            console.log('🟡 Project filter changed to:', e.target.value);
+        });
+
+        // Group by filter
+        document.getElementById('groupByFilter').addEventListener('change', (e) => {
+            console.log('🟡 Group by filter changed to:', e.target.value);
+        });
+
+        // Three-dot menu
+        const moreBtn = document.getElementById('moreOptions');
+        const dropdown = document.getElementById('dropdown');
+
+        moreBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            console.log('🟡 More options button clicked');
+            dropdown.classList.toggle('hidden');
+        });
+
+        // Dropdown items
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('dropdown-item')) {
+                e.preventDefault();
+                console.log('🟡 Dropdown item clicked:', e.target.textContent);
+                dropdown.classList.add('hidden');
+            }
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!moreBtn.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

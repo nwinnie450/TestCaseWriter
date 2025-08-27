@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TestCaseWriter - Mock Data Tester</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2563eb;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background-color: #2563eb;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #1d4ed8;
+        }
+        .btn-secondary {
+            background-color: #6b7280;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+        .btn-danger {
+            background-color: #dc2626;
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: #b91c1c;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .status.success {
+            background-color: #d1fae5;
+            border: 1px solid #10b981;
+            color: #065f46;
+        }
+        .status.info {
+            background-color: #dbeafe;
+            border: 1px solid #3b82f6;
+            color: #1e40af;
+        }
+        .status.error {
+            background-color: #fee2e2;
+            border: 1px solid #ef4444;
+            color: #991b1b;
+        }
+        .features {
+            background-color: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .features h3 {
+            color: #374151;
+            margin-top: 0;
+        }
+        .features ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .features li {
+            margin: 8px 0;
+            color: #4b5563;
+        }
+        .code {
+            background-color: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎭 TestCaseWriter - Mock Data Tester</h1>
+        
+        <p>This tool helps you populate your browser's localStorage with enhanced mock data to test the filtering system in the Library.</p>
+        
+        <div class="button-group">
+            <button class="btn-primary" onclick="populateMockData()">🚀 Populate Mock Data</button>
+            <button class="btn-secondary" onclick="checkMockData()">🔍 Check Current Data</button>
+            <button class="btn-danger" onclick="clearMockData()">🧹 Clear All Data</button>
+        </div>
+        
+        <div id="status" class="status info">
+            Ready to populate mock data. Click "Populate Mock Data" to get started.
+        </div>
+        
+        <div class="features">
+            <h3>✨ Enhanced Mock Data Includes:</h3>
+            <ul>
+                <li><strong>4 Projects:</strong> E-commerce Platform, API Gateway, Payment System, Document Management</li>
+                <li><strong>5 Test Cases:</strong> Covering authentication, API testing, payment processing, and file management</li>
+                <li><strong>Enhanced Fields:</strong> Project ID, Feature, Enhancement ID, Ticket ID, and Tags</li>
+                <li><strong>Realistic Data:</strong> Proper test steps, priorities, statuses, and metadata</li>
+            </ul>
+            
+            <h3>🎯 Testing the Enhanced Filtering System:</h3>
+            <ol>
+                <li>Click "Populate Mock Data" above</li>
+                <li>Navigate to your app's Library page</li>
+                <li>Click the "Filters" button to open the filter panel</li>
+                <li>Test filtering by:
+                    <ul>
+                        <li><strong>Project:</strong> E-commerce Platform, API Gateway, etc.</li>
+                        <li><strong>Feature:</strong> User Authentication, Payment Processing, etc.</li>
+                        <li><strong>Enhancement:</strong> ENH-001, ENH-002, etc.</li>
+                        <li><strong>Ticket:</strong> TICKET-001, TICKET-002, etc.</li>
+                        <li><strong>Tags:</strong> login, authentication, payment, etc.</li>
+                    </ul>
+                </li>
+                <li>Test the expand/collapse functionality for individual test cases</li>
+                <li>Use "Expand All" and "Collapse All" buttons</li>
+                <li>Test the global search functionality</li>
+            </ol>
+        </div>
+        
+        <div class="features">
+            <h3>🔧 Manual Console Commands:</h3>
+            <p>You can also run these commands directly in your browser console:</p>
+            <div class="code">
+// Populate with mock data
+populateMockData()
+
+// Check current data
+checkMockData()
+
+// Clear all data
+clearMockData()
+            </div>
+        </div>
+    </div>
+
+    <script src="populate-mock-data.js"></script>
+    <script>
+        // Override console.log to display in the status div
+        const originalLog = console.log;
+        const statusDiv = document.getElementById('status');
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            ).join(' ');
+            
+            statusDiv.textContent += message + '\n';
+            statusDiv.scrollTop = statusDiv.scrollHeight;
+        };
+        
+        // Override console.error to display errors
+        const originalError = console.error;
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            ).join(' ');
+            
+            statusDiv.className = 'status error';
+            statusDiv.textContent = '❌ Error: ' + message;
+        };
+        
+        // Function to update status display
+        function updateStatus(message, type = 'info') {
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+        }
+        
+        // Enhanced populate function with status updates
+        window.populateMockData = function() {
+            updateStatus('🚀 Populating localStorage with enhanced mock data...', 'info');
+            try {
+                populateLocalStorage();
+                updateStatus('✅ Mock data populated successfully! Now you can test the filtering system in your Library.', 'success');
+            } catch (error) {
+                updateStatus('❌ Error populating mock data: ' + error.message, 'error');
+            }
+        };
+        
+        // Enhanced check function with status updates
+        window.checkMockData = function() {
+            updateStatus('🔍 Checking current localStorage content...', 'info');
+            try {
+                checkLocalStorage();
+            } catch (error) {
+                updateStatus('❌ Error checking mock data: ' + error.message, 'error');
+            }
+        };
+        
+        // Enhanced clear function with status updates
+        window.clearMockData = function() {
+            if (confirm('Are you sure you want to clear all mock data? This cannot be undone.')) {
+                updateStatus('🧹 Clearing localStorage...', 'info');
+                try {
+                    clearLocalStorage();
+                    updateStatus('✅ All mock data cleared successfully!', 'success');
+                } catch (error) {
+                    updateStatus('❌ Error clearing mock data: ' + error.message, 'error');
+                }
+            }
+        };
+        
+        // Auto-check for existing data on page load
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                checkMockData();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

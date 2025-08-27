@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-900 font-sans;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+  
+  h1 {
+    @apply text-3xl;
+  }
+  
+  h2 {
+    @apply text-2xl;
+  }
+  
+  h3 {
+    @apply text-xl;
+  }
+  
+  h4 {
+    @apply text-lg;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center rounded-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:pointer-events-none disabled:opacity-50;
+  }
+  
+  .btn-primary {
+    @apply btn bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800;
+  }
+  
+  .btn-secondary {
+    @apply btn border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100;
+  }
+  
+  .btn-ghost {
+    @apply btn text-gray-700 hover:bg-gray-100 active:bg-gray-200;
+  }
+  
+  .btn-sm {
+    @apply h-9 px-4 text-sm;
+  }
+  
+  .btn-md {
+    @apply h-11 px-6;
+  }
+  
+  .btn-lg {
+    @apply h-14 px-8 text-base;
+  }
+  
+  .input {
+    @apply flex h-11 w-full rounded-sm border border-gray-300 bg-white px-4 py-3 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  
+  .input-error {
+    @apply border-error-500 focus-visible:ring-error-500;
+  }
+  
+  .card {
+    @apply rounded-lg border border-gray-200 bg-white shadow-card;
+  }
+  
+  .card-header {
+    @apply flex flex-col space-y-2 p-8;
+  }
+  
+  .card-content {
+    @apply p-8 pt-0;
+  }
+  
+  .card-footer {
+    @apply flex items-center p-8 pt-0;
+  }
+  
+  .data-grid {
+    @apply w-full border-collapse border border-gray-200 bg-white;
+  }
+  
+  .data-grid th {
+    @apply border-b border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-700;
+  }
+  
+  .data-grid td {
+    @apply border-b border-gray-200 px-4 py-3 text-sm;
+  }
+  
+  .data-grid tr:hover {
+    @apply bg-gray-50;
+  }
+  
+  .line-clamp-1 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+  
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  
+  /* Ensure action buttons are clickable */
+  .data-grid .action-buttons {
+    position: relative;
+    z-index: 100;
+  }
+  
+  .data-grid .action-buttons button {
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 101;
+  }
+  
+  /* Prevent row selection from interfering with buttons */
+  .data-grid tbody tr {
+    pointer-events: auto;
+  }
+  
+  .data-grid tbody tr td {
+    position: relative;
+  }
+  
+  /* Force action buttons to be clickable */
+  .action-cell {
+    isolation: isolate;
+    z-index: 999 !important;
+  }
+  
+  .action-cell > div {
+    pointer-events: all !important;
+    position: relative;
+    z-index: 1000 !important;
+  }
+  
+  .action-cell > div > div {
+    pointer-events: all !important;
+    z-index: 1001 !important;
+    position: relative;
+    display: inline-block;
+  }
+}
