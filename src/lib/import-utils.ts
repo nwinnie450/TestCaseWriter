@@ -91,14 +91,78 @@ async function parseCSV(file: File): Promise<Record<string, any>[]> {
   
   console.log('✅ CSV Debug - Final parsed data:', data)
   
-  // Check if we need to group rows that belong to the same test case
-  const groupedData = groupRelatedRows(data, headers)
-  console.log('✅ CSV Debug - After grouping:', groupedData)
+  // Apply smart-detect filtering: only keep rows with valid Test Case IDs
+  const filteredData = smartDetectValidTestCases(data, headers)
+  console.log('✅ CSV Debug - After smart detection:', filteredData)
   
-  return groupedData
+  return filteredData
 }
 
-// Group related rows that belong to the same test case
+// Smart-detect valid test cases: only rows with non-empty Test Case ID become test cases
+function smartDetectValidTestCases(data: Record<string, any>[], headers: string[]): Record<string, any>[] {
+  console.log('🔍 Smart Detect - Starting smart detection of valid test cases')
+  console.log('🔍 Smart Detect - Input data length:', data.length)
+  
+  function isNonEmpty(v?: string): boolean {
+    return !!(v && v.trim().length > 0)
+  }
+  
+  // Find the Test Case ID field
+  const testCaseIdField = headers.find(h => 
+    h.toLowerCase().includes('test case id') ||
+    h.toLowerCase().includes('testcaseid') ||
+    h.toLowerCase().includes('test case') ||
+    h.toLowerCase().includes('testcase') ||
+    h.toLowerCase().includes('tc') ||
+    h.toLowerCase().includes('id')
+  ) || headers[0]
+  
+  console.log('🔍 Smart Detect - Using Test Case ID field:', testCaseIdField)
+  
+  const validTestCases: Record<string, any>[] = []
+  const seenIds = new Set<string>()
+  let skippedCount = 0
+  
+  for (const row of data) {
+    const testCaseId = (row[testCaseIdField] || "").trim()
+    
+    // SMART DETECT: Only process rows with non-empty Test Case ID
+    if (!isNonEmpty(testCaseId)) {
+      console.log('🔍 Smart Detect - Skipping row with empty Test Case ID:', row)
+      skippedCount++
+      continue
+    }
+    
+    // Normalize all fields and preserve line breaks
+    const normalizedRow = { ...row }
+    Object.keys(normalizedRow).forEach(key => {
+      if (typeof normalizedRow[key] === 'string') {
+        // Remove non-breaking spaces and normalize line breaks
+        normalizedRow[key] = normalizedRow[key]
+          .replace(/\u00A0/g, " ") // Remove non-breaking spaces
+          .replace(/\r\n?/g, "\n") // Normalize line breaks
+      }
+    })
+    
+    // Check for duplicate IDs
+    if (seenIds.has(testCaseId)) {
+      console.warn(`🔍 Smart Detect - Duplicate Test Case ID: ${testCaseId} — skipping duplicate`)
+      continue
+    }
+    
+    seenIds.add(testCaseId)
+    validTestCases.push(normalizedRow)
+    
+    console.log(`✅ Smart Detect - Added valid test case: ${testCaseId}`)
+  }
+  
+  console.log(`✅ Smart Detect - Filtered ${data.length} rows to ${validTestCases.length} valid test cases`)
+  console.log(`✅ Smart Detect - Skipped ${skippedCount} rows with empty Test Case IDs`)
+  
+  return validTestCases
+}
+
+// Group related rows that belong to the same test case (DEPRECATED - replaced by smart detect)
 function groupRelatedRows(data: Record<string, any>[], headers: string[]): Record<string, any>[] {
   console.log('🔍 Grouping Debug - Starting row grouping for related rows')
   console.log('🔍 Grouping Debug - Input data:', data)
