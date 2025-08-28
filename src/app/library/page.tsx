@@ -12,11 +12,9 @@ import { exportTestCases, quickExportCSV, quickExportJSON } from '@/lib/export-u
 import { TestCaseDetailModal } from '@/components/library/TestCaseDetailModal'
 import { TestCaseEditModal } from '@/components/library/TestCaseEditModal'
 import { BulkEditModal } from '@/components/library/BulkEditModal'
-import { ImportModal } from '@/components/import/ImportModal'
 import { VersionHistoryModal } from '@/components/library/VersionHistoryModal'
 import { 
   Plus, 
-  Upload, 
   Download, 
   FileText,
   Filter,
@@ -36,7 +34,6 @@ export default function TestCaseLibrary() {
   const [editingTestCase, setEditingTestCase] = useState<TestCase | null>(null)
   const [groupBy, setGroupBy] = useState<string>('none')
   const [showBulkEditModal, setShowBulkEditModal] = useState(false)
-  const [showImportModal, setShowImportModal] = useState(false)
   const [showVersionHistoryModal, setShowVersionHistoryModal] = useState(false)
   const [selectedVersionTestCase, setSelectedVersionTestCase] = useState<TestCase | null>(null)
   const [projects, setProjects] = useState<Array<{id: string, name: string}>>([])
@@ -441,44 +438,6 @@ export default function TestCaseLibrary() {
     }
   }
 
-  const handleBulkImport = () => {
-    setShowImportModal(true)
-  }
-
-  const handleImportTestCases = (importedTestCases: any[]) => {
-    try {
-      console.log('🔍 Library Debug - Handling import of test cases:', importedTestCases.length)
-      console.log('🔍 Library Debug - Selected project filter:', selectedProjectFilter)
-      console.log('🔍 Library Debug - Available projects:', projects)
-      
-      // Import storage functions
-      const { saveGeneratedTestCases, getAllStoredTestCases, getStorageStats } = require('@/lib/test-case-storage')
-      
-      // Save imported test cases
-      const sessionId = saveGeneratedTestCases(
-        importedTestCases,
-        [`imported-${Date.now()}`],
-        'import',
-        selectedProjectFilter || projects[0]?.id || 'default-project',
-        projects.find(p => p.id === (selectedProjectFilter || projects[0]?.id))?.name || 'Default Project'
-      )
-      
-      console.log('✅ Library Debug - Saved with session ID:', sessionId)
-      
-      // Refresh the UI
-      const updatedTestCases = getAllStoredTestCases()
-      const updatedStats = getStorageStats()
-      
-      setTestCases(updatedTestCases)
-      setStorageStats(updatedStats)
-      
-      alert(`✅ Successfully imported ${importedTestCases.length} test cases!`)
-      
-    } catch (error) {
-      console.error('Failed to import test cases:', error)
-      alert('❌ Failed to import test cases. Please try again.')
-    }
-  }
 
   const handleGenerateAI = () => {
     console.log('Generate with AI')
@@ -623,10 +582,6 @@ export default function TestCaseLibrary() {
         </>
       )}
       
-      <Button variant="secondary" onClick={handleBulkImport}>
-        <Upload className="h-4 w-4 mr-2" />
-        Import
-      </Button>
 
       <Button variant="secondary" onClick={handleLoadMockData} className="border-blue-300 text-blue-600 hover:bg-blue-50">
         <FileText className="h-4 w-4 mr-2" />
@@ -1004,15 +959,6 @@ export default function TestCaseLibrary() {
         onSave={handleBulkSave}
       />
 
-      {/* Import Modal */}
-      <ImportModal
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        onImport={handleImportTestCases}
-        templates={templates}
-        projects={projects}
-        currentProjectId={selectedProjectFilter}
-      />
 
       {/* Version History Modal */}
       {selectedVersionTestCase && (
