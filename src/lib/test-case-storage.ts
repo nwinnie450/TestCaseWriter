@@ -21,6 +21,9 @@ const mockTestCasesForTesting: TestCase[] = [
     module: 'Authentication',
     priority: 'high',
     status: 'active',
+    projectId: 'PROJ-AUTH-001',
+    enhancement: 'ENH-2024-001',
+    ticketId: 'TICKET-AUTH-501',
     testSteps: [
       { step: 1, description: 'Navigate to the application login page', testData: 'Browser URL: https://app.example.com/login', expectedResult: 'Login page loads with username and password fields visible' },
       { step: 2, description: 'Verify page elements are present', testData: 'N/A', expectedResult: 'Username field, password field, login button, and forgot password link are visible' },
@@ -39,7 +42,10 @@ const mockTestCasesForTesting: TestCase[] = [
     data: {
       title: 'Comprehensive User Login Flow Validation',
       description: 'This test validates the complete user login process from page load to successful authentication',
-      tags: ['authentication', 'login', 'security', 'user-interface']
+      tags: ['authentication', 'login', 'security', 'user-interface'],
+      projectId: 'PROJ-AUTH-001',
+      enhancement: 'ENH-2024-001',
+      ticketId: 'TICKET-AUTH-501'
     }
   },
   {
@@ -48,6 +54,9 @@ const mockTestCasesForTesting: TestCase[] = [
     module: 'Shopping',
     priority: 'critical',
     status: 'active',
+    projectId: 'PROJ-ECOM-002',
+    enhancement: 'ENH-2024-007',
+    ticketId: 'TICKET-SHOP-401',
     testSteps: [
       { step: 1, description: 'Navigate to product catalog page', testData: 'URL: /products', expectedResult: 'Product catalog displays with search and filter options' },
       { step: 2, description: 'Search for specific product', testData: 'search term: "wireless headphones"', expectedResult: 'Search results show relevant products with images and prices' },
@@ -68,7 +77,10 @@ const mockTestCasesForTesting: TestCase[] = [
     data: {
       title: 'E-commerce Shopping Cart Full Workflow',
       description: 'End-to-end test of shopping cart functionality from product search to order completion',
-      tags: ['e-commerce', 'shopping-cart', 'payment', 'checkout', 'integration']
+      tags: ['e-commerce', 'shopping-cart', 'payment', 'checkout', 'integration'],
+      projectId: 'PROJ-ECOM-002',
+      enhancement: 'ENH-2024-007',
+      ticketId: 'TICKET-SHOP-401'
     }
   },
   {
@@ -77,6 +89,9 @@ const mockTestCasesForTesting: TestCase[] = [
     module: 'File Management',
     priority: 'medium',
     status: 'active',
+    projectId: 'PROJ-FILE-003',
+    enhancement: 'ENH-2024-012',
+    ticketId: 'TICKET-FILE-201',
     testSteps: [
       { step: 1, description: 'Navigate to file upload section', testData: 'URL: /upload', expectedResult: 'Upload interface displays with drag-drop area and browse button' },
       { step: 2, description: 'Select multiple files for upload', testData: 'files: document.pdf, image.jpg, spreadsheet.xlsx', expectedResult: 'Selected files appear in upload queue with file details' },
@@ -96,7 +111,10 @@ const mockTestCasesForTesting: TestCase[] = [
     data: {
       title: 'File Upload and Processing System Test',
       description: 'Comprehensive testing of file upload, validation, processing, and download features',
-      tags: ['file-upload', 'validation', 'processing', 'download', 'ui-testing']
+      tags: ['file-upload', 'validation', 'processing', 'download', 'ui-testing'],
+      projectId: 'PROJ-FILE-003',
+      enhancement: 'ENH-2024-012',
+      ticketId: 'TICKET-FILE-201'
     }
   }
 ]
@@ -263,6 +281,42 @@ export function getStorageStats(): { sessions: number, totalTestCases: number, s
 export function loadMockTestCases(): string {
   try {
     console.log('🎭 Loading mock test cases for expand/collapse testing...')
+    
+    // Create sample projects if they don't exist
+    const sampleProjects = [
+      {
+        id: 'PROJ-AUTH-001',
+        name: 'Authentication System',
+        description: 'User authentication and login functionality',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 'PROJ-ECOM-002',
+        name: 'E-commerce Platform',
+        description: 'Online shopping cart and checkout system',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 'PROJ-FILE-003',
+        name: 'File Management System',
+        description: 'File upload, processing, and storage functionality',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+    
+    // Save projects to localStorage
+    const existingProjects = localStorage.getItem('testCaseWriter_projects')
+    if (!existingProjects) {
+      console.log('🎭 Creating sample projects...')
+      localStorage.setItem('testCaseWriter_projects', JSON.stringify(sampleProjects))
+    }
+    
     return saveGeneratedTestCases(mockTestCasesForTesting, ['Mock Data'], 'mock-generator')
   } catch (error) {
     console.error('❌ Failed to load mock test cases:', error)

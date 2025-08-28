@@ -120,12 +120,38 @@ export default function TestCaseLibrary() {
         // Create default template if none exist
         const defaultTemplate = {
           id: 'default-template',
-          name: 'Default Template',
+          name: 'Standard Test Case Template',
+          description: 'Standard template: Test Case | Module | Test Step | Test Step Description | Test Data | Expected Result | Test Result | QA | Remarks',
           fields: [
-            { id: 'title', label: 'Title', type: 'text', required: true },
-            { id: 'description', label: 'Description', type: 'textarea', required: false },
-            { id: 'priority', label: 'Priority', type: 'select', required: false }
-          ]
+            { id: 'testCase', label: 'Test Case', type: 'text', required: true, order: 1, placeholder: 'TC_001 (unique ID)' },
+            { id: 'module', label: 'Module', type: 'text', required: true, order: 2, placeholder: 'Transaction "Cancel" Feature' },
+            { id: 'testStep', label: 'Test Step', type: 'number', required: false, order: 3, placeholder: '1', defaultValue: 1 },
+            { id: 'testStepDescription', label: 'Test Step Description', type: 'textarea', required: true, order: 4, placeholder: 'Detailed numbered list of actions:\n1. Navigate to...\n2. Click on...\n3. Verify...' },
+            { id: 'testData', label: 'Test Data', type: 'textarea', required: false, order: 5, placeholder: 'Input values or parameters\n(can be blank if not applicable)' },
+            { id: 'expectedResult', label: 'Expected Result', type: 'textarea', required: true, order: 6, placeholder: 'Clear outcome criteria:\n- System should...\n- User should see...' },
+            { 
+              id: 'testResult', 
+              label: 'Test Result', 
+              type: 'select', 
+              required: false, 
+              order: 7,
+              options: [
+                { label: 'Not Executed', value: 'Not Executed' },
+                { label: 'Passed', value: 'Passed' },
+                { label: 'Failed', value: 'Failed' },
+                { label: 'Blocked', value: 'Blocked' },
+                { label: 'Skipped', value: 'Skipped' }
+              ],
+              defaultValue: 'Not Executed'
+            },
+            { id: 'qa', label: 'QA', type: 'text', required: false, order: 8, placeholder: 'Tester name or team (e.g., Ops)' },
+            { id: 'remarks', label: 'Remarks', type: 'textarea', required: false, order: 9, placeholder: 'Additional notes, links to Jira/Confluence, improvement references' }
+          ],
+          version: 1,
+          isPublished: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          createdBy: 'system'
         }
         setTemplates([defaultTemplate])
       }
@@ -421,17 +447,23 @@ export default function TestCaseLibrary() {
 
   const handleImportTestCases = (importedTestCases: any[]) => {
     try {
+      console.log('🔍 Library Debug - Handling import of test cases:', importedTestCases.length)
+      console.log('🔍 Library Debug - Selected project filter:', selectedProjectFilter)
+      console.log('🔍 Library Debug - Available projects:', projects)
+      
       // Import storage functions
-      const { saveTestCases, getAllStoredTestCases, getStorageStats } = require('@/lib/test-case-storage')
+      const { saveGeneratedTestCases, getAllStoredTestCases, getStorageStats } = require('@/lib/test-case-storage')
       
       // Save imported test cases
-      const sessionId = saveTestCases(
+      const sessionId = saveGeneratedTestCases(
         importedTestCases,
         [`imported-${Date.now()}`],
         'import',
         selectedProjectFilter || projects[0]?.id || 'default-project',
         projects.find(p => p.id === (selectedProjectFilter || projects[0]?.id))?.name || 'Default Project'
       )
+      
+      console.log('✅ Library Debug - Saved with session ID:', sessionId)
       
       // Refresh the UI
       const updatedTestCases = getAllStoredTestCases()

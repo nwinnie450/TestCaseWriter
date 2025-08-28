@@ -1,0 +1,42 @@
+Test Case,Module,Test Step,Test Step Description,Test Data,Expected Result,Test Result,QA,Remarks
+TC_001,Transaction Cancel Feature,1,"1. Navigate to transaction page
+2. Start a new transaction
+3. Enter transaction details
+4. Click Cancel button
+5. Confirm cancellation in dialog","Transaction Amount: $100
+Payment Method: Credit Card","1. Transaction page loads successfully
+2. Transaction form is displayed
+3. All fields accept valid input
+4. Cancel dialog appears
+5. Transaction is cancelled and user returns to main page",Not Executed,Ops,Initial test for cancel feature
+TC_002,User Authentication,1,"1. Open login page
+2. Enter valid username
+3. Enter valid password  
+4. Click Login button
+5. Verify successful login","Username: testuser@company.com
+Password: SecurePass123","1. Login page displays correctly
+2. Username field accepts input
+3. Password is masked properly
+4. Login button is clickable
+5. User is redirected to dashboard",Passed,QA Team,Authentication working correctly
+TC_003,Shopping Cart,1,"1. Navigate to product catalog
+2. Select product item
+3. Set quantity to 2
+4. Click Add to Cart
+5. Verify cart contents","Product: Wireless Headphones
+Quantity: 2
+Price: $99.99","1. Product catalog loads with items
+2. Product details page opens
+3. Quantity selector works properly
+4. Item is added to cart
+5. Cart shows correct item and quantity",Failed,Test Team,Cart quantity calculation incorrect - see JIRA-1234
+TC_004,File Upload System,1,"1. Access file upload page
+2. Select multiple files
+3. Validate file types
+4. Start upload process
+5. Monitor upload progress","Files: document.pdf (2MB), image.jpg (1MB)
+Max size: 5MB per file","1. Upload interface displays drag-drop area
+2. Files are selected and listed
+3. Only allowed file types accepted
+4. Upload progress bar appears
+5. Success message shown after completion",Blocked,File Team,Server configuration issue preventing uploads

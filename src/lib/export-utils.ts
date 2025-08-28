@@ -12,35 +12,82 @@ export interface ExportOptions {
 // Convert test case to CSV row
 function testCaseToCSVRow(testCase: TestCase, includeHeaders: boolean = false): string {
   const headers = [
-    'Test Case ID',
+    'Test Case',
     'Module',
-    'Test Case Description', 
-    'Test Steps',
-    'Expected Results',
+    'Test Step',
+    'Test Step Description',
+    'Test Data',
+    'Expected Result',
     'Test Result',
-    'QA Notes',
+    'QA',
     'Remarks'
   ]
   
-  // Format test steps as numbered list
-  const formattedSteps = testCase.testSteps
-    ?.map(step => `${step.step}. ${step.description} | Test Data: ${step.testData} | Expected: ${step.expectedResult}`)
-    .join('; ') || 'No steps defined'
-  
-  const row = [
-    testCase.id,
-    testCase.module,
-    testCase.testCase,
-    `"${formattedSteps}"`, // Wrap in quotes to handle commas
-    `"${testCase.testSteps?.map(s => s.expectedResult).join('; ') || 'Not specified'}"`,
-    testCase.testResult,
-    testCase.qa,
-    testCase.remarks
-  ]
-  
   if (includeHeaders) {
-    return `${headers.join(',')}\n${row.join(',')}`
+    return headers.join(',')
   }
+  
+  // Extract field values with proper fallbacks
+  const testCaseId = testCase.data?.testCase || testCase.id || 'TC_001'
+  const module = testCase.data?.module || testCase.module || 'General'
+  const testStep = testCase.data?.testStep || 1
+  
+  // Format test step description (multi-line in one cell)
+  let testStepDescription = ''
+  if (testCase.data?.testStepDescription) {
+    testStepDescription = testCase.data.testStepDescription
+  } else if (testCase.testSteps && testCase.testSteps.length > 0) {
+    testStepDescription = testCase.testSteps
+      .map((step, index) => `${index + 1}. ${step.description}`)
+      .join('\n')
+  } else {
+    testStepDescription = testCase.testCase || 'No description'
+  }
+  
+  // Test data (can be blank, with numbering if multiple items)
+  let testData = ''
+  if (testCase.data?.testData) {
+    testData = testCase.data.testData
+  } else if (testCase.testSteps && testCase.testSteps.length > 0) {
+    const dataItems = testCase.testSteps
+      .map((step, index) => {
+        if (step.testData && step.testData.trim() !== '' && step.testData !== 'N/A') {
+          return `${index + 1}. ${step.testData}`
+        }
+        return null
+      })
+      .filter(item => item !== null)
+    testData = dataItems.join('\n')
+  }
+  
+  // Expected result (multi-line in one cell with numbering)
+  let expectedResult = ''
+  if (testCase.data?.expectedResult) {
+    expectedResult = testCase.data.expectedResult
+  } else if (testCase.testSteps && testCase.testSteps.length > 0) {
+    expectedResult = testCase.testSteps
+      .map((step, index) => `${index + 1}. ${step.expectedResult}`)
+      .join('\n')
+  } else {
+    expectedResult = 'Expected result not specified'
+  }
+  
+  const testResult = testCase.data?.testResult || testCase.testResult || 'Not Executed'
+  const qa = testCase.data?.qa || testCase.qa || ''
+  const remarks = testCase.data?.remarks || testCase.remarks || ''
+  
+  // Escape and format for CSV
+  const row = [
+    testCaseId,
+    module,
+    testStep,
+    `"${testStepDescription.replace(/"/g, '""')}"`,
+    `"${testData.replace(/"/g, '""')}"`,
+    `"${expectedResult.replace(/"/g, '""')}"`,
+    testResult,
+    qa,
+    `"${remarks.replace(/"/g, '""')}"`
+  ]
   
   return row.join(',')
 }

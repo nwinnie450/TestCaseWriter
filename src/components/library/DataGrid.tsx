@@ -432,7 +432,7 @@ export function DataGrid({
       size: 50
     }),
     columnHelper.accessor('id', {
-      header: 'Test ID',
+      header: 'Test case ID',
       cell: (info) => (
         <span className="font-mono text-sm text-primary-600">
           {info.getValue()}
@@ -716,7 +716,7 @@ export function DataGrid({
       const testCase = row.original
       
       // Function to safely extract all possible values from nested objects
-      const getAllValues = (obj, visited = new Set()) => {
+      const getAllValues = (obj: any, visited = new Set()) => {
         if (!obj || visited.has(obj)) return []
         visited.add(obj)
         

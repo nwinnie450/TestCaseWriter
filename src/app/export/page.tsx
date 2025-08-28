@@ -76,7 +76,7 @@ const defaultProfiles: ExportProfile[] = [
     description: 'Standard Excel format for test case documentation',
     format: 'excel',
     fieldMappings: [
-      { sourceField: 'id', targetField: 'Test ID', required: true },
+      { sourceField: 'id', targetField: 'Test case ID', required: true },
       { sourceField: 'title', targetField: 'Test Title', required: true },
       { sourceField: 'description', targetField: 'Description', required: false },
       { sourceField: 'priority', targetField: 'Priority', required: false },

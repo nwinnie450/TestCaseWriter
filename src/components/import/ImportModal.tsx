@@ -15,7 +15,8 @@ import {
   Eye,
   CheckCircle,
   AlertCircle,
-  Settings
+  Settings,
+  Zap
 } from 'lucide-react'
 import {
   parseImportFile,
@@ -24,6 +25,7 @@ import {
   createTestCaseFromImport,
   generateCSVTemplate,
   generateJSONTemplate,
+  validateImportData,
   type ImportPreview,
   type FieldMapping,
   type ImportOptions
@@ -88,36 +90,68 @@ export function ImportModal({
 
   const handleNext = async () => {
     if (step === 'upload') {
+      console.log('🔍 Import Debug - Starting file upload step')
+      console.log('🔍 Import Debug - File:', file?.name, file?.size, file?.type)
+      console.log('🔍 Import Debug - Selected project:', selectedProject)
+      console.log('🔍 Import Debug - Selected template:', selectedTemplate)
+      console.log('🔍 Import Debug - File format:', fileFormat)
+      
       if (!file) {
+        console.error('❌ Import Debug - No file selected')
         setErrors(['Please select a file to import'])
         return
       }
       if (!selectedProject) {
+        console.error('❌ Import Debug - No project selected')
         setErrors(['Please select a project'])
         return
       }
       if (!selectedTemplate) {
+        console.error('❌ Import Debug - No template selected')
         setErrors(['Please select a template'])
         return
       }
 
       try {
+        console.log('🔍 Import Debug - Parsing file...')
         const data = await parseImportFile(file, fileFormat)
+        console.log('🔍 Import Debug - Parsed data:', {
+          totalRows: data.length,
+          sampleRow: data[0],
+          availableFields: Object.keys(data[0] || {}),
+          allRows: data
+        })
         setImportData(data)
         
         const selectedTemplateObj = templates.find(t => t.id === selectedTemplate)
+        console.log('🔍 Import Debug - Selected template object:', selectedTemplateObj)
+        
         if (selectedTemplateObj) {
+          console.log('🔍 Import Debug - Generating preview...')
           const previewData = generateImportPreview(data, selectedTemplateObj)
+          console.log('🔍 Import Debug - Preview data:', {
+            totalRows: previewData.totalRows,
+            availableFields: previewData.availableFields,
+            suggestedMappings: previewData.suggestedMappings,
+            validationErrors: previewData.validationErrors,
+            sampleData: previewData.sampleData
+          })
           setPreview(previewData)
           setFieldMappings(previewData.suggestedMappings)
+          console.log('🔍 Import Debug - Field mappings set:', previewData.suggestedMappings)
         }
         
         setStep('mapping')
         setErrors([])
+        console.log('✅ Import Debug - Successfully moved to mapping step')
       } catch (error) {
-        setErrors([`Failed to parse file: ${error}`])
+        console.error('❌ Import Debug - Parse error:', error)
+        console.error('❌ Import Debug - Error stack:', error.stack)
+        setErrors([`Failed to parse file: ${error.message || error}`])
       }
     } else if (step === 'mapping') {
+      console.log('🔍 Import Debug - Moving to preview step')
+      console.log('🔍 Import Debug - Current field mappings:', fieldMappings)
       setStep('preview')
     }
   }
@@ -131,10 +165,18 @@ export function ImportModal({
   }
 
   const handleImport = async () => {
+    console.log('🔍 Import Debug - Starting import process')
+    console.log('🔍 Import Debug - Import data length:', importData.length)
+    console.log('🔍 Import Debug - Field mappings:', fieldMappings)
+    console.log('🔍 Import Debug - Selected template:', selectedTemplate)
+    console.log('🔍 Import Debug - Selected project:', selectedProject)
+    
     setStep('importing')
     
     try {
       const selectedTemplateObj = templates.find(t => t.id === selectedTemplate)
+      console.log('🔍 Import Debug - Template object:', selectedTemplateObj)
+      
       if (!selectedTemplateObj) throw new Error('Template not found')
       
       const testCases = []
@@ -143,10 +185,15 @@ export function ImportModal({
       let errorCount = 0
       const errors: string[] = []
       
+      console.log('🔍 Import Debug - Processing rows...')
+      
       for (let i = 0; i < importData.length; i++) {
         try {
           const row = importData[i]
+          console.log(`🔍 Import Debug - Processing row ${i + 1}:`, row)
+          
           const transformedData = transformImportData(row, fieldMappings)
+          console.log(`🔍 Import Debug - Transformed data for row ${i + 1}:`, transformedData)
           
           const testCase = createTestCaseFromImport(
             transformedData,
@@ -154,14 +201,27 @@ export function ImportModal({
             selectedProject,
             'current-user' // TODO: Get from auth context
           )
+          console.log(`🔍 Import Debug - Created test case for row ${i + 1}:`, testCase)
           
           testCases.push(testCase)
           importedCount++
+          console.log(`✅ Import Debug - Row ${i + 1} processed successfully`)
         } catch (error) {
+          console.error(`❌ Import Debug - Error processing row ${i + 1}:`, error)
+          console.error(`❌ Import Debug - Row ${i + 1} data:`, importData[i])
+          console.error(`❌ Import Debug - Error stack:`, error.stack)
           errorCount++
-          errors.push(`Row ${i + 1}: ${error}`)
+          errors.push(`Row ${i + 1}: ${error.message || error}`)
         }
       }
+      
+      console.log('🔍 Import Debug - Import summary:', {
+        importedCount,
+        skippedCount,
+        errorCount,
+        errors,
+        totalTestCases: testCases.length
+      })
       
       setImportResult({
         success: errorCount === 0,
@@ -172,11 +232,15 @@ export function ImportModal({
       })
       
       if (testCases.length > 0) {
+        console.log('✅ Import Debug - Calling onImport with test cases:', testCases)
         onImport(testCases)
+      } else {
+        console.warn('⚠️ Import Debug - No test cases to import')
       }
       
       // Wait a moment to show the result, then close
       setTimeout(() => {
+        console.log('🔍 Import Debug - Cleaning up and closing modal')
         onClose()
         setStep('upload')
         setFile(null)
@@ -187,7 +251,9 @@ export function ImportModal({
       }, 2000)
       
     } catch (error) {
-      setErrors([`Import failed: ${error}`])
+      console.error('❌ Import Debug - Import process failed:', error)
+      console.error('❌ Import Debug - Error stack:', error.stack)
+      setErrors([`Import failed: ${error.message || error}`])
       setStep('preview')
     }
   }
@@ -196,6 +262,15 @@ export function ImportModal({
     const newMappings = [...fieldMappings]
     newMappings[index] = { ...newMappings[index], ...updates }
     setFieldMappings(newMappings)
+    
+    // Re-validate with updated mappings
+    if (preview && importData.length > 0) {
+      const selectedTemplateObj = templates.find(t => t.id === selectedTemplate)
+      if (selectedTemplateObj) {
+        const validationErrors = validateImportData(importData, selectedTemplateObj, newMappings)
+        setPreview({...preview, validationErrors})
+      }
+    }
   }
 
   const addFieldMapping = () => {
@@ -214,20 +289,131 @@ export function ImportModal({
     setFieldMappings(fieldMappings.filter((_, i) => i !== index))
   }
 
+  // Helper functions for field mapping analysis
+  const getUnmappedSourceFields = () => {
+    if (!preview) return []
+    const mappedSources = fieldMappings.map(m => m.sourceField).filter(Boolean)
+    return preview.availableFields.filter(field => !mappedSources.includes(field))
+  }
+
+  const getUnmappedTargetFields = () => {
+    const systemOptions = getSystemFieldOptions()
+    const templateOptions = templates.find(t => t.id === selectedTemplate)?.fields.map(f => ({
+      value: f.id,
+      label: `${f.label} (Template)`
+    })) || []
+    
+    // Combine and ensure unique values
+    const allTargetOptions = [...systemOptions, ...templateOptions]
+    const uniqueOptions = allTargetOptions.filter((option, index, array) => 
+      array.findIndex(opt => opt.value === option.value) === index
+    )
+    
+    const mappedTargets = fieldMappings.map(m => m.targetField).filter(Boolean)
+    return uniqueOptions.filter(option => !mappedTargets.includes(option.value))
+  }
+
+  const getRequiredFieldStatus = () => {
+    const selectedTemplateObj = templates.find(t => t.id === selectedTemplate)
+    if (!selectedTemplateObj) return { missing: [], satisfied: [] }
+    
+    const requiredFields = selectedTemplateObj.fields.filter(f => f.required)
+    const systemRequiredFields = ['testCase', 'module'] // Basic required system fields
+    
+    const mappedTargets = fieldMappings.map(m => m.targetField).filter(Boolean)
+    
+    const allRequired = [
+      ...requiredFields.map(f => ({ id: f.id, label: f.label, type: 'template' })),
+      ...systemRequiredFields.map(f => ({ id: f, label: f, type: 'system' }))
+    ]
+    
+    const missing = allRequired.filter(req => !mappedTargets.includes(req.id))
+    const satisfied = allRequired.filter(req => mappedTargets.includes(req.id))
+    
+    return { missing, satisfied }
+  }
+
+  const autoMapUnmappedFields = () => {
+    const unmappedSources = getUnmappedSourceFields()
+    const unmappedTargets = getUnmappedTargetFields()
+    
+    if (unmappedSources.length === 0 || unmappedTargets.length === 0) return
+    
+    const newMappings = [...fieldMappings]
+    
+    // Try to create intelligent mappings based on field names
+    unmappedSources.forEach(sourceField => {
+      const bestTarget = findBestTargetMatch(sourceField, unmappedTargets)
+      if (bestTarget) {
+        newMappings.push({
+          sourceField,
+          targetField: bestTarget.value,
+          required: false,
+          isSystemField: !bestTarget.label.includes('Template')
+        })
+        // Remove from unmapped targets
+        const targetIndex = unmappedTargets.findIndex(t => t.value === bestTarget.value)
+        if (targetIndex > -1) unmappedTargets.splice(targetIndex, 1)
+      }
+    })
+    
+    setFieldMappings(newMappings)
+    
+    // Re-validate with new mappings
+    if (preview && importData.length > 0) {
+      const selectedTemplateObj = templates.find(t => t.id === selectedTemplate)
+      if (selectedTemplateObj) {
+        const validationErrors = validateImportData(importData, selectedTemplateObj, newMappings)
+        setPreview({...preview, validationErrors})
+      }
+    }
+  }
+
+  const findBestTargetMatch = (sourceField: string, availableTargets: any[]) => {
+    const normalizedSource = sourceField.toLowerCase().replace(/[^a-z0-9]/g, '')
+    
+    // Direct matches first
+    const directMatch = availableTargets.find(target => {
+      const normalizedTarget = target.label.toLowerCase().replace(/[^a-z0-9]/g, '')
+      return normalizedTarget === normalizedSource || 
+             normalizedTarget.includes(normalizedSource) ||
+             normalizedSource.includes(normalizedTarget)
+    })
+    
+    if (directMatch) return directMatch
+    
+    // Partial matches
+    const partialMatch = availableTargets.find(target => {
+      const normalizedTarget = target.label.toLowerCase().replace(/[^a-z0-9]/g, '')
+      const sourceWords = normalizedSource.split(/[^a-z0-9]+/).filter(Boolean)
+      const targetWords = normalizedTarget.split(/[^a-z0-9]+/).filter(Boolean)
+      
+      return sourceWords.some(word => targetWords.some(targetWord => 
+        word.includes(targetWord) || targetWord.includes(word)
+      ))
+    })
+    
+    return partialMatch || null
+  }
+
   const getSystemFieldOptions = () => [
-    { value: 'testCase', label: 'Test Case Description' },
-    { value: 'testSteps', label: 'Test Steps' },
-    { value: 'testResult', label: 'Expected Result' },
-    { value: 'module', label: 'Module/Component' },
+    { value: 'testCase', label: 'Test Case (ID)' },
+    { value: 'module', label: 'Module' },
+    { value: 'testStep', label: 'Test Step' },
+    { value: 'testStepDescription', label: 'Test Step Description' },
+    { value: 'testData', label: 'Test Data' },
+    { value: 'expectedResult', label: 'Expected Result' },
+    { value: 'testResult', label: 'Test Result' },
+    { value: 'qa', label: 'QA' },
+    { value: 'remarks', label: 'Remarks' },
+    { value: 'testSteps', label: 'Test Steps (Legacy)' },
     { value: 'priority', label: 'Priority' },
     { value: 'status', label: 'Status' },
     { value: 'tags', label: 'Tags' },
     { value: 'ticketId', label: 'Ticket ID' },
     { value: 'enhancement', label: 'Enhancement' },
     { value: 'epic', label: 'Epic' },
-    { value: 'feature', label: 'Feature' },
-    { value: 'qa', label: 'QA Notes' },
-    { value: 'remarks', label: 'Remarks' }
+    { value: 'feature', label: 'Feature' }
   ]
 
   const getTransformationOptions = () => [
@@ -410,18 +596,117 @@ export function ImportModal({
         </Card>
       )}
 
+      {/* Missing Fields Analysis */}
+      {preview && fieldMappings.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Unmapped Source Fields */}
+          <Card className="border-orange-200 bg-orange-50">
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2 mb-2">
+                <AlertCircle className="h-4 w-4 text-orange-600" />
+                <h5 className="text-sm font-medium text-orange-800">
+                  Unmapped File Columns ({getUnmappedSourceFields().length})
+                </h5>
+              </div>
+              {getUnmappedSourceFields().length > 0 ? (
+                <div className="space-y-1">
+                  {getUnmappedSourceFields().map((field, index) => (
+                    <div key={index} className="text-xs bg-orange-100 px-2 py-1 rounded text-orange-700">
+                      {field}
+                    </div>
+                  ))}
+                  <p className="text-xs text-orange-600 mt-2">
+                    These columns from your file aren't mapped to any target field yet.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-orange-600">All file columns are mapped!</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Required Fields Status */}
+          <Card className={getRequiredFieldStatus().missing.length > 0 ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2 mb-2">
+                {getRequiredFieldStatus().missing.length > 0 ? (
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                ) : (
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                )}
+                <h5 className={`text-sm font-medium ${getRequiredFieldStatus().missing.length > 0 ? 'text-red-800' : 'text-green-800'}`}>
+                  Required Fields ({getRequiredFieldStatus().missing.length} missing)
+                </h5>
+              </div>
+              {getRequiredFieldStatus().missing.length > 0 ? (
+                <div className="space-y-1">
+                  {getRequiredFieldStatus().missing.map((field, index) => (
+                    <div key={index} className="text-xs bg-red-100 px-2 py-1 rounded text-red-700">
+                      {field.label} ({field.type})
+                    </div>
+                  ))}
+                  <p className="text-xs text-red-600 mt-2">
+                    These required fields need to be mapped before import.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-green-600">All required fields are mapped!</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Available Target Fields */}
+          <Card className="border-blue-200 bg-blue-50">
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2 mb-2">
+                <Eye className="h-4 w-4 text-blue-600" />
+                <h5 className="text-sm font-medium text-blue-800">
+                  Available Target Fields ({getUnmappedTargetFields().length})
+                </h5>
+              </div>
+              {getUnmappedTargetFields().length > 0 ? (
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {getUnmappedTargetFields().slice(0, 8).map((field, index) => (
+                    <div key={index} className="text-xs bg-blue-100 px-2 py-1 rounded text-blue-700">
+                      {field.label}
+                    </div>
+                  ))}
+                  {getUnmappedTargetFields().length > 8 && (
+                    <p className="text-xs text-blue-600">...and {getUnmappedTargetFields().length - 8} more</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-blue-600">All target fields are in use!</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Field Mappings */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h4 className="text-md font-medium text-gray-900">Field Mappings</h4>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={addFieldMapping}
-          >
-            <Map className="h-4 w-4 mr-2" />
-            Add Mapping
-          </Button>
+          <div className="flex space-x-2">
+            {preview && getUnmappedSourceFields().length > 0 && getUnmappedTargetFields().length > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={autoMapUnmappedFields}
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                Auto Map
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={addFieldMapping}
+            >
+              <Map className="h-4 w-4 mr-2" />
+              Add Mapping
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -446,13 +731,21 @@ export function ImportModal({
                 <Select
                   value={mapping.targetField}
                   onChange={(value) => updateFieldMapping(index, { targetField: value })}
-                  options={[
-                    ...getSystemFieldOptions(),
-                    ...(templates.find(t => t.id === selectedTemplate)?.fields.map(f => ({
+                  options={(() => {
+                    const systemOptions = getSystemFieldOptions()
+                    const templateOptions = templates.find(t => t.id === selectedTemplate)?.fields.map(f => ({
                       value: f.id,
                       label: `${f.label} (Template)`
-                    })) || [])
-                  ]}
+                    })) || []
+                    
+                    // Combine and ensure unique values
+                    const allOptions = [...systemOptions, ...templateOptions]
+                    const uniqueOptions = allOptions.filter((option, index, array) => 
+                      array.findIndex(opt => opt.value === option.value) === index
+                    )
+                    
+                    return uniqueOptions
+                  })()}
                   placeholder="Select target field"
                 />
               </div>

@@ -1,0 +1,11 @@
+Test Case ID,Module,Test Case,Test Steps,Test Step Description,Test Data,Expected Result,Test Result,QA,Remarks
+TC-001,Authentication,User Login with Valid Credentials,1,Navigate to login page,URL: /login,Login page loads successfully,Not Executed,John Doe,Initial test case
+TC-001,Authentication,User Login with Valid Credentials,2,Enter valid username,username: testuser@company.com,Username field accepts input,Not Executed,John Doe,
+TC-001,Authentication,User Login with Valid Credentials,3,Enter valid password,password: SecurePass123,Password field accepts input and masks characters,Not Executed,John Doe,
+TC-001,Authentication,User Login with Valid Credentials,4,Click Login button,N/A,User is redirected to dashboard,Not Executed,John Doe,
+TC-002,Shopping Cart,Add Product to Cart,1,Navigate to product catalog,URL: /products,Product catalog page loads with available items,Not Executed,Jane Smith,Test with multiple product types
+TC-002,Shopping Cart,Add Product to Cart,2,Select a product,Product ID: PROD-001,Product detail page opens,Not Executed,Jane Smith,
+TC-002,Shopping Cart,Add Product to Cart,3,Click 'Add to Cart' button,Quantity: 1,Product is added to cart and cart count increases,Not Executed,Jane Smith,
+TC-003,User Profile,Update Profile Information,1,Navigate to profile page,URL: /profile,Profile page loads with current user information,Not Executed,Mike Johnson,Verify all profile fields are editable
+TC-003,User Profile,Update Profile Information,2,Update email address,email: newemail@test.com,Email field shows updated value,Not Executed,Mike Johnson,
+TC-003,User Profile,Update Profile Information,3,Click Save Changes button,N/A,Success message appears and changes are saved,Not Executed,Mike Johnson,
