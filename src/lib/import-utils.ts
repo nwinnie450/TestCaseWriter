@@ -53,55 +53,153 @@ export async function parseImportFile(file: File, format: string): Promise<Recor
   }
 }
 
-// Parse CSV files
+// Parse CSV files with robust parsing (keeps newlines inside cells, proper quoting)
 async function parseCSV(file: File): Promise<Record<string, any>[]> {
-  console.log('🔍 CSV Debug - Starting CSV parse for file:', file.name, file.size)
+  console.log('🔍 CSV Debug - Starting robust CSV parse for file:', file.name, file.size)
   
   const text = await file.text()
   console.log('🔍 CSV Debug - File text length:', text.length)
   console.log('🔍 CSV Debug - First 500 chars:', text.substring(0, 500))
   
-  const lines = text.split('\n').filter(line => line.trim())
-  console.log('🔍 CSV Debug - Total lines after filtering:', lines.length)
-  console.log('🔍 CSV Debug - First few lines:', lines.slice(0, 3))
+  // Use robust CSV parsing that handles quoted multi-line content
+  const rows = parseCSVText(text)
+  console.log('🔍 CSV Debug - Parsed rows:', rows.length)
   
-  if (lines.length < 2) {
-    console.error('❌ CSV Debug - Not enough lines:', lines.length)
+  if (rows.length < 2) {
+    console.error('❌ CSV Debug - Not enough rows:', rows.length)
     throw new Error('CSV must have at least a header and one data row')
   }
   
-  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
-  console.log('🔍 CSV Debug - Detected headers:', headers)
+  const [headerRow, ...dataRows] = rows
+  console.log('🔍 CSV Debug - Headers:', headerRow)
   
-  const data: Record<string, any>[] = []
-  
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''))
-    console.log(`🔍 CSV Debug - Row ${i} values:`, values)
-    
-    const row: Record<string, any> = {}
-    
-    headers.forEach((header, index) => {
-      row[header] = values[index] || ''
+  // Convert rows to objects
+  const objects = dataRows.map(row => {
+    const obj: Record<string, any> = {}
+    headerRow.forEach((header, index) => {
+      obj[header] = row[index] || ''
     })
-    
-    console.log(`🔍 CSV Debug - Row ${i} object:`, row)
-    data.push(row)
+    return obj
+  })
+  
+  console.log('🔍 CSV Debug - Converted to objects:', objects.length)
+  console.log('🔍 CSV Debug - Sample object:', objects[0])
+  
+  // Apply smart-detect logic to filter valid test cases
+  const validTestCases = smartDetectValidTestCases(objects, headerRow)
+  console.log('🔍 CSV Debug - Smart-detect filtered to:', validTestCases.length, 'valid test cases')
+  
+  // Map headers and convert to test cases  
+  const headerMap = mapHeaders(headerRow)
+  const testCases = rowsToTestCases(validTestCases, headerMap)
+  console.log('✅ CSV Debug - Final result:', testCases.length, 'test cases')
+  
+  // Return the test cases as regular objects (not TestCase instances) for the import flow
+  return testCases.map(tc => ({
+    id: tc.id,
+    testCase: tc.testCase,
+    module: tc.module,
+    testSteps: tc.testSteps,
+    testResult: tc.testResult,
+    qa: tc.qa,
+    remarks: tc.remarks,
+    priority: tc.priority,
+    status: tc.status,
+    createdAt: tc.createdAt,
+    updatedAt: tc.updatedAt,
+    data: tc.data
+  }))
+}
+
+// Robust CSV text parsing (handles quoted multi-line content properly)
+function parseCSVText(text: string): string[][] {
+  console.log('🔍 CSV Parse - Starting text parsing')
+  
+  const rows: string[][] = []
+  let currentRow: string[] = []
+  let currentCell = ''
+  let insideQuotes = false
+  let i = 0
+  
+  // Handle UTF-8 BOM
+  if (text.charCodeAt(0) === 0xFEFF) {
+    text = text.slice(1)
   }
   
-  console.log('✅ CSV Debug - Final parsed data:', data)
+  while (i < text.length) {
+    const char = text[i]
+    const nextChar = text[i + 1]
+    
+    if (char === '"') {
+      if (insideQuotes && nextChar === '"') {
+        // Escaped quote
+        currentCell += '"'
+        i += 2
+        continue
+      } else {
+        // Toggle quote state
+        insideQuotes = !insideQuotes
+        i++
+        continue
+      }
+    }
+    
+    if (!insideQuotes) {
+      if (char === ',') {
+        currentRow.push(currentCell.trim())
+        currentCell = ''
+        i++
+        continue
+      }
+      
+      if (char === '\n' || (char === '\r' && nextChar === '\n')) {
+        if (currentCell.trim() || currentRow.length > 0) {
+          currentRow.push(currentCell.trim())
+          if (currentRow.some(cell => cell.length > 0)) {
+            rows.push(currentRow)
+          }
+        }
+        currentRow = []
+        currentCell = ''
+        i += char === '\r' ? 2 : 1
+        continue
+      }
+      
+      if (char === '\r') {
+        if (currentCell.trim() || currentRow.length > 0) {
+          currentRow.push(currentCell.trim())
+          if (currentRow.some(cell => cell.length > 0)) {
+            rows.push(currentRow)
+          }
+        }
+        currentRow = []
+        currentCell = ''
+        i++
+        continue
+      }
+    }
+    
+    currentCell += char
+    i++
+  }
   
-  // Apply smart-detect filtering: only keep rows with valid Test Case IDs
-  const filteredData = smartDetectValidTestCases(data, headers)
-  console.log('✅ CSV Debug - After smart detection:', filteredData)
+  // Handle final row
+  if (currentCell.trim() || currentRow.length > 0) {
+    currentRow.push(currentCell.trim())
+    if (currentRow.some(cell => cell.length > 0)) {
+      rows.push(currentRow)
+    }
+  }
   
-  return filteredData
+  console.log('✅ CSV Parse - Parsed into', rows.length, 'rows')
+  return rows
 }
 
 // Smart-detect valid test cases: only rows with non-empty Test Case ID become test cases
 function smartDetectValidTestCases(data: Record<string, any>[], headers: string[]): Record<string, any>[] {
   console.log('🔍 Smart Detect - Starting smart detection of valid test cases')
   console.log('🔍 Smart Detect - Input data length:', data.length)
+  console.log('🔍 Smart Detect - Headers:', headers)
   
   function isNonEmpty(v?: string): boolean {
     return !!(v && v.trim().length > 0)
@@ -160,6 +258,113 @@ function smartDetectValidTestCases(data: Record<string, any>[], headers: string[
   console.log(`✅ Smart Detect - Skipped ${skippedCount} rows with empty Test Case IDs`)
   
   return validTestCases
+}
+
+// Robust header mapping that handles various CSV formats
+function mapHeaders(rawHeaders: string[]): Record<string, string> {
+  const headerMap: Record<string, string> = {}
+  
+  // Standard field mappings - case insensitive and flexible
+  const fieldMappings: Record<string, string[]> = {
+    'testCase': ['test case', 'test case id', 'testcase', 'testcaseid', 'tc', 'id', 'case id'],
+    'module': ['module', 'component', 'feature', 'area'],
+    'testStep': ['test step', 'teststep', 'step', 'step number', 'stepno'],
+    'testStepDescription': ['test step description', 'teststepdescription', 'description', 'steps', 'procedure'],
+    'testData': ['test data', 'testdata', 'data', 'input', 'parameters'],
+    'expectedResult': ['expected result', 'expectedresult', 'expected', 'result', 'outcome'],
+    'testResult': ['test result', 'testresult', 'actual result', 'status', 'verdict'],
+    'qa': ['qa', 'tester', 'assignee', 'owner'],
+    'remarks': ['remarks', 'notes', 'comments', 'observations']
+  }
+  
+  rawHeaders.forEach(header => {
+    const normalizedHeader = header.toLowerCase().trim()
+    
+    // Find matching field
+    for (const [targetField, aliases] of Object.entries(fieldMappings)) {
+      if (aliases.some(alias => normalizedHeader.includes(alias) || alias.includes(normalizedHeader))) {
+        headerMap[header] = targetField
+        break
+      }
+    }
+  })
+  
+  console.log('🔍 Header Mapping:', headerMap)
+  return headerMap
+}
+
+// Convert rows to test cases using proper field mapping
+function rowsToTestCases(validRows: Record<string, any>[], headerMap: Record<string, string>): TestCase[] {
+  console.log('🔍 RowsToTestCases - Processing', validRows.length, 'valid rows')
+  
+  const testCases: TestCase[] = []
+  
+  for (const row of validRows) {
+    try {
+      // Map fields using header mapping
+      const mappedData: Record<string, any> = {}
+      
+      for (const [originalHeader, value] of Object.entries(row)) {
+        const mappedField = headerMap[originalHeader] || originalHeader
+        mappedData[mappedField] = value
+      }
+      
+      // Generate unique test case ID
+      const testCaseId = `TC-${Date.now()}-${Math.random().toString(36).substring(2, 5)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
+      
+      // Parse multi-line test steps if present
+      let testSteps: TestStep[] = []
+      if (mappedData.testStepDescription || mappedData.expectedResult) {
+        testSteps = parseMultiLineTestCase(
+          mappedData.testStepDescription || '',
+          mappedData.expectedResult || '',
+          mappedData.testData || ''
+        )
+      }
+      
+      // Default test step to 1 if blank
+      const testStep = mappedData.testStep || 1
+      
+      const testCase: TestCase = {
+        id: testCaseId,
+        testCase: mappedData.testCase || 'Imported Test Case',
+        module: mappedData.module || 'General',
+        priority: 'medium',
+        status: 'active',
+        testSteps: testSteps.length > 0 ? testSteps : [{
+          step: 1,
+          description: mappedData.testStepDescription || 'No description provided',
+          expectedResult: mappedData.expectedResult || 'No expected result specified',
+          testData: mappedData.testData || ''
+        }],
+        testResult: mappedData.testResult || 'Not Executed',
+        qa: mappedData.qa || '',
+        remarks: mappedData.remarks || '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        data: {
+          testCase: mappedData.testCase,
+          module: mappedData.module,
+          testStep: testStep,
+          testStepDescription: mappedData.testStepDescription,
+          testData: mappedData.testData,
+          expectedResult: mappedData.expectedResult,
+          testResult: mappedData.testResult,
+          qa: mappedData.qa,
+          remarks: mappedData.remarks
+        }
+      }
+      
+      testCases.push(testCase)
+      console.log(`✅ RowsToTestCases - Created test case:`, testCase.id)
+      
+    } catch (error) {
+      console.error('❌ RowsToTestCases - Error processing row:', error, row)
+    }
+  }
+  
+  console.log(`✅ RowsToTestCases - Generated ${testCases.length} test cases`)
+  return testCases
 }
 
 // Group related rows that belong to the same test case (DEPRECATED - replaced by smart detect)

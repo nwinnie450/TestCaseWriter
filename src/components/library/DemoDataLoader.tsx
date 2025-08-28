@@ -188,6 +188,55 @@ export function DemoDataLoader({ onDataLoaded }: DemoDataLoaderProps) {
     setMessage('🔍 localStorage inspection completed. Check debug info below.')
   }
 
+  const checkCurrentData = () => {
+    try {
+      const testCases = localStorage.getItem('testCaseWriter_generatedTestCases')
+      const projects = localStorage.getItem('testCaseWriter_projects')
+      
+      if (testCases) {
+        const parsed = JSON.parse(testCases)
+        console.log('🔍 Current localStorage test cases:', parsed)
+        
+        // Count total test cases across all sessions
+        let totalCount = 0
+        if (Array.isArray(parsed)) {
+          parsed.forEach((session: any, index: number) => {
+            console.log(`📁 Session ${index + 1}:`, {
+              id: session.id,
+              name: session.name || session.documentNames,
+              testCaseCount: session.testCases?.length || 0,
+              totalCount: session.totalCount,
+              firstTestCase: session.testCases?.[0] ? {
+                id: session.testCases[0].id,
+                title: session.testCases[0].data?.title || session.testCases[0].testCase,
+                testStepsCount: session.testCases[0].testSteps?.length || 0
+              } : null
+            })
+            totalCount += session.testCases?.length || 0
+          })
+        }
+        
+        setDebugInfo(`📊 Total test cases found: ${totalCount}\n\n${JSON.stringify(parsed, null, 2)}`)
+        setStatus('success')
+        setMessage(`Found ${totalCount} test cases in localStorage`)
+      } else {
+        setDebugInfo('No test cases found in localStorage')
+        setStatus('idle')
+        setMessage('No test cases found')
+      }
+      
+      if (projects) {
+        const parsedProjects = JSON.parse(projects)
+        console.log('🔍 Current localStorage projects:', parsedProjects)
+      }
+    } catch (error) {
+      console.error('Error checking current data:', error)
+      setDebugInfo(`Error: ${error}`)
+      setStatus('error')
+      setMessage('Error checking data')
+    }
+  }
+
   return (
     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
       <div className="flex items-center justify-between mb-3">
