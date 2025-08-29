@@ -64,7 +64,7 @@ export function compareVersions(
   }> = []
 
   // Compare data fields
-  const allFields = new Set([...Object.keys(oldVersion.data), ...Object.keys(newVersion.data)])
+  const allFields = Array.from(new Set([...Object.keys(oldVersion.data), ...Object.keys(newVersion.data)]))
   
   for (const field of allFields) {
     if (!(field in oldVersion.data)) {

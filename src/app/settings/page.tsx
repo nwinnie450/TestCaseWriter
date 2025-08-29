@@ -1192,9 +1192,9 @@ export default function Settings() {
                     <Input
                       type="number"
                       value={settings.ai.maxTokens}
-                      onChange={(e) => updateAIConfig({ maxTokens: parseInt(e.target.value) || 2000 })}
+                      onChange={(e) => updateAIConfig({ maxTokens: parseInt(e.target.value) || 128000 })}
                       min="100"
-                      max="8000"
+                      max="1000000"
                       className="w-full"
                     />
                   </div>

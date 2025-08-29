@@ -177,21 +177,35 @@ class OpenAIProvider implements BaseAIProvider {
         ? `🚨 STRICT DOCUMENT-ONLY MODE ENABLED 🚨\nABSOLUTELY CRITICAL: You MUST ONLY generate test cases based on the specific content in the uploaded documents.\n\n`
         : ''
 
-      const systemPrompt = `${documentFocusPrefix}You are an expert QA engineer specializing in test case generation.\n\nYour task is to analyze requirements documents and generate EXACTLY ${config.maxTestCases} test cases following this template format:\n\n${template}\n\nIMPORTANT: Generate EXACTLY ${config.maxTestCases} test cases, no more, no less.\n\nCRITICAL: Each test case MUST have AT LEAST 5-8 detailed test steps to ensure comprehensive testing. Create thorough, step-by-step test scenarios that cover setup, execution, validation, and cleanup phases.\n\nGenerate test cases in JSON format with this structure:\n[\n  {\n    "id": "TC-0001",\n    "module": "Module Name",\n    "testCase": "Detailed test case description explaining the specific scenario being tested",\n    "testSteps": [\n      {\n        "step": 1,\n        "description": "Navigate to the application login page",\n        "testData": "Valid username and password credentials",\n        "expectedResult": "Login page displays correctly with username and password fields"\n      },\n      {\n        "step": 2,\n        "description": "Enter valid username in the username field",\n        "testData": "username: testuser@example.com",\n        "expectedResult": "Username is entered successfully without validation errors"\n      },\n      {\n        "step": 3,\n        "description": "Enter valid password in the password field",\n        "testData": "password: ValidPass123!",\n        "expectedResult": "Password is masked and entered successfully"\n      },\n      {\n        "step": 4,\n        "description": "Click the Login button to submit credentials",\n        "testData": "N/A",\n        "expectedResult": "Login button triggers authentication process"\n      },\n      {\n        "step": 5,\n        "description": "Verify successful authentication and dashboard loading",\n        "testData": "N/A",\n        "expectedResult": "User is redirected to dashboard with welcome message displayed"\n      }\n    ],\n    "testResult": "Not Executed",\n    "qa": "",\n    "remarks": "Generated from requirements"\n  }\n]`
+      const systemPrompt = `${documentFocusPrefix}You are an expert QA engineer specializing in comprehensive test case generation.\n\nYour task is to analyze requirements documents and generate EXACTLY ${config.maxTestCases} test cases following this template format:\n\n${template}\n\nCRITICAL REQUIREMENTS FOR COMPREHENSIVE COVERAGE:\n\n1. FOR EACH REQUIREMENT, create multiple test cases covering:\n   - POSITIVE SCENARIOS: Happy path with valid data, boundary conditions, different data types\n   - NEGATIVE SCENARIOS: Invalid inputs, missing fields, error conditions, unauthorized access\n   - EDGE CASES: Extremely large/small values, special characters, concurrent operations\n   - INTEGRATION SCENARIOS: API interactions, database operations, external services\n   - SECURITY SCENARIOS: Input validation, authentication, data sanitization\n   - PERFORMANCE SCENARIOS: Load conditions, resource limits, timeouts\n\n2. TEST CASE STRUCTURE:\n   - Each test case MUST have AT LEAST 5-8 detailed test steps\n   - Include specific test data and expected results for each step\n   - Cover setup, execution, validation, and cleanup phases\n   - Consider different user roles and permissions\n   - Include realistic test data and conditions\n\n3. QUALITY STANDARDS:\n   - Ensure 100% requirement coverage across all test cases\n   - Each test case must be specific and actionable\n   - Consider business impact and risk levels\n   - Generate test cases that can be executed immediately\n\n4. CRITICAL ORDERING REQUIREMENT:\n   - Generate test cases in the EXACT SAME ORDER as requirements appear in the document\n   - Test Case ID should follow sequential order (TC-0001, TC-0002, TC-0003...)\n   - Each requirement should have its test cases generated immediately after it appears\n   - Maintain logical flow and dependency relationships\n   - Do NOT mix test cases from different requirements randomly\n\nGenerate EXACTLY ${config.maxTestCases} test cases in JSON format with this structure:\n[\n  {\n    "id": "TC-0001",\n    "module": "Module Name",\n    "testCase": "Detailed test case description covering specific scenario",\n    "testSteps": [\n      {\n        "step": 1,\n        "description": "Specific step description with test data",\n        "testData": "Specific test data values",\n        "expectedResult": "Detailed expected result"\n      }\n    ],\n    "testResult": "Not Executed",\n    "qa": "QA notes for this test case",\n    "remarks": "Additional context or risk considerations"\n  }\n]`
 
-      const userPrompt = `Please analyze the following requirements document and generate EXACTLY ${config.maxTestCases} test cases:\n\nDOCUMENT CONTENT:\n${documentContent}\n\nCONFIGURATION:\n- Maximum test cases: ${config.maxTestCases}\n- Coverage: ${config.coverage}\n- Include negative tests: ${config.includeNegativeTests}\n- Include edge cases: ${config.includeEdgeCases}\n- Custom instructions: ${config.customInstructions}\n\nGenerate EXACTLY ${config.maxTestCases} test cases based on the ACTUAL requirements above. Do not exceed this limit.`
+      const userPrompt = `Please analyze the following requirements document and generate EXACTLY ${config.maxTestCases} comprehensive test cases:\n\nDOCUMENT CONTENT:\n${documentContent}\n\nCONFIGURATION:\n- Maximum test cases: ${config.maxTestCases}\n- Coverage: ${config.coverage}\n- Include negative tests: ${config.includeNegativeTests}\n- Include edge cases: ${config.includeEdgeCases}\n- Custom instructions: ${config.customInstructions}\n\nIMPORTANT: Generate comprehensive test cases that cover EVERY requirement with multiple test scenarios:\n- Positive, negative, and edge case testing\n- Security and performance considerations\n- Integration and user workflow coverage\n- Realistic test data and conditions\n\nCRITICAL ORDERING: Generate test cases in the EXACT SAME ORDER as requirements appear in the document. Maintain logical flow and sequential numbering (TC-0001, TC-0002, TC-0003...).\n\nEnsure 100% requirement coverage with detailed, actionable test cases. Generate EXACTLY ${config.maxTestCases} test cases based on the ACTUAL requirements above.`
 
       const supportsJsonFormat = aiConfig.model.includes('gpt-4') || 
                                  aiConfig.model.includes('gpt-4o') || 
                                  aiConfig.model.includes('gpt-3.5-turbo')
 
+      // Calculate appropriate max_tokens to prevent truncation
+      const estimatedInputTokens = Math.ceil((systemPrompt.length + userPrompt.length) / 4) // Rough estimate
+      const safeMaxTokens = Math.min(
+        aiConfig.maxTokens,
+        // For most models, reserve some tokens for the response
+        aiConfig.model.includes('gpt-4') ? 8000 : 4000
+      )
+      
+      console.log('🔍 Token calculation:', {
+        estimatedInput: estimatedInputTokens,
+        maxOutput: safeMaxTokens,
+        total: estimatedInputTokens + safeMaxTokens
+      })
+      
       const requestBody: any = {
         model: aiConfig.model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        max_tokens: aiConfig.maxTokens,
+        max_tokens: safeMaxTokens,
         temperature: aiConfig.temperature
       }
 
@@ -223,6 +237,17 @@ class OpenAIProvider implements BaseAIProvider {
       if (!content) {
         throw new AIProviderError('No content received from OpenAI API', undefined, 'openai')
       }
+      
+      // Check if response was truncated
+      if (data.choices[0]?.finish_reason === 'length') {
+        console.warn('⚠️ OpenAI response was truncated due to token limit. Consider reducing maxTestCases or increasing max_tokens.')
+      }
+      
+      console.log('🔍 OpenAI response received:', {
+        contentLength: content.length,
+        finishReason: data.choices[0]?.finish_reason,
+        usage: data.usage
+      })
 
       const usage: TokenUsageData = {
         inputTokens: data.usage?.prompt_tokens || 0,
@@ -259,44 +284,173 @@ class OpenAIProvider implements BaseAIProvider {
   }
 
   private parseTestCases(content: string): TestCase[] {
+    console.log('🔍 Parsing test cases from content length:', content.length)
+    console.log('🔍 Content preview (first 500 chars):', content.substring(0, 500))
+    
     try {
       const parsed = JSON.parse(content)
+      console.log('✅ Direct JSON parse successful')
       return Array.isArray(parsed) ? parsed : parsed.testCases || []
     } catch (parseError) {
-      console.log('Initial JSON parse failed, trying to extract JSON from response...')
+      console.log('❌ Initial JSON parse failed, trying to extract JSON from response...')
+      console.log('❌ Parse error:', parseError)
       
+      // Try to extract JSON from markdown code blocks
       const jsonMatch = content.match(/```(?:json)?\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*```/)
       if (jsonMatch) {
         try {
+          console.log('🔍 Found JSON in code block, attempting to parse...')
           const parsed = JSON.parse(jsonMatch[1])
+          console.log('✅ JSON from code block parse successful')
           return Array.isArray(parsed) ? parsed : parsed.testCases || []
         } catch (secondParseError) {
-          console.error('Failed to parse extracted JSON:', secondParseError)
+          console.error('❌ Failed to parse extracted JSON from code block:', secondParseError)
         }
       }
       
+      // Try to find JSON array or object boundaries
       const jsonStartIndex = content.indexOf('[')
       const jsonEndIndex = content.lastIndexOf(']')
       if (jsonStartIndex !== -1 && jsonEndIndex !== -1 && jsonEndIndex > jsonStartIndex) {
         try {
+          console.log('🔍 Found JSON array boundaries, attempting to extract...')
           const extractedJson = content.substring(jsonStartIndex, jsonEndIndex + 1)
+          console.log('🔍 Extracted JSON length:', extractedJson.length)
           const parsed = JSON.parse(extractedJson)
+          console.log('✅ JSON from boundaries parse successful')
           return Array.isArray(parsed) ? parsed : []
         } catch (thirdParseError) {
-          console.error('Failed to parse extracted JSON array:', thirdParseError)
+          console.error('❌ Failed to parse extracted JSON from boundaries:', thirdParseError)
         }
       }
       
-      throw new AIProviderError(`Failed to parse OpenAI response as JSON. Response preview: ${content.substring(0, 200)}...`)
+      // Try to find JSON object boundaries
+      const objStartIndex = content.indexOf('{')
+      const objEndIndex = content.lastIndexOf('}')
+      if (objStartIndex !== -1 && objEndIndex !== -1 && objEndIndex > objStartIndex) {
+        try {
+          console.log('🔍 Found JSON object boundaries, attempting to extract...')
+          const extractedJson = content.substring(objStartIndex, objEndIndex + 1)
+          console.log('🔍 Extracted JSON object length:', extractedJson.length)
+          const parsed = JSON.parse(extractedJson)
+          console.log('✅ JSON object parse successful')
+          return Array.isArray(parsed) ? parsed : parsed.testCases || []
+        } catch (fourthParseError) {
+          console.error('❌ Failed to parse extracted JSON object:', fourthParseError)
+        }
+      }
+      
+      // Try to salvage partial results from truncated JSON
+      console.log('🔄 Attempting to salvage partial results from truncated response...')
+      const partialResults = this.extractPartialTestCases(content)
+      if (partialResults.length > 0) {
+        console.log(`✅ Salvaged ${partialResults.length} test cases from truncated response`)
+        return partialResults
+      }
+      
+      // Log the full content for debugging
+      console.error('❌ All parsing attempts failed. Full content:', content)
+      
+      // Provide a more helpful error message
+      const errorMessage = content.length > 1000 
+        ? `Response too long (${content.length} chars). Check token limits. Content preview: ${content.substring(0, 300)}...`
+        : `Failed to parse response as JSON. Content: ${content}`
+      
+      throw new AIProviderError(`Failed to parse OpenAI response as JSON. ${errorMessage}`)
     }
   }
 
+  private getNextSequentialId(): string {
+    const nextNumber = this.getNextIdNumber();
+    return `TC-${String(nextNumber).padStart(3, '0')}`;
+  }
+
+  private getNextIdNumber(): number {
+    // Get existing test cases from localStorage to find the highest ID number
+    try {
+      const existingTestCases = localStorage.getItem('testCaseWriterLibrary');
+      if (!existingTestCases) {
+        return 1;
+      }
+      
+      const testCases = JSON.parse(existingTestCases);
+      let maxNumber = 0;
+      
+      // Find the highest TC number in existing test cases
+      testCases.forEach((tc: any) => {
+        if (tc.id && tc.id.startsWith('TC-')) {
+          const match = tc.id.match(/^TC-(\d+)$/);
+          if (match) {
+            const number = parseInt(match[1], 10);
+            if (number > maxNumber) {
+              maxNumber = number;
+            }
+          }
+        }
+      });
+      
+      return maxNumber + 1;
+    } catch (error) {
+      console.warn('Error reading existing test cases for ID generation:', error);
+      return 1;
+    }
+  }
+
+  private extractPartialTestCases(content: string): TestCase[] {
+    console.log('🔍 Attempting to extract partial test cases...')
+    const results: TestCase[] = []
+    
+    try {
+      // Look for complete test case objects in the truncated response
+      const testCasePattern = /"id":\s*"[^"]*",[\s\S]*?(?="id":|$)/g
+      const matches = content.match(testCasePattern)
+      
+      if (matches) {
+        for (const match of matches) {
+          try {
+            // Try to construct a valid JSON object from the match
+            let testCaseJson = '{' + match
+            
+            // Remove trailing incomplete parts
+            testCaseJson = testCaseJson.replace(/,\s*$/, '')
+            
+            // Try to close any unclosed structures
+            const openBraces = (testCaseJson.match(/{/g) || []).length
+            const closeBraces = (testCaseJson.match(/}/g) || []).length
+            const openBrackets = (testCaseJson.match(/\[/g) || []).length
+            const closeBrackets = (testCaseJson.match(/]/g) || []).length
+            
+            // Add missing closing brackets and braces
+            for (let i = 0; i < openBrackets - closeBrackets; i++) {
+              testCaseJson += ']'
+            }
+            for (let i = 0; i < openBraces - closeBraces; i++) {
+              testCaseJson += '}'
+            }
+            
+            const parsed = JSON.parse(testCaseJson)
+            if (parsed.id && parsed.testCase) {
+              results.push(parsed)
+              console.log(`✅ Extracted partial test case: ${parsed.id}`)
+            }
+          } catch (parseError) {
+            console.log(`⚠️ Failed to parse partial test case:`, parseError)
+          }
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ Pattern matching failed:', error)
+    }
+    
+    return results
+  }
+
   private formatTestCases(testCases: TestCase[]): TestCase[] {
-    const timestamp = Date.now()
-    const randomSuffix = Math.random().toString(36).substring(2, 5)
+    // Generate sequential IDs for the batch starting from the next available number
+    let nextIdNumber = this.getNextIdNumber();
     
     return testCases.map((tc, index) => ({
-      id: tc.id || `TC-${timestamp}-${randomSuffix}-${String(index + 1).padStart(2, '0')}`,
+      id: `TC-${String(nextIdNumber + index).padStart(3, '0')}`, // Force sequential IDs
       templateId: tc.templateId || 'ai-generated',
       projectId: tc.projectId || 'default',
       module: tc.module || 'General',
@@ -334,7 +488,7 @@ class GeminiProvider implements BaseAIProvider {
     try {
       const documentContent = documents.join('\n\n')
       
-      const prompt = `You are an expert QA engineer. Generate test cases based on this template:\n\n${template}\n\nRequirements document:\n${documentContent}\n\nGenerate ${config.maxTestCases} test cases in JSON format as an array.`
+      const prompt = `You are an expert QA engineer specializing in comprehensive test case generation.\n\nYour task is to analyze requirements documents and generate EXACTLY ${config.maxTestCases} comprehensive test cases following this template format:\n\n${template}\n\nCRITICAL REQUIREMENTS FOR COMPREHENSIVE COVERAGE:\n\n1. FOR EACH REQUIREMENT, create multiple test cases covering:\n   - POSITIVE SCENARIOS: Happy path with valid data, boundary conditions, different data types\n   - NEGATIVE SCENARIOS: Invalid inputs, missing fields, error conditions, unauthorized access\n   - EDGE CASES: Extremely large/small values, special characters, concurrent operations\n   - INTEGRATION SCENARIOS: API interactions, database operations, external services\n   - SECURITY SCENARIOS: Input validation, authentication, data sanitization\n   - PERFORMANCE SCENARIOS: Load conditions, resource limits, timeouts\n\n2. TEST CASE STRUCTURE:\n   - Each test case MUST have AT LEAST 5-8 detailed test steps\n   - Include specific test data and expected results for each step\n   - Cover setup, execution, validation, and cleanup phases\n   - Consider different user roles and permissions\n   - Include realistic test data and conditions\n\n3. QUALITY STANDARDS:\n   - Ensure 100% requirement coverage across all test cases\n   - Each test case must be specific and actionable\n   - Consider business impact and risk levels\n   - Generate test cases that can be executed immediately\n\nRequirements document:\n${documentContent}\n\nGenerate EXACTLY ${config.maxTestCases} comprehensive test cases in JSON format as an array. Ensure 100% requirement coverage with detailed, actionable test cases.`
 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${aiConfig.model}:generateContent?key=${aiConfig.apiKey}`, {
         method: 'POST',
@@ -422,11 +576,11 @@ class GeminiProvider implements BaseAIProvider {
   }
 
   private formatTestCases(testCases: TestCase[]): TestCase[] {
-    const timestamp = Date.now()
-    const randomSuffix = Math.random().toString(36).substring(2, 5)
+    // Generate sequential IDs for the batch starting from the next available number
+    let nextIdNumber = this.getNextIdNumber();
     
     return testCases.map((tc, index) => ({
-      id: tc.id || `TC-${timestamp}-${randomSuffix}-${String(index + 1).padStart(2, '0')}`,
+      id: `TC-${String(nextIdNumber + index).padStart(3, '0')}`, // Force sequential IDs
       templateId: tc.templateId || 'ai-generated',
       projectId: tc.projectId || 'default',
       module: tc.module || 'General',
@@ -464,9 +618,9 @@ class ClaudeProvider implements BaseAIProvider {
     try {
       const documentContent = documents.join('\n\n')
       
-      const systemPrompt = `You are an expert QA engineer specializing in test case generation. Generate test cases based on the provided template and requirements documents.`
+      const systemPrompt = `You are an expert QA engineer specializing in comprehensive test case generation.\n\nYour task is to analyze requirements documents and generate EXACTLY ${config.maxTestCases} comprehensive test cases following the provided template format.\n\nCRITICAL REQUIREMENTS FOR COMPREHENSIVE COVERAGE:\n\n1. FOR EACH REQUIREMENT, create multiple test cases covering:\n   - POSITIVE SCENARIOS: Happy path with valid data, boundary conditions, different data types\n   - NEGATIVE SCENARIOS: Invalid inputs, missing fields, error conditions, unauthorized access\n   - EDGE CASES: Extremely large/small values, special characters, concurrent operations\n   - INTEGRATION SCENARIOS: API interactions, database operations, external services\n   - SECURITY SCENARIOS: Input validation, authentication, data sanitization\n   - PERFORMANCE SCENARIOS: Load conditions, resource limits, timeouts\n\n2. TEST CASE STRUCTURE:\n   - Each test case MUST have AT LEAST 5-8 detailed test steps\n   - Include specific test data and expected results for each step\n   - Cover setup, execution, validation, and cleanup phases\n   - Consider different user roles and permissions\n   - Include realistic test data and conditions\n\n3. QUALITY STANDARDS:\n   - Ensure 100% requirement coverage across all test cases\n   - Each test case must be specific and actionable\n   - Consider business impact and risk levels\n   - Generate test cases that can be executed immediately`
       
-      const userPrompt = `Generate test cases using this template:\n\n${template}\n\nRequirements document:\n${documentContent}\n\nGenerate ${config.maxTestCases} test cases in JSON array format.`
+      const userPrompt = `Generate EXACTLY ${config.maxTestCases} comprehensive test cases using this template:\n\n${template}\n\nRequirements document:\n${documentContent}\n\nIMPORTANT: Generate comprehensive test cases that cover EVERY requirement with multiple test scenarios:\n- Positive, negative, and edge case testing\n- Security and performance considerations\n- Integration and user workflow coverage\n- Realistic test data and conditions\n\nEnsure 100% requirement coverage with detailed, actionable test cases. Generate in JSON array format.`
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -551,11 +705,11 @@ class ClaudeProvider implements BaseAIProvider {
   }
 
   private formatTestCases(testCases: TestCase[]): TestCase[] {
-    const timestamp = Date.now()
-    const randomSuffix = Math.random().toString(36).substring(2, 5)
+    // Generate sequential IDs for the batch starting from the next available number
+    let nextIdNumber = this.getNextIdNumber();
     
     return testCases.map((tc, index) => ({
-      id: tc.id || `TC-${timestamp}-${randomSuffix}-${String(index + 1).padStart(2, '0')}`,
+      id: `TC-${String(nextIdNumber + index).padStart(3, '0')}`, // Force sequential IDs
       templateId: tc.templateId || 'ai-generated',
       projectId: tc.projectId || 'default',
       module: tc.module || 'General',
@@ -597,9 +751,9 @@ class GrokProvider implements BaseAIProvider {
         ? `🚨 STRICT DOCUMENT-ONLY MODE ENABLED 🚨\nABSOLUTELY CRITICAL: You MUST ONLY generate test cases based on the specific content in the uploaded documents.\n\n`
         : ''
 
-      const systemPrompt = `${documentFocusPrefix}You are an expert QA engineer specializing in test case generation.\n\nYour task is to analyze requirements documents and generate comprehensive test cases following this template format:\n\n${template}\n\nGenerate test cases in JSON format with this structure:\n[\n  {\n    "id": "TC-0001",\n    "module": "Module Name",\n    "testCase": "Test case description",\n    "testSteps": [\n      {\n        "step": 1,\n        "description": "Step description",\n        "testData": "Test data",\n        "expectedResult": "Expected result"\n      }\n    ],\n    "testResult": "Not Executed",\n    "qa": "",\n    "remarks": "Generated from requirements"\n  }\n]`
+      const systemPrompt = `${documentFocusPrefix}You are an expert QA engineer specializing in comprehensive test case generation.\n\nYour task is to analyze requirements documents and generate EXHAUSTIVE test coverage following this template format:\n\n${template}\n\nCRITICAL REQUIREMENTS FOR COMPREHENSIVE COVERAGE:\n\n1. FOR EACH REQUIREMENT, create multiple test cases covering:\n   - POSITIVE SCENARIOS: Happy path with valid data, boundary conditions, different data types\n   - NEGATIVE SCENARIOS: Invalid inputs, missing fields, error conditions, unauthorized access\n   - EDGE CASES: Extremely large/small values, special characters, concurrent operations\n   - INTEGRATION SCENARIOS: API interactions, database operations, external services\n   - SECURITY SCENARIOS: Input validation, authentication, data sanitization\n   - PERFORMANCE SCENARIOS: Load conditions, resource limits, timeouts\n\n2. TEST CASE STRUCTURE:\n   - Each test case must be specific and actionable\n   - Include detailed test steps with specific test data\n   - Specify expected results for each step\n   - Cover all possible user workflows and business logic\n   - Consider different user roles and permissions\n\n3. QUALITY STANDARDS:\n   - Ensure 100% requirement coverage\n   - Include realistic test data and conditions\n   - Consider business impact and risk levels\n   - Generate test cases that can be executed immediately\n\nGenerate test cases in JSON format with this structure:\n[\n  {\n    "id": "TC-0001",\n    "module": "Module Name",\n    "testCase": "Detailed test case description covering specific scenario",\n    "testSteps": [\n      {\n        "step": 1,\n        "description": "Specific step description with test data",\n        "testData": "Specific test data values",\n        "expectedResult": "Detailed expected result"\n      }\n    ],\n    "testResult": "Not Executed",\n    "qa": "QA notes for this test case",\n    "remarks": "Additional context or risk considerations"\n  }\n]`
 
-      const userPrompt = `Please analyze the following requirements document and generate test cases:\n\nDOCUMENT CONTENT:\n${documentContent}\n\nGenerate comprehensive test cases based on the ACTUAL requirements above.`
+      const userPrompt = `Please analyze the following requirements document and generate EXHAUSTIVE test coverage:\n\nDOCUMENT CONTENT:\n${documentContent}\n\nIMPORTANT: Generate comprehensive test cases that cover EVERY requirement with multiple test scenarios:\n- Positive, negative, and edge case testing\n- Security and performance considerations\n- Integration and user workflow coverage\n- Realistic test data and conditions\n\nEnsure 100% requirement coverage with detailed, actionable test cases.`
 
       const requestBody = {
         model: aiConfig.model,
@@ -705,11 +859,11 @@ class GrokProvider implements BaseAIProvider {
   }
 
   private formatTestCases(testCases: TestCase[]): TestCase[] {
-    const timestamp = Date.now()
-    const randomSuffix = Math.random().toString(36).substring(2, 5)
+    // Generate sequential IDs for the batch starting from the next available number
+    let nextIdNumber = this.getNextIdNumber();
     
     return testCases.map((tc, index) => ({
-      id: tc.id || `TC-${timestamp}-${randomSuffix}-${String(index + 1).padStart(2, '0')}`,
+      id: `TC-${String(nextIdNumber + index).padStart(3, '0')}`, // Force sequential IDs
       templateId: tc.templateId || 'ai-generated',
       projectId: tc.projectId || 'default',
       module: tc.module || 'General',

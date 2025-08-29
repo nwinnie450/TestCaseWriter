@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react'
 import { Layout } from '@/components/layout/Layout'
 import { DataGrid } from '@/components/library/DataGrid'
 import { DemoDataLoader } from '@/components/library/DemoDataLoader'
+import { ReconcileDuplicatesButton } from '@/components/library/ReconcileDuplicatesButton'
+import { CoverageDashboard } from '@/components/coverage/CoverageDashboard'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { TestCase } from '@/types'
@@ -40,6 +42,9 @@ export default function TestCaseLibrary() {
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>('')
   const [filteredTestCases, setFilteredTestCases] = useState<TestCase[]>([])
   const [templates, setTemplates] = useState<Array<{id: string, name: string, fields: any[]}>>([])
+  const [showCoverage, setShowCoverage] = useState(false)
+  const [activeDocId, setActiveDocId] = useState<string | null>(null)
+  const [isFromGenerate, setIsFromGenerate] = useState(false)
 
   // Load test cases from localStorage on component mount
   useEffect(() => {
@@ -75,8 +80,17 @@ export default function TestCaseLibrary() {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search)
       const projectParam = urlParams.get('project')
+      const viewParam = urlParams.get('view')
+      
+      console.log('🔍 Library - URL params:', { projectParam, viewParam })
+      
       if (projectParam) {
         setSelectedProjectFilter(projectParam)
+      }
+      
+      // Check if coming from generate page
+      if (viewParam === 'generated') {
+        setIsFromGenerate(true)
       }
     }
   }, [])
@@ -160,7 +174,12 @@ export default function TestCaseLibrary() {
 
   // Filter test cases by project
   useEffect(() => {
-    console.log('🔍 Filter Debug - Project filter changed:', { selectedProjectFilter, testCasesCount: testCases.length })
+    console.log('🔍 Filter Debug - Project filter changed:', { 
+      selectedProjectFilter, 
+      testCasesCount: testCases.length, 
+      loading,
+      projectsLoaded: projects.length 
+    })
     
     if (selectedProjectFilter === '') {
       console.log('🔍 Filter Debug - No project filter, showing all test cases')
@@ -170,11 +189,12 @@ export default function TestCaseLibrary() {
       console.log('🔍 Filter Debug - Filtered by project:', { 
         projectId: selectedProjectFilter, 
         filteredCount: filtered.length,
-        totalCount: testCases.length 
+        totalCount: testCases.length,
+        testCasesSample: testCases.slice(0, 2).map(tc => ({ id: tc.id, projectId: tc.projectId }))
       })
       setFilteredTestCases(filtered)
     }
-  }, [testCases, selectedProjectFilter])
+  }, [testCases, selectedProjectFilter, loading, projects])
 
   // Debug logging for groupBy changes
   useEffect(() => {
@@ -196,6 +216,25 @@ export default function TestCaseLibrary() {
       projectsCount: projects.length
     })
   }, [selectedProjectFilter, groupBy, testCases, filteredTestCases, projects])
+
+  // Check if there are chunks available for coverage analysis
+  useEffect(() => {
+    try {
+      // Check if we have any chunks with associated test cases
+      const chunksWithCases = testCases.filter(tc => tc.data?.chunkId && tc.data?.docId)
+      if (chunksWithCases.length > 0) {
+        // Get the most recent docId for coverage analysis
+        const latestCase = chunksWithCases.sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )[0]
+        if (latestCase.data?.docId && latestCase.data.docId !== activeDocId) {
+          setActiveDocId(latestCase.data.docId)
+        }
+      }
+    } catch (error) {
+      console.log('Could not detect chunks for coverage:', error)
+    }
+  }, [testCases, activeDocId])
 
   const handleEdit = (testCase: TestCase) => {
     console.log('Edit test case:', testCase.id)
@@ -424,10 +463,17 @@ export default function TestCaseLibrary() {
         return
       }
       
+      // Generate filename with project name + timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) // YYYY-MM-DDTHH-mm-ss
+      const projectName = selectedProjectFilter ? 
+        (projects.find(p => p.id === selectedProjectFilter)?.name || 'Unknown-Project') : 
+        'All-Projects'
+      const safeProjectName = projectName.replace(/[^a-zA-Z0-9-_]/g, '-') // Make filename safe
+      
       // Export the test cases
       await exportTestCases(selectedTestCases, { 
         format: format as 'csv' | 'json' | 'excel',
-        filename: `selected-test-cases-${new Date().toISOString().split('T')[0]}`
+        filename: `${safeProjectName}_Selected_${selectedTestCases.length}Cases_${timestamp}`
       })
       
       alert(`✅ Successfully exported ${selectedTestCases.length} test cases as ${format.toUpperCase()}!`)
@@ -441,8 +487,15 @@ export default function TestCaseLibrary() {
 
   const handleGenerateAI = () => {
     console.log('Generate with AI')
-    // Navigate to generate page
-    window.location.href = '/generate'
+    // Navigate to generate page and continue with existing session if available
+    const projectParam = selectedProjectFilter ? `project=${selectedProjectFilter}&` : ''
+    window.location.href = `/generate?${projectParam}continue=true`
+  }
+
+  const handleBackToGenerate = () => {
+    // Navigate back to generate and continue with existing session
+    const projectParam = selectedProjectFilter ? `project=${selectedProjectFilter}&` : ''
+    window.location.href = `/generate?${projectParam}continue=true`
   }
 
   const handleLoadMockData = async () => {
@@ -535,9 +588,16 @@ export default function TestCaseLibrary() {
         return
       }
       
+      // Generate filename with project name + timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) // YYYY-MM-DDTHH-mm-ss
+      const projectName = selectedProjectFilter ? 
+        (projects.find(p => p.id === selectedProjectFilter)?.name || 'Unknown-Project') : 
+        'All-Projects'
+      const safeProjectName = projectName.replace(/[^a-zA-Z0-9-_]/g, '-') // Make filename safe
+      
       await exportTestCases(testCases, { 
         format: format as 'csv' | 'json' | 'excel',
-        filename: `all-test-cases-${new Date().toISOString().split('T')[0]}`
+        filename: `${safeProjectName}_TestCases_${timestamp}`
       })
       
       alert(`✅ Successfully exported all ${testCases.length} test cases as ${format.toUpperCase()}!`)
@@ -549,17 +609,28 @@ export default function TestCaseLibrary() {
   }
 
   const handleClearStorage = async () => {
-    if (confirm('Are you sure you want to clear all stored test cases? This action cannot be undone.')) {
+    if (confirm('Are you sure you want to clear all stored test cases? This action cannot be undone. (Projects will be preserved)')) {
       try {
         const { clearStoredTestCases } = await import('@/lib/test-case-storage')
+        
+        // Preserve current projects before clearing
+        const currentProjects = [...projects]
+        const currentProjectFilter = selectedProjectFilter
+        
         clearStoredTestCases()
         
-        // Refresh UI
+        // Refresh UI but preserve projects
         setTestCases([])
+        setFilteredTestCases([])
         setSelectedIds([])
         setStorageStats({ sessions: 0, totalTestCases: 0, storageSize: '0 KB' })
         
-        alert('✅ All stored test cases have been cleared!')
+        // Ensure projects are not lost
+        setProjects(currentProjects)
+        setSelectedProjectFilter(currentProjectFilter)
+        
+        console.log('✅ Test cases cleared, projects preserved:', currentProjects.length)
+        alert('✅ All stored test cases have been cleared! Projects are preserved.')
       } catch (error) {
         console.error('Failed to clear storage:', error)
         alert('❌ Failed to clear stored test cases')
@@ -569,15 +640,36 @@ export default function TestCaseLibrary() {
 
   const actions = (
     <div className="flex items-center space-x-3">
+      {/* Generate More button when coming from generate page */}
+      {isFromGenerate && (
+        <Button variant="primary" onClick={handleBackToGenerate} className="mr-4">
+          <Zap className="h-4 w-4 mr-2" />
+          Continue Generating Test Cases
+        </Button>
+      )}
+      
       {testCases.length > 0 && (
         <>
+          <ReconcileDuplicatesButton 
+            projectId={selectedProjectFilter || undefined}
+            onComplete={(result) => {
+              // Refresh test cases after reconciliation
+              const { getAllStoredTestCases, getStorageStats } = require('@/lib/test-case-storage')
+              const updatedTestCases = getAllStoredTestCases()
+              const updatedStats = getStorageStats()
+              setTestCases(updatedTestCases)
+              setStorageStats(updatedStats)
+              setSelectedIds([]) // Clear selection after reconciliation
+            }}
+          />
+          
           <Button variant="secondary" onClick={handleExportAll}>
             <Download className="h-4 w-4 mr-2" />
             Export All ({testCases.length})
           </Button>
           
           <Button variant="secondary" onClick={handleClearStorage} className="text-red-600 hover:text-red-700">
-            Clear All
+            Clear Test Cases
           </Button>
         </>
       )}
@@ -588,12 +680,15 @@ export default function TestCaseLibrary() {
         Load Test Data
       </Button>
       
-      <Button variant="secondary" onClick={handleGenerateAI}>
-        <Zap className="h-4 w-4 mr-2" />
-        Generate with AI
-      </Button>
+      {/* Only show generate button if NOT coming from generate page */}
+      {!isFromGenerate && (
+        <Button variant="primary" onClick={handleGenerateAI}>
+          <Zap className="h-4 w-4 mr-2" />
+          Generate Test Cases
+        </Button>
+      )}
       
-      <Button variant="primary">
+      <Button variant="secondary">
         <Plus className="h-4 w-4 mr-2" />
         New Test Case
       </Button>
@@ -605,6 +700,23 @@ export default function TestCaseLibrary() {
     active: filteredTestCases.filter(tc => tc.testResult === 'Pass').length,
     draft: filteredTestCases.filter(tc => tc.testResult === 'Not Executed').length,
     review: filteredTestCases.filter(tc => tc.testResult === 'Fail').length
+  }
+
+  // Show loading state if data is still loading
+  if (loading && testCases.length === 0) {
+    return (
+      <Layout 
+        breadcrumbs={breadcrumbs}
+        title="Test Case Library"
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary-600 border-t-transparent mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading test cases...</p>
+          </div>
+        </div>
+      </Layout>
+    )
   }
 
   return (
@@ -735,6 +847,20 @@ export default function TestCaseLibrary() {
           </CardContent>
         </Card>
 
+        {/* Coverage Dashboard */}
+        {showCoverage && activeDocId && (
+          <CoverageDashboard
+            docId={activeDocId}
+            projectId={selectedProjectFilter || undefined}
+            onGenerateMore={async (chunkId) => {
+              console.log('🎯 Coverage - Generate More requested for chunk:', chunkId)
+              // TODO: Implement single-chunk generation
+              // For now, redirect to generate page
+              window.location.href = '/generate'
+            }}
+          />
+        )}
+
         {/* Quick Actions for Selected Items */}
         {selectedIds.length > 0 && (
           <Card className="border-primary-200 bg-primary-50/50">
@@ -761,7 +887,11 @@ export default function TestCaseLibrary() {
                     Export Selected
                   </Button>
                   
-                  <Button variant="secondary" size="sm">
+                  <Button 
+                    variant="secondary" 
+                    size="sm"
+                    onClick={() => handleBulkEdit(selectedIds)}
+                  >
                     <Filter className="h-4 w-4 mr-2" />
                     Bulk Edit
                   </Button>
@@ -817,6 +947,18 @@ export default function TestCaseLibrary() {
                     <option value="status">Status</option>
                   </select>
                 </div>
+                
+                {activeDocId && (
+                  <Button 
+                    variant={showCoverage ? "primary" : "ghost"} 
+                    size="sm"
+                    onClick={() => setShowCoverage(!showCoverage)}
+                  >
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    {showCoverage ? 'Hide Coverage' : 'Show Coverage'}
+                  </Button>
+                )}
+                
                 <Button variant="ghost" size="sm">
                   <BarChart3 className="h-4 w-4 mr-2" />
                   Analytics
@@ -892,7 +1034,13 @@ export default function TestCaseLibrary() {
                       </span>
                     </div>
                   )) : (
-                    <p className="text-gray-500 text-sm">No test cases generated yet. <a href="/generate" className="text-primary-600 hover:underline">Generate some test cases</a> to see them here.</p>
+                    <div className="text-center py-8">
+                      <p className="text-gray-500 text-sm mb-4">No test cases generated yet.</p>
+                      <Button variant="primary" onClick={() => window.location.href = '/generate?step=upload'}>
+                        <Zap className="h-4 w-4 mr-2" />
+                        Generate Your First Test Cases
+                      </Button>
+                    </div>
                   )}
               </div>
             </CardContent>

@@ -1,11 +1,13 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { Layout } from '@/components/layout/Layout'
 import { StepIndicator } from '@/components/generate/StepIndicator'
 import { FileUploadZone } from '@/components/upload/FileUploadZone'
 import { RequirementInput } from '@/components/generate/RequirementInput'
 import { TemplateSelector } from '@/components/generate/TemplateSelector'
+import { GenerateMoreButton } from '@/components/generate/GenerateMoreButton'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { FileUploadProgress } from '@/types'
@@ -16,16 +18,18 @@ import { AIGenerationError } from '@/lib/ai-generation'
 import { generateMockTestCases, OpenAIError } from '@/lib/openai'
 import { getAvailableProviders, getProvider } from '@/lib/ai-providers'
 import { TestCase } from '@/types'
-// Dynamic import for PDF parser to avoid SSR issues
+// Import the simple PDF parser
+import { extractTextFromDocument as extractFromDoc } from '@/lib/simple-pdf-parser'
+
 const extractTextFromDocument = async (file: File): Promise<string> => {
-  const { extractTextFromDocument: extractFn } = await import('@/lib/pdf-parser-react')
-  return extractFn(file)
+  const result = await extractFromDoc(file)
+  return result.text
 }
 import { saveGeneratedTestCases } from '@/lib/test-case-storage'
 import { getCurrentUser } from '@/lib/user-storage'
 import { LoginModal } from '@/components/auth/LoginModal'
 import { APIKeyModal } from '@/components/modals/APIKeyModal'
-import { Wand2, FileText, Settings, Eye, Download, AlertCircle, Edit3, FolderOpen, Brain, Cpu, Zap } from 'lucide-react'
+import { Wand2, FileText, Settings, Eye, Download, AlertCircle, Edit3, FolderOpen, Brain, Cpu, Zap, Table } from 'lucide-react'
 
 const steps = [
   {
@@ -69,13 +73,31 @@ export default function GenerateTestCases() {
   const [uploadProgress, setUploadProgress] = useState<FileUploadProgress[]>([])
   const [completedDocuments, setCompletedDocuments] = useState<{ file: File; content: string }[]>([])
   const [textRequirements, setTextRequirements] = useState<string[]>([])
+  const [uploadedMatrices, setUploadedMatrices] = useState<Array<{ file: File; matrix: any }>>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>('custom_qa_template_v1')
   const [generationConfig, setGenerationConfig] = useState({
     coverage: 'comprehensive' as 'comprehensive' | 'focused' | 'minimal',
     includeNegativeTests: true,
     includeEdgeCases: true,
     maxTestCases: 50,
-    customInstructions: ''
+    customInstructions: `Generate comprehensive test coverage for each requirement including:
+- Positive scenarios (happy path, valid data, boundary conditions)
+- Negative scenarios (invalid inputs, error conditions, unauthorized access)
+- Edge cases (extreme values, special characters, concurrent operations)
+- Integration scenarios (API interactions, database operations)
+- Security scenarios (input validation, authentication, data sanitization)
+- Performance scenarios (load conditions, resource limits)
+
+MATRIX INTEGRATION: When test matrices are provided, use them to:
+- Extract specific test scenarios and their expected behaviors
+- Use matrix parameters as test data variations
+- Map matrix categories to test case modules/features
+- Ensure all matrix scenarios are covered in generated test cases
+- Maintain traceability between matrix rows and generated test cases
+
+CRITICAL ORDERING: Generate test cases in the EXACT SAME ORDER as requirements appear in the document. Maintain logical flow and sequential numbering (TC-0001, TC-0002, TC-0003...).
+
+Ensure each test case has detailed steps with specific test data and expected results.`
   })
   // New metadata state
   const [projectId, setProjectId] = useState('')
@@ -105,6 +127,7 @@ export default function GenerateTestCases() {
   const [generationProgress, setGenerationProgress] = useState(0)
   const [generationStep, setGenerationStep] = useState('')
   const [generatedTestCases, setGeneratedTestCases] = useState<TestCase[]>([])
+  const [chunkingResults, setChunkingResults] = useState<Array<{docId: string, totalChunks: number}>>([])
   const [duplicateInfo, setDuplicateInfo] = useState<{
     exactDuplicates: number
     potentialDuplicates: number
@@ -112,13 +135,43 @@ export default function GenerateTestCases() {
   } | null>(null)
   const [estimatedTime, setEstimatedTime] = useState(0)
   const [generationError, setGenerationError] = useState<string | null>(null)
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  const [sessionTestCaseCount, setSessionTestCaseCount] = useState(0)
   
-  const { getAIConfig, hasValidAPIKey, updateAIConfig } = useSettings()
+  const { settings, getAIConfig, hasValidAPIKey, updateAIConfig } = useSettings()
   const { addUsage } = useTokenUsage()
 
   // Get available AI providers and current selection
   const availableProviders = getAvailableProviders()
   const currentProvider = getProvider(getAIConfig().providerId)
+
+  // Load current session statistics
+  const loadSessionStats = () => {
+    try {
+      const sessions = localStorage.getItem('testCaseWriter_generatedTestCases')
+      if (sessions) {
+        const parsedSessions = JSON.parse(sessions)
+        if (parsedSessions.length > 0) {
+          // Get the most recent session for the current project
+          const projectSessions = projectId ? 
+            parsedSessions.filter((s: any) => s.projectId === projectId) : 
+            parsedSessions
+          
+          if (projectSessions.length > 0) {
+            const latestSession = projectSessions[projectSessions.length - 1]
+            setCurrentSessionId(latestSession.id)
+            setSessionTestCaseCount(latestSession.testCases?.length || 0)
+            
+            // If we have test cases for this session, load them for display only
+            // Don't set generatedTestCases to avoid infinite loops
+            // setGeneratedTestCases will be set during actual generation
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load session stats:', error)
+    }
+  }
 
   // Load current user and projects
   React.useEffect(() => {
@@ -136,19 +189,149 @@ export default function GenerateTestCases() {
     } catch (error) {
       console.error('Failed to load projects:', error)
     }
+
+    // Load current session stats
+    loadSessionStats()
   }, [])
+
+  // Refresh session stats when generation completes - removed dependency to prevent loops
+  // This will be called manually after generation instead
+
+  // Reload session stats when project changes
+  React.useEffect(() => {
+    if (projectId) {
+      loadSessionStats()
+    }
+  }, [projectId])
+  
+  // Add ref to prevent infinite loops
+  const loadedProjectRef = React.useRef<string | null>(null)
+
+  // Function to restore previous generation session
+  const restorePreviousSession = (projectParam: string | null) => {
+    try {
+      console.log('🔄 Restoring previous session for project:', projectParam)
+      
+      // Try to restore from session storage first (most recent session)
+      const sessionData = sessionStorage.getItem('testCaseWriter_lastGenerationSession')
+      if (sessionData) {
+        const parsed = JSON.parse(sessionData)
+        console.log('📋 Found session data:', parsed)
+        
+        // Check if session matches project
+        if (!projectParam || parsed.projectId === projectParam) {
+          // Restore documents and matrices
+          if (parsed.completedDocuments) {
+            setCompletedDocuments(parsed.completedDocuments)
+          }
+          if (parsed.uploadedMatrices) {
+            setUploadedMatrices(parsed.uploadedMatrices)
+          }
+          if (parsed.textRequirements) {
+            setTextRequirements(parsed.textRequirements)
+          }
+          if (parsed.selectedTemplateId) {
+            setSelectedTemplateId(parsed.selectedTemplateId)
+          }
+          if (parsed.tags) {
+            setTags(parsed.tags)
+          }
+          if (parsed.enhancement) {
+            setEnhancement(parsed.enhancement)
+          }
+          if (parsed.ticketId) {
+            setTicketId(parsed.ticketId)
+          }
+          if (parsed.generationConfig) {
+            setGenerationConfig(parsed.generationConfig)
+          }
+          if (parsed.currentSessionId) {
+            setCurrentSessionId(parsed.currentSessionId)
+            // Also update session count
+            import('@/lib/test-case-storage').then(({ getStoredTestCaseSessions }) => {
+              try {
+                const sessions = getStoredTestCaseSessions()
+                const currentSession = sessions.find((s: any) => s.id === parsed.currentSessionId)
+                if (currentSession) {
+                  setSessionTestCaseCount(currentSession.totalCount)
+                }
+              } catch (error) {
+                console.error('Failed to load session count:', error)
+              }
+            }).catch(error => {
+              console.error('Failed to import test-case-storage:', error)
+            })
+          }
+          
+          // Go directly to generation ready step
+          setCurrentStep(5)
+          console.log('✅ Session restored successfully')
+          return
+        }
+      }
+      
+      // Fallback: go to upload step if no session found
+      console.log('⚠️ No matching session found, going to upload step')
+      setCurrentStep(2)
+      
+    } catch (error) {
+      console.error('❌ Error restoring session:', error)
+      setCurrentStep(2)
+    }
+  }
 
   // Check for project parameter in URL and skip to step 2 if provided
   React.useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && projects.length > 0) {
       const urlParams = new URLSearchParams(window.location.search)
       const projectParam = urlParams.get('project')
-      if (projectParam && projects.length > 0) {
+      const stepParam = urlParams.get('step')
+      const continueParam = urlParams.get('continue')
+      
+      if (projectParam && loadedProjectRef.current !== projectParam) {
         const project = projects.find(p => p.id === projectParam)
         if (project) {
+          loadedProjectRef.current = projectParam
           setProjectId(projectParam)
-          setCurrentStep(2) // Skip project selection step
+          
+          // If continue=true, restore the previous session and go to generation step
+          if (continueParam === 'true') {
+            restorePreviousSession(projectParam)
+          }
+          // If step=upload is specified, go directly to upload step
+          else if (stepParam === 'upload') {
+            setCurrentStep(2)
+          } else {
+            // Check if there's existing session data to determine step
+            try {
+              const sessions = localStorage.getItem('testCaseWriter_generatedTestCases')
+              if (sessions) {
+                const parsedSessions = JSON.parse(sessions)
+                const hasRecentSession = parsedSessions.some((s: any) => 
+                  s.projectId === projectParam && 
+                  new Date(s.timestamp) > new Date(Date.now() - 24 * 60 * 60 * 1000) // Within 24 hours
+                )
+                // If there's a recent session, go to the final step
+                setCurrentStep(hasRecentSession ? 6 : 2)
+              } else {
+                setCurrentStep(2) // Skip project selection step
+              }
+            } catch (error) {
+              console.error('Error loading session data:', error)
+              setCurrentStep(2)
+            }
+          }
         }
+      }
+      // Handle continue without specific project
+      else if (continueParam === 'true' && loadedProjectRef.current === null) {
+        loadedProjectRef.current = 'continue-session'
+        restorePreviousSession(null)
+      }
+      // Also handle case where only step=upload is provided (no project)
+      else if (stepParam === 'upload' && loadedProjectRef.current === null) {
+        loadedProjectRef.current = 'no-project'
+        setCurrentStep(2)
       }
     }
   }, [projects])
@@ -182,21 +365,60 @@ export default function GenerateTestCases() {
           await new Promise(resolve => setTimeout(resolve, 100))
         }
         
-        // Extract text content
-        const content = await extractTextFromDocument(file)
+        // Check if file is a matrix (CSV/Excel)
+        const fileName = file.name.toLowerCase()
+        const isMatrix = fileName.endsWith('.csv') || fileName.endsWith('.xlsx') || fileName.endsWith('.xls')
         
-        // Complete upload
-        setUploadProgress(prev => {
-          const updated = [...prev]
-          if (updated[progressIndex]) {
-            updated[progressIndex].progress = 100
-            updated[progressIndex].status = 'completed'
+        if (isMatrix) {
+          // Parse matrix file
+          const { parseMatrixFile } = await import('@/lib/matrix-parser')
+          const matrix = await parseMatrixFile(file)
+          
+          console.log(`📊 Matrix parsing result for ${file.name}:`, {
+            totalScenarios: matrix.metadata.totalScenarios,
+            parameters: matrix.metadata.parameters,
+            categories: matrix.metadata.categories
+          })
+          
+          // Complete upload
+          setUploadProgress(prev => {
+            const updated = [...prev]
+            if (updated[progressIndex]) {
+              updated[progressIndex].progress = 100
+              updated[progressIndex].status = 'completed'
+            }
+            return updated
+          })
+          
+          // Add to uploaded matrices
+          setUploadedMatrices(prev => [...prev, { file, matrix }])
+        } else {
+          // Extract text content for documents
+          const content = await extractTextFromDocument(file)
+          
+          console.log(`📄 Text extraction result for ${file.name}:`, {
+            contentLength: content.length,
+            contentPreview: content.substring(0, 200),
+            isEmpty: !content || content.trim().length === 0
+          })
+          
+          if (!content || content.trim().length === 0) {
+            throw new Error(`No readable content found in ${file.name}. The document may be image-based, password-protected, or corrupted.`)
           }
-          return updated
-        })
-        
-        // Add to completed documents
-        setCompletedDocuments(prev => [...prev, { file, content }])
+          
+          // Complete upload
+          setUploadProgress(prev => {
+            const updated = [...prev]
+            if (updated[progressIndex]) {
+              updated[progressIndex].progress = 100
+              updated[progressIndex].status = 'completed'
+            }
+            return updated
+          })
+          
+          // Add to completed documents
+          setCompletedDocuments(prev => [...prev, { file, content }])
+        }
         
       } catch (error) {
         console.error('File processing error:', error)
@@ -212,8 +434,21 @@ export default function GenerateTestCases() {
     }
   }
 
+  const handleFileRemoved = (index: number) => {
+    // Remove from upload progress
+    const removedFile = uploadProgress[index]
+    setUploadProgress(prev => prev.filter((_, i) => i !== index))
+    
+    // Remove from completed documents if it exists
+    if (removedFile) {
+      setCompletedDocuments(prev => 
+        prev.filter(doc => doc.file.name !== removedFile.file.name)
+      )
+    }
+  }
+
   // Check if user can proceed from requirements step
-  const canProceedFromRequirements = completedDocuments.length > 0 || textRequirements.length > 0
+  const canProceedFromRequirements = completedDocuments.length > 0 || textRequirements.length > 0 || uploadedMatrices.length > 0
 
   // Mock templates data - in a real app this would come from a database or API
   const templates = [
@@ -320,20 +555,48 @@ export default function GenerateTestCases() {
         throw new Error(`No ${currentProvider?.name || 'AI'} API key configured. Please add your API key in the AI configuration.`)
       }
       
-      // Get all requirements content (documents + text)
+      // Get all requirements content (documents + text + matrices)
       const documentTexts = completedDocuments.map(doc => doc.content)
-      const allRequirements = [...documentTexts, ...textRequirements]
+      
+      // Process matrix data into structured format for AI
+      const matrixContent: string[] = []
+      uploadedMatrices.forEach(matrixData => {
+        const { matrix } = matrixData
+        let matrixText = `\n=== TEST MATRIX: ${matrix.fileName} ===\n`
+        matrixText += `Total Scenarios: ${matrix.metadata.totalScenarios}\n`
+        matrixText += `Categories: ${matrix.metadata.categories.join(', ')}\n`
+        matrixText += `Parameters: ${matrix.metadata.parameters.join(', ')}\n\n`
+        
+        matrix.rows.forEach((row, index) => {
+          matrixText += `Scenario ${index + 1}: ${row.testScenario}\n`
+          matrixText += `Expected: ${row.expectedBehavior}\n`
+          if (row.priority) matrixText += `Priority: ${row.priority}\n`
+          if (row.category) matrixText += `Category: ${row.category}\n`
+          
+          // Add parameters
+          Object.entries(row.parameters).forEach(([key, value]) => {
+            if (value.trim()) matrixText += `${key}: ${value}\n`
+          })
+          matrixText += '\n'
+        })
+        
+        matrixContent.push(matrixText)
+      })
+      
+      const allRequirements = [...documentTexts, ...textRequirements, ...matrixContent]
       
       console.log('📄 Requirements:', { 
         documents: completedDocuments.length,
         textRequirements: textRequirements.length,
+        matrices: uploadedMatrices.length,
         totalContent: allRequirements.length,
         documentFiles: completedDocuments.map(d => ({ name: d.file.name, size: d.content.length })),
-        textSizes: textRequirements.map(t => t.length)
+        textSizes: textRequirements.map(t => t.length),
+        matrixFiles: uploadedMatrices.map(m => ({ name: m.file.name, scenarios: m.matrix.metadata.totalScenarios }))
       })
       
       if (allRequirements.length === 0) {
-        throw new Error('No requirements provided. Please upload documents or add text requirements first.')
+        throw new Error('No requirements provided. Please upload documents, add text requirements, or upload test matrices.')
       }
       
       // Prepare all requirements content (already extracted documents + text requirements)
@@ -378,6 +641,42 @@ export default function GenerateTestCases() {
       // Update progress
       setGenerationStep('Analyzing uploaded documents...')
       setGenerationProgress(20)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      // Chunk documents for efficient processing
+      setGenerationStep('Chunking documents for optimal processing...')
+      setGenerationProgress(30)
+      
+      const { chunkDocuments } = await import('@/lib/documentChunking')
+      const documentsForChunking = completedDocuments.map(doc => ({
+        extractedText: doc.content, // Fix: use doc.content instead of doc.extractedText
+        fileName: doc.file.name,
+        uploadedAt: new Date() // Fix: completedDocuments doesn't have uploadedAt
+      }))
+      
+      const chunkingResults = await chunkDocuments(documentsForChunking)
+      const totalChunks = chunkingResults.reduce((sum, result) => sum + result.totalChunks, 0)
+      const totalTokens = chunkingResults.reduce((sum, result) => sum + result.totalTokens, 0)
+      
+      // Store chunking results for Generate More button
+      setChunkingResults(chunkingResults.map(r => ({
+        docId: r.docId,
+        totalChunks: r.totalChunks
+      })))
+      
+      console.log('📊 Document chunking complete:', {
+        documents: chunkingResults.length,
+        totalChunks,
+        estimatedTokens: totalTokens,
+        results: chunkingResults.map(r => ({
+          docId: r.docId.substring(0, 8) + '...',
+          chunks: r.totalChunks,
+          tokens: r.totalTokens
+        }))
+      })
+      
+      setGenerationStep(`Documents chunked: ${totalChunks} chunks (~${totalTokens} tokens)`)
+      setGenerationProgress(35)
       await new Promise(resolve => setTimeout(resolve, 1000))
       
       setGenerationStep('Extracting requirements and user stories...')
@@ -516,14 +815,41 @@ Template: ${selectedTemplate.description}`
         }
         
         const { saveGeneratedTestCases } = await import('@/lib/test-case-storage')
-        const sessionId = saveGeneratedTestCases(
+        const saveResult = saveGeneratedTestCases(
           testCasesWithMetadata as TestCase[],
           completedDocuments.map(doc => doc.file.name),
           aiConfig.model,
           projectId,
-          projectName
+          projectName,
+          currentSessionId || undefined // Pass existing session ID to continue the session
         )
-        console.log('✅ Test cases saved with session ID:', sessionId)
+        
+        console.log('✅ Test cases saved:', saveResult)
+        
+        // Update session info
+        if (saveResult.sessionId && saveResult.sessionId !== 'no-new-cases') {
+          setCurrentSessionId(saveResult.sessionId)
+          // Update session count (get total from all sessions for this project)
+          if (projectId) {
+            try {
+              const { getStoredTestCaseSessions } = await import('@/lib/test-case-storage')
+              const sessions = getStoredTestCaseSessions()
+              const currentSession = sessions.find(s => s.id === saveResult.sessionId)
+              if (currentSession) {
+                setSessionTestCaseCount(currentSession.totalCount)
+              }
+            } catch (error) {
+              console.error('Failed to update session count:', error)
+            }
+          }
+        }
+        
+        // Update generation step with deduplication info
+        if (saveResult.skipped > 0) {
+          setGenerationStep(`✅ Saved ${saveResult.saved} new test cases · 🚫 Skipped ${saveResult.skipped} duplicates`)
+        } else {
+          setGenerationStep(`✅ Saved ${saveResult.saved} test cases`)
+        }
       } catch (saveError) {
         console.error('⚠️ Failed to save test cases:', saveError)
         // Don't fail the generation if saving fails
@@ -531,7 +857,29 @@ Template: ${selectedTemplate.description}`
     
     setGenerationProgress(100)
     setGenerationStep('Generation complete!')
-      setCurrentStep(6)
+    
+    // Save current session for "Generate More" functionality
+    try {
+      const sessionData = {
+        projectId,
+        completedDocuments,
+        uploadedMatrices,
+        textRequirements,
+        selectedTemplateId,
+        tags,
+        enhancement,
+        ticketId,
+        generationConfig,
+        currentSessionId, // Include current session ID
+        timestamp: Date.now()
+      }
+      sessionStorage.setItem('testCaseWriter_lastGenerationSession', JSON.stringify(sessionData))
+      console.log('💾 Session saved for future "Generate More" operations')
+    } catch (error) {
+      console.error('⚠️ Failed to save session:', error)
+    }
+    
+    setCurrentStep(6)
       
     } catch (error) {
       console.error('Generation error:', error)
@@ -565,13 +913,24 @@ Template: ${selectedTemplate.description}`
 
 
   const handleReviewTestCases = () => {
-    // Navigate to library with generated test cases
-    window.location.href = '/library?view=generated'
+    // Navigate to library with current project filter if available
+    const projectParam = projectId ? `&project=${projectId}` : ''
+    const url = `/library?view=generated${projectParam}`
+    console.log('🔍 Navigating to:', url)
+    window.location.href = url
   }
 
   const handleExportTestCases = () => {
     // Navigate to export with generated test cases
     window.location.href = '/export?cases=generated'
+  }
+
+  const handleViewSessionTestCases = () => {
+    // Navigate to library filtered by current project
+    const projectParam = projectId ? `?project=${projectId}` : ''
+    const url = `/library${projectParam}`
+    console.log('🔍 Session View - Navigating to:', url, { projectId })
+    window.location.href = url
   }
 
   const renderStepContent = () => {
@@ -673,7 +1032,7 @@ Template: ${selectedTemplate.description}`
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-2">Provide Requirements</h2>
               <p className="text-gray-600">
-                Upload your requirements documents or enter them directly as text. Choose the method that works best for your team's workflow.
+                Upload your requirements documents (PDF, Word) and test matrices (CSV, Excel) or enter requirements directly as text. Matrix files help generate more accurate test cases by defining test parameters and expected behaviors.
               </p>
             </div>
             
@@ -684,6 +1043,7 @@ Template: ${selectedTemplate.description}`
               onTextRequirementsChange={setTextRequirements}
               uploadProgress={uploadProgress}
               onFileUpload={handleFilesAdded}
+              onFileRemoved={handleFileRemoved}
               projectId={projectId}
               enhancement={enhancement}
               ticketId={ticketId}
@@ -914,16 +1274,119 @@ Template: ${selectedTemplate.description}`
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Custom Instructions
                     </label>
+                    <p className="text-xs text-gray-600 mb-2">
+                      Add your specific testing requirements, scenarios, or instructions for the AI to follow when generating test cases.
+                    </p>
                     <textarea
                       value={generationConfig.customInstructions}
                       onChange={(e) => setGenerationConfig(prev => ({
                         ...prev,
                         customInstructions: e.target.value
                       }))}
+                      onPaste={(e) => {
+                        // Handle clipboard paste
+                        const pastedText = e.clipboardData.getData('text')
+                        if (pastedText) {
+                          e.preventDefault()
+                          setGenerationConfig(prev => ({
+                            ...prev,
+                            customInstructions: prev.customInstructions + pastedText
+                          }))
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        // Handle Ctrl+V (Cmd+V on Mac)
+                        if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+                          e.preventDefault()
+                          navigator.clipboard.readText().then(text => {
+                            if (text) {
+                              setGenerationConfig(prev => ({
+                                ...prev,
+                                customInstructions: prev.customInstructions + text
+                              }))
+                            }
+                          }).catch(err => {
+                            console.log('Clipboard read failed, using default paste behavior')
+                          })
+                        }
+                      }}
                       className="w-full py-2 px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 resize-vertical"
-                      rows={3}
-                      placeholder="Any specific requirements or focus areas for test generation..."
+                      rows={6}
+                      placeholder="Any specific requirements or focus areas for test generation...&#10;&#10;You can paste your custom instructions here using Ctrl+V (or Cmd+V on Mac)"
                     />
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-gray-500">Paste using Ctrl+V or right-click → Paste</span>
+                        <Button
+                          onClick={async () => {
+                            try {
+                              const text = await navigator.clipboard.readText()
+                              if (text) {
+                                setGenerationConfig(prev => ({
+                                  ...prev,
+                                  customInstructions: prev.customInstructions + text
+                                }))
+                              }
+                            } catch (err) {
+                              console.log('Clipboard read failed:', err)
+                              // Fallback: try to paste using execCommand
+                              const textarea = document.createElement('textarea')
+                              textarea.value = ''
+                              document.body.appendChild(textarea)
+                              textarea.focus()
+                              document.execCommand('paste')
+                              const pastedText = textarea.value
+                              document.body.removeChild(textarea)
+                              if (pastedText) {
+                                setGenerationConfig(prev => ({
+                                  ...prev,
+                                  customInstructions: prev.customInstructions + pastedText
+                                }))
+                              }
+                            }
+                          }}
+                          size="sm"
+
+                          variant="secondary"
+                          className="text-xs h-6 px-2"
+                        >
+                          Paste
+                        </Button>
+                        <Button
+                          onClick={() => setGenerationConfig(prev => ({
+                            ...prev,
+                            customInstructions: ''
+                          }))}
+                          size="sm"
+                          variant="secondary"
+                          className="text-xs h-6 px-2"
+                        >
+                          Clear
+                        </Button>
+                        <Button
+                          onClick={() => setGenerationConfig(prev => ({
+                            ...prev,
+                            customInstructions: `Generate comprehensive test coverage for each requirement including:
+- Positive scenarios (happy path, valid data, boundary conditions)
+- Negative scenarios (invalid inputs, error conditions, unauthorized access)
+- Edge cases (extreme values, special characters, concurrent operations)
+- Integration scenarios (API interactions, database operations)
+- Security scenarios (input validation, authentication, data sanitization)
+- Performance scenarios (load conditions, resource limits)
+
+CRITICAL ORDERING: Generate test cases in the EXACT SAME ORDER as requirements appear in the document. Maintain logical flow and sequential numbering (TC-0001, TC-0002, TC-0003...).
+
+Ensure each test case has detailed steps with specific test data and expected results.`
+                          }))}
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs h-6 px-2"
+                        >
+                          Reset to Default
+                        </Button>
+                      </div>
+                      <span className="text-xs text-gray-500">{generationConfig.customInstructions.length} characters</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -955,7 +1418,7 @@ Template: ${selectedTemplate.description}`
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <FileText className="h-5 w-5" />
-                    <span>Requirements ({completedDocuments.length + textRequirements.length})</span>
+                    <span>Requirements ({completedDocuments.length + textRequirements.length + uploadedMatrices.length})</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -978,6 +1441,15 @@ Template: ${selectedTemplate.description}`
                         </span>
                         </div>
                       ))}
+                    {uploadedMatrices.map((matrixData, index) => (
+                      <div key={`matrix-${index}`} className="flex items-center space-x-2 text-sm">
+                        <Table className="h-4 w-4 text-green-600" />
+                        <span className="truncate">{matrixData.file.name}</span>
+                        <span className="text-xs text-gray-500">
+                          ({matrixData.matrix.metadata.totalScenarios} scenarios)
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -1024,9 +1496,10 @@ Template: ${selectedTemplate.description}`
                   Ready to Generate Test Cases
                 </h3>
                 <p className="text-gray-600 mb-6">
-                  Our AI will analyze your {completedDocuments.length + textRequirements.length} requirements 
-                  ({completedDocuments.length} documents + {textRequirements.length} text requirements) 
+                  Our AI will analyze your {completedDocuments.length + textRequirements.length + uploadedMatrices.length} requirements 
+                  ({completedDocuments.length} documents + {textRequirements.length} text requirements + {uploadedMatrices.length} test matrices) 
                   and generate comprehensive test cases based on your selected template and settings.
+                  {uploadedMatrices.length > 0 && <span className="block text-green-600 text-sm mt-2">✨ Test matrices will enhance accuracy by providing structured test parameters and expected behaviors.</span>}
                 </p>
 
 
@@ -1201,20 +1674,106 @@ Template: ${selectedTemplate.description}`
                   </div>
                 )}
                 
+                {/* Current Session Info */}
+                {currentSessionId && sessionTestCaseCount > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-medium text-blue-900 mb-1">Current Session</h4>
+                        <p className="text-sm text-blue-700">
+                          {sessionTestCaseCount} total test case{sessionTestCaseCount !== 1 ? 's' : ''} generated
+                          {projectId && projects.find(p => p.id === projectId) && (
+                            <span className="ml-2">• Project: {projects.find(p => p.id === projectId)?.name}</span>
+                          )}
+                        </p>
+                      </div>
+                      <Button 
+                        variant="secondary" 
+                        size="sm"
+                        onClick={handleViewSessionTestCases}
+                        className="border-blue-300 text-blue-600 hover:bg-blue-100"
+                      >
+                        <FolderOpen className="h-4 w-4 mr-1" />
+                        View in Library
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Generate More Section */}
+                {chunkingResults.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-md font-medium text-gray-900 mb-3">Generate Additional Test Cases</h4>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Process remaining document chunks to generate more test cases with the same settings.
+                    </p>
+                    {chunkingResults.map((result, index) => (
+                      <div key={result.docId} className="mb-3">
+                        <GenerateMoreButton
+                          docId={result.docId}
+                          projectId={projectId}
+                          enhancement={enhancement}
+                          ticketId={ticketId}
+                          tags={tags}
+                          settings={{
+                            model: settings.ai.model || 'gpt-4o-mini',
+                            maxCases: generationConfig.maxTestCases,
+                            temperature: settings.ai.temperature || 0.2,
+                            schemaVersion: 'v1',
+                            promptTemplateVersion: 'v1.0',
+                            projectId
+                          }}
+                          onProgress={(step) => setGenerationStep(step)}
+                          onComplete={(result) => {
+                            console.log('Generate More completed:', result)
+                            // Refresh session stats to show updated count
+                            loadSessionStats()
+                          }}
+                        />
+                        {chunkingResults.length > 1 && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Document {index + 1} of {chunkingResults.length}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Primary Action Buttons */}
+                <div className="flex justify-center space-x-3 mb-4">
+                  <Button 
+                    variant="primary" 
+                    size="lg"
+                    icon={FolderOpen}
+                    onClick={handleReviewTestCases}
+                    className="px-6"
+                  >
+                    View All Test Cases in Library
+                  </Button>
+                </div>
+                
+                {/* Secondary Actions */}
                 <div className="flex justify-center space-x-4">
                   <Button 
                     variant="secondary" 
-                    icon={Eye}
-                    onClick={handleReviewTestCases}
+                    icon={Wand2}
+                    onClick={() => {
+                      // Keep everything and just trigger generation again
+                      setGenerationProgress(0)
+                      setGenerationStep('')
+                      // Trigger generation with existing documents
+                      handleGenerate()
+                    }}
                   >
-                    Review Test Cases
+                    Generate More
                   </Button>
                   <Button 
-                    variant="primary" 
+                    variant="secondary" 
                     icon={Download}
                     onClick={handleExportTestCases}
                   >
-                    Export Test Cases
+                    Export
                   </Button>
                 </div>
               </CardContent>

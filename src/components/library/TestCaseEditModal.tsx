@@ -235,6 +235,53 @@ export function TestCaseEditModal({
                     />
                   </div>
                 </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Enhancement
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={editedTestCase.enhancement || ''}
+                      onChange={(e) => updateField('enhancement', e.target.value)}
+                      placeholder="e.g., Performance improvement"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Ticket ID
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={editedTestCase.ticketId || ''}
+                      onChange={(e) => updateField('ticketId', e.target.value)}
+                      placeholder="e.g., JIRA-123"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tags
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={editedTestCase.tags ? editedTestCase.tags.join(', ') : ''}
+                    onChange={(e) => {
+                      const tags = e.target.value.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
+                      updateField('tags', tags)
+                    }}
+                    placeholder="e.g., critical, api, security (comma-separated)"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter tags separated by commas
+                  </p>
+                </div>
               </CardContent>
             </Card>
 

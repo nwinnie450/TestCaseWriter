@@ -84,7 +84,18 @@ export interface TestCase {
   id: string
   templateId: string
   projectId: string
-  data: Record<string, any> // field values
+  data: Record<string, any> & {
+    // Signature for hard deduplication
+    signature?: string
+    // SimHash for soft deduplication
+    simhash?: string
+    // Outline links for consistency
+    links?: {
+      feature_ids?: string[]
+      flow_ids?: string[]
+      rule_ids?: string[]
+    }
+  } // field values
   status: 'draft' | 'active' | 'deprecated' | 'review'
   priority: 'low' | 'medium' | 'high' | 'critical'
   tags: string[]

@@ -10,13 +10,16 @@ import {
   Image, 
   File,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  X,
+  Table
 } from 'lucide-react'
 import { formatBytes } from '@/lib/utils'
 import { Document, FileUploadProgress } from '@/types'
 
 interface FileUploadZoneProps {
   onFilesAdded: (files: File[]) => void
+  onFileRemoved?: (index: number) => void
   uploadProgress: FileUploadProgress[]
   maxFiles?: number
   maxFileSize?: number
@@ -32,7 +35,17 @@ const DEFAULT_ACCEPTED_TYPES = [
   'text/plain',
   'image/jpeg',
   'image/png',
-  'image/gif'
+  'image/gif',
+  // Matrix files - including multiple MIME types for Excel
+  'text/csv',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/excel',
+  'application/x-excel',
+  'application/x-msexcel',
+  '.csv',
+  '.xlsx',
+  '.xls'
 ]
 
 const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
@@ -41,6 +54,7 @@ function getFileIcon(type: string) {
   if (type.startsWith('image/')) return Image
   if (type === 'application/pdf') return FileText
   if (type.includes('word') || type.includes('document')) return FileText
+  if (type === 'text/csv' || type.includes('spreadsheet') || type.includes('excel')) return Table
   return File
 }
 
@@ -53,7 +67,11 @@ function getFileTypeLabel(type: string) {
     'text/plain': 'Text File',
     'image/jpeg': 'JPEG Image',
     'image/png': 'PNG Image',
-    'image/gif': 'GIF Image'
+    'image/gif': 'GIF Image',
+    // Matrix files
+    'text/csv': 'Test Matrix (CSV)',
+    'application/vnd.ms-excel': 'Test Matrix (Excel)',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Test Matrix (Excel)'
   }
   
   return typeMap[type] || 'Unknown File Type'
@@ -61,22 +79,56 @@ function getFileTypeLabel(type: string) {
 
 export function FileUploadZone({
   onFilesAdded,
+  onFileRemoved,
   uploadProgress,
   maxFiles = 10,
   maxFileSize = DEFAULT_MAX_FILE_SIZE,
   acceptedTypes = DEFAULT_ACCEPTED_TYPES,
   disabled = false
 }: FileUploadZoneProps) {
+  const isFileTypeSupported = (file: File): boolean => {
+    // Check by file extension (more reliable for Excel files)
+    const fileName = file.name.toLowerCase()
+    const supportedExtensions = ['.pdf', '.docx', '.doc', '.md', '.txt', '.jpg', '.jpeg', '.png', '.gif', '.csv', '.xlsx', '.xls']
+    const hasValidExtension = supportedExtensions.some(ext => fileName.endsWith(ext))
+    
+    // Check by MIME type
+    const hasValidMimeType = DEFAULT_ACCEPTED_TYPES.some(type => 
+      type.startsWith('.') || file.type === type || file.type.includes(type.split('/')[1])
+    )
+    
+    return hasValidExtension || hasValidMimeType
+  }
+
   const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: any[]) => {
+    // Handle rejected files by react-dropzone
     if (rejectedFiles.length > 0) {
-      // Handle rejected files
       rejectedFiles.forEach(({ file, errors }) => {
-        console.error(`File ${file.name} rejected:`, errors)
+        console.error(`File ${file.name} rejected by dropzone:`, errors)
       })
     }
     
-    if (acceptedFiles.length > 0) {
-      onFilesAdded(acceptedFiles)
+    // Additional custom validation for all files
+    const validFiles: File[] = []
+    const invalidFiles: File[] = []
+    
+    ;[...acceptedFiles, ...rejectedFiles.map(f => f.file)].forEach(file => {
+      if (isFileTypeSupported(file)) {
+        validFiles.push(file)
+      } else {
+        invalidFiles.push(file)
+        console.error(`File ${file.name} not supported. Type: ${file.type}, Extension: ${file.name.split('.').pop()}`)
+      }
+    })
+    
+    if (validFiles.length > 0) {
+      onFilesAdded(validFiles)
+    }
+    
+    // Show user-friendly error for unsupported files
+    if (invalidFiles.length > 0) {
+      const unsupportedNames = invalidFiles.map(f => f.name).join(', ')
+      alert(`The following files are not supported: ${unsupportedNames}\n\nSupported formats: PDF, DOCX, MD, TXT, JPG, PNG, CSV, XLSX, XLS`)
     }
   }, [onFilesAdded])
 
@@ -88,7 +140,17 @@ export function FileUploadZone({
     open
   } = useDropzone({
     onDrop,
-    accept: acceptedTypes.reduce((acc, type) => ({ ...acc, [type]: [] }), {}),
+    // Use more permissive accept settings and rely on our custom validation
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/msword': ['.doc'],
+      'text/plain': ['.txt', '.md'],
+      'text/csv': ['.csv'],
+      'application/vnd.ms-excel': ['.xls'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'image/*': ['.jpg', '.jpeg', '.png', '.gif']
+    },
     maxSize: maxFileSize,
     maxFiles: maxFiles - uploadProgress.length,
     disabled,
@@ -158,7 +220,7 @@ export function FileUploadZone({
           
           <div className="mt-4 text-sm text-gray-500 space-y-1">
             <p>
-              Supported formats: PDF, DOCX, MD, TXT, JPG, PNG
+              Supported formats: PDF, DOCX, MD, TXT, JPG, PNG, CSV, XLSX, XLS
             </p>
             <p>
               Maximum file size: {formatBytes(maxFileSize)}
@@ -228,6 +290,17 @@ export function FileUploadZone({
                           
                           {item.status === 'error' && (
                             <AlertCircle className="h-4 w-4 text-error-600" />
+                          )}
+                          
+                          {onFileRemoved && (
+                            <button
+                              onClick={() => onFileRemoved(index)}
+                              className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                              title="Remove file"
+                              disabled={item.status === 'uploading' || item.status === 'processing'}
+                            >
+                              <X className="h-3 w-3 text-gray-400 hover:text-gray-600" />
+                            </button>
                           )}
                         </div>
                       </div>

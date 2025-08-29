@@ -1,4 +1,6 @@
 import { TestCase } from '@/types'
+import { getTestCaseSignature } from './caseSignature'
+import { buildTestCaseSimhash } from './simhash'
 
 const STORAGE_KEY = 'testCaseWriter_generatedTestCases'
 
@@ -119,47 +121,162 @@ const mockTestCasesForTesting: TestCase[] = [
   }
 ]
 
-export function saveGeneratedTestCases(testCases: TestCase[], documentNames: string[] = [], model: string = 'gpt-4o', projectId?: string, projectName?: string): string {
-  try {
-    // Debug logging for test cases being saved
-    console.log('🔍 Storage Debug - Saving test cases:', testCases.map(tc => ({
-      id: tc.id,
-      rootTags: tc.tags,
-      dataTags: tc.data?.tags,
-      hasRootTags: tc.tags && tc.tags.length > 0,
-      hasDataTags: tc.data?.tags && tc.data.tags.length > 0
-    })))
-    
-    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    const session: TestCaseSession = {
-      id: sessionId,
-      generatedAt: new Date(),
-      testCases,
-      documentNames,
-      model,
-      totalCount: testCases.length,
-      projectId,
-      projectName
-    }
+export interface SaveResult {
+  sessionId: string
+  saved: number
+  skipped: number
+  duplicateSignatures: string[]
+}
 
-    // Get existing sessions
-    const existingSessions = getStoredTestCaseSessions()
+export function saveGeneratedTestCases(
+  testCases: TestCase[], 
+  documentNames: string[] = [], 
+  model: string = 'gpt-4o', 
+  projectId?: string, 
+  projectName?: string,
+  continueSessionId?: string
+): SaveResult {
+  try {
+    console.log('🔍 Storage Debug - Starting deduplication save for', testCases.length, 'test cases')
     
-    // Add new session (keep only last 10 sessions to avoid storage bloat)
-    const updatedSessions = [session, ...existingSessions.slice(0, 9)]
+    // Get all existing test cases with their signatures
+    const existingTestCases = getAllStoredTestCases()
+    const existingSignatures = new Set<string>()
+    const projectFilter = projectId || 'all'
     
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSessions))
-    console.log('✅ Test cases saved to localStorage:', { sessionId, count: testCases.length })
+    // Build signature set for existing test cases in this project
+    existingTestCases.forEach(tc => {
+      if (projectFilter === 'all' || tc.projectId === projectId) {
+        const signature = getTestCaseSignature(tc)
+        existingSignatures.add(signature)
+      }
+    })
     
-    return sessionId
+    console.log('🔍 Storage Debug - Found', existingSignatures.size, 'existing signatures in project')
+    
+    // Deduplicate incoming test cases
+    const newTestCases: TestCase[] = []
+    const duplicateSignatures: string[] = []
+    let skipped = 0
+    
+    for (const testCase of testCases) {
+      const signature = getTestCaseSignature(testCase)
+      
+      if (existingSignatures.has(signature)) {
+        console.log('🚫 Storage Debug - Skipping duplicate:', {
+          id: testCase.id,
+          title: testCase.testCase,
+          signature: signature.substring(0, 8) + '...'
+        })
+        duplicateSignatures.push(signature)
+        skipped++
+      } else {
+        // Compute SimHash for soft deduplication
+        const simhash = buildTestCaseSimhash(testCase)
+        
+        // Add to new test cases and mark signature as used
+        newTestCases.push({
+          ...testCase,
+          // Ensure projectId is applied to each test case
+          projectId: projectId || testCase.projectId || 'default',
+          // Add signature and simhash to test case for future reference
+          data: {
+            ...testCase.data,
+            signature,
+            simhash
+          }
+        })
+        existingSignatures.add(signature)
+        console.log('✅ Storage Debug - Adding new test case:', {
+          id: testCase.id,
+          title: testCase.testCase,
+          signature: signature.substring(0, 8) + '...'
+        })
+      }
+    }
+    
+    // Only create/update session if we have new test cases
+    let sessionId: string
+    
+    if (newTestCases.length > 0) {
+      const existingSessions = getStoredTestCaseSessions()
+      
+      // If continuing an existing session, append to it
+      if (continueSessionId) {
+        const existingSessionIndex = existingSessions.findIndex(s => s.id === continueSessionId)
+        if (existingSessionIndex >= 0) {
+          // Append to existing session
+          sessionId = continueSessionId
+          const existingSession = existingSessions[existingSessionIndex]
+          existingSession.testCases.push(...newTestCases)
+          existingSession.totalCount += newTestCases.length
+          existingSession.generatedAt = new Date() // Update timestamp
+          
+          // Move updated session to front
+          const updatedSessions = [existingSession, ...existingSessions.filter((_, i) => i !== existingSessionIndex)]
+          
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSessions))
+          console.log('✅ Storage Debug - Appended to existing session:', { sessionId, added: newTestCases.length, totalInSession: existingSession.totalCount })
+        } else {
+          // Session not found, create new one
+          console.log('⚠️ Requested session not found, creating new session')
+          sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          const session: TestCaseSession = {
+            id: sessionId,
+            generatedAt: new Date(),
+            testCases: newTestCases,
+            documentNames,
+            model,
+            totalCount: newTestCases.length,
+            projectId,
+            projectName
+          }
+          const updatedSessions = [session, ...existingSessions.slice(0, 9)]
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSessions))
+          console.log('✅ Storage Debug - New session created:', { sessionId, saved: newTestCases.length, skipped })
+        }
+      } else {
+        // Create new session
+        sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        const session: TestCaseSession = {
+          id: sessionId,
+          generatedAt: new Date(),
+          testCases: newTestCases,
+          documentNames,
+          model,
+          totalCount: newTestCases.length,
+          projectId,
+          projectName
+        }
+        const updatedSessions = [session, ...existingSessions.slice(0, 9)]
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSessions))
+        console.log('✅ Storage Debug - New session created:', { sessionId, saved: newTestCases.length, skipped })
+      }
+    } else {
+      sessionId = continueSessionId || 'no-new-cases'
+      console.log('ℹ️ Storage Debug - No new test cases to save, all were duplicates')
+    }
+    
+    return {
+      sessionId,
+      saved: newTestCases.length,
+      skipped,
+      duplicateSignatures
+    }
+    
   } catch (error) {
-    console.error('❌ Failed to save test cases to localStorage:', error)
+    console.error('❌ Failed to save test cases with deduplication:', error)
     throw new Error('Failed to save test cases. Your browser storage may be full.')
   }
 }
 
 export function getStoredTestCaseSessions(): TestCaseSession[] {
   try {
+    // Check if localStorage is available (browser environment)
+    if (typeof window === 'undefined' || !localStorage) {
+      return []
+    }
+    
     const stored = localStorage.getItem(STORAGE_KEY)
     if (!stored) return []
     
@@ -266,6 +383,11 @@ export function getProjectTestCaseStats(projectId: string): { total: number, byS
 }
 
 export function getStorageStats(): { sessions: number, totalTestCases: number, storageSize: string } {
+  // Check if localStorage is available (browser environment)
+  if (typeof window === 'undefined' || !localStorage) {
+    return { sessions: 0, totalTestCases: 0, storageSize: '0 KB' }
+  }
+  
   const sessions = getStoredTestCaseSessions()
   const totalTestCases = getAllStoredTestCases().length
   const storageData = localStorage.getItem(STORAGE_KEY) || ''

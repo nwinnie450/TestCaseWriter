@@ -162,15 +162,23 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory }: {
         } else {
           // Create a new session with just this test case
           const { saveGeneratedTestCases } = require('@/lib/test-case-storage')
-          saveGeneratedTestCases([duplicateTestCase], [], 'manual-duplicate')
-          alert(`✅ Test case duplicated and saved as a new session!`)
+          const result = saveGeneratedTestCases([duplicateTestCase], [], 'manual-duplicate')
+          if (result.saved > 0) {
+            alert(`✅ Test case duplicated and saved as a new session!`)
+          } else {
+            alert(`ℹ️ Test case was not duplicated - it already exists!`)
+          }
           window.location.reload()
         }
       } else {
         // No existing sessions, create a new one
         const { saveGeneratedTestCases } = require('@/lib/test-case-storage')
-        saveGeneratedTestCases([duplicateTestCase], [], 'manual-duplicate')
-        alert(`✅ Test case duplicated and saved!`)
+        const result = saveGeneratedTestCases([duplicateTestCase], [], 'manual-duplicate')
+        if (result.saved > 0) {
+          alert(`✅ Test case duplicated and saved!`)
+        } else {
+          alert(`ℹ️ Test case was not duplicated - it already exists!`)
+        }
         window.location.reload()
       }
     } catch (error) {

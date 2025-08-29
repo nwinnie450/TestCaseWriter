@@ -4,9 +4,17 @@ let pdfjs: any = null
 async function initializePdfJs() {
   if (typeof window !== 'undefined' && !pdfjs) {
     pdfjs = await import('pdfjs-dist')
-    // Use the copied worker file from public directory
-    pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
-    console.log('✅ PDF.js worker configured with local file:', pdfjs.GlobalWorkerOptions.workerSrc)
+    
+    // Try multiple worker configurations for better compatibility
+    try {
+      // First try: use local worker file
+      pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
+      console.log('✅ PDF.js worker configured with local file:', pdfjs.GlobalWorkerOptions.workerSrc)
+    } catch (error) {
+      // Fallback: use CDN worker
+      pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+      console.log('⚠️ Using CDN worker as fallback:', pdfjs.GlobalWorkerOptions.workerSrc)
+    }
   }
   return pdfjs
 }
@@ -25,12 +33,16 @@ export async function extractTextFromPDF(file: File): Promise<string> {
     const arrayBuffer = await file.arrayBuffer()
     console.log('✅ File converted to ArrayBuffer, size:', arrayBuffer.byteLength, 'bytes')
     
-    // Load PDF document with error handling for worker issues
+    // Load PDF document with comprehensive error handling
     const loadingTask = pdfjsLib.getDocument({ 
       data: arrayBuffer,
       useWorkerFetch: false,
       isEvalSupported: false,
-      useSystemFonts: true
+      useSystemFonts: true,
+      // Additional options for better compatibility
+      verbosity: pdfjsLib.VerbosityLevel.ERRORS,
+      cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+      cMapPacked: true
     })
     
     const pdf = await loadingTask.promise
@@ -46,16 +58,22 @@ export async function extractTextFromPDF(file: File): Promise<string> {
       const page = await pdf.getPage(pageNum)
       const textContent = await page.getTextContent()
       
-      const pageText = textContent.items
-        .filter((item: any) => item.str && item.str.trim())
-        .map((item: any) => item.str)
-        .join(' ')
+      const textItems = textContent.items.filter((item: any) => item.str && item.str.trim())
+      const pageText = textItems.map((item: any) => item.str).join(' ')
+      
+      console.log(`🔍 Page ${pageNum} analysis:`, {
+        totalItems: textContent.items.length,
+        textItems: textItems.length,
+        pageTextLength: pageText.length,
+        firstFewItems: textItems.slice(0, 5).map((item: any) => item.str)
+      })
       
       if (pageText.trim()) {
         fullText += `\n--- Page ${pageNum} ---\n${pageText}\n`
         console.log(`✅ Page ${pageNum} extracted: ${pageText.length} characters`)
       } else {
-        console.log(`⚠️ Page ${pageNum} has no readable text`)
+        console.log(`⚠️ Page ${pageNum} has no readable text - might be image-based`)
+        console.log(`Raw items on page ${pageNum}:`, textContent.items.slice(0, 3))
       }
     }
     
