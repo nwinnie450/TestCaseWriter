@@ -1,133 +1,56 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Notification, NotificationItem } from './NotificationItem'
+import { useRouter } from 'next/navigation'
+import { NotificationItem } from './NotificationItem'
 import { Button } from '@/components/ui/Button'
 import { Bell, CheckCheck, X } from 'lucide-react'
-
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    type: 'export_complete',
-    title: 'Export Complete',
-    description: 'Your export to TestRail was successful.',
-    createdAt: new Date(Date.now() - 10 * 60 * 1000),
-    isRead: false,
-  },
-  {
-    id: '2',
-    type: 'new_test_case',
-    title: 'New Test Cases Generated',
-    description: '15 new test cases were generated from your document.',
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    isRead: false,
-  },
-  {
-    id: '3',
-    type: 'export_failed',
-    title: 'Export Failed',
-    description: 'Your export to Jira failed due to an authentication error.',
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    isRead: true,
-  },
-]
+import { notificationService, type Notification } from '@/lib/notification-service'
 
 export function NotificationDropdown() {
+  const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [isHydrated, setIsHydrated] = useState(false)
   
   // Start with empty state to avoid hydration mismatch
   const [notifications, setNotifications] = useState<Notification[]>([])
 
-  // Load notifications from localStorage after hydration
+  // Load notifications from service after hydration
   useEffect(() => {
     setIsHydrated(true)
-    
-    const saved = localStorage.getItem('testCaseWriter_notifications')
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved).map((n: any) => ({
-          ...n,
-          createdAt: new Date(n.createdAt)
-        }))
-        setNotifications(parsed)
-      } catch (e) {
-        console.warn('Failed to parse saved notifications:', e)
-        setNotifications(mockNotifications)
-      }
-    } else {
-      setNotifications(mockNotifications)
-    }
+    setNotifications(notificationService.getNotifications())
   }, [])
 
-  // Save notifications to localStorage whenever they change
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('testCaseWriter_notifications', JSON.stringify(notifications))
-    }
-  }, [notifications])
-
-  // Listen for new notifications added from other parts of the app
-  React.useEffect(() => {
-    const handleNotificationAdded = () => {
-      // Reload notifications from localStorage
-      const saved = localStorage.getItem('testCaseWriter_notifications')
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved).map((n: any) => ({
-            ...n,
-            createdAt: new Date(n.createdAt)
-          }))
-          setNotifications(parsed)
-        } catch (e) {
-          console.warn('Failed to parse saved notifications:', e)
-        }
-      }
+  // Listen for notification updates
+  useEffect(() => {
+    const handleNotificationUpdate = () => {
+      setNotifications(notificationService.getNotifications())
     }
 
-    window.addEventListener('notification-added', handleNotificationAdded)
-    return () => window.removeEventListener('notification-added', handleNotificationAdded)
+    window.addEventListener('notifications-updated', handleNotificationUpdate)
+    // Keep the old event for backward compatibility
+    window.addEventListener('notification-added', handleNotificationUpdate)
+    
+    return () => {
+      window.removeEventListener('notifications-updated', handleNotificationUpdate)
+      window.removeEventListener('notification-added', handleNotificationUpdate)
+    }
   }, [])
 
   // Only calculate unread count after hydration to avoid SSR mismatch
-  const unreadCount = isHydrated ? notifications.filter(n => !n.isRead).length : 0
+  const unreadCount = isHydrated ? notificationService.getUnreadCount() : 0
 
   const handleMarkAsRead = (id: string) => {
     console.log('📍 Marking notification as read:', id)
-    const updatedNotifications = notifications.map(n => (n.id === id ? { ...n, isRead: true } : n))
-    setNotifications(updatedNotifications)
-    
-    // Force immediate localStorage update
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('testCaseWriter_notifications', JSON.stringify(updatedNotifications))
-    }
+    notificationService.markAsRead(id)
+    setNotifications(notificationService.getNotifications())
   }
 
   const handleMarkAllAsRead = () => {
     console.log('📍 Marking all notifications as read')
-    const updatedNotifications = notifications.map(n => ({ ...n, isRead: true }))
-    setNotifications(updatedNotifications)
-    
-    // Force immediate localStorage update
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('testCaseWriter_notifications', JSON.stringify(updatedNotifications))
-    }
+    notificationService.markAllAsRead()
+    setNotifications(notificationService.getNotifications())
   }
-
-  // Function to add new notifications (can be called from other components)
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // @ts-ignore - Adding to window for global access
-      window.addNotification = (notification: Omit<Notification, 'id' | 'createdAt'>) => {
-        const newNotification: Notification = {
-          ...notification,
-          id: Date.now().toString(),
-          createdAt: new Date(),
-        }
-        setNotifications(prev => [newNotification, ...prev])
-      }
-    }
-  }, [])
 
   return (
     <div className="relative">
@@ -195,7 +118,14 @@ export function NotificationDropdown() {
             </div>
             <div className="p-2 text-center border-t border-gray-200">
               <div className="flex justify-center space-x-2">
-                <Button variant="ghost" size="sm">
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => {
+                    setIsOpen(false)
+                    router.push('/settings#notifications')
+                  }}
+                >
                   View all notifications
                 </Button>
                 {/* Debug button - remove in production */}

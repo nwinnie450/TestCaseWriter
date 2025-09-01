@@ -567,7 +567,7 @@ Ensure each test case has detailed steps with specific test data and expected re
         matrixText += `Categories: ${matrix.metadata.categories.join(', ')}\n`
         matrixText += `Parameters: ${matrix.metadata.parameters.join(', ')}\n\n`
         
-        matrix.rows.forEach((row, index) => {
+        matrix.rows.forEach((row: any, index: number) => {
           matrixText += `Scenario ${index + 1}: ${row.testScenario}\n`
           matrixText += `Expected: ${row.expectedBehavior}\n`
           if (row.priority) matrixText += `Priority: ${row.priority}\n`
@@ -575,7 +575,7 @@ Ensure each test case has detailed steps with specific test data and expected re
           
           // Add parameters
           Object.entries(row.parameters).forEach(([key, value]) => {
-            if (value.trim()) matrixText += `${key}: ${value}\n`
+            if (typeof value === 'string' && value.trim()) matrixText += `${key}: ${value}\n`
           })
           matrixText += '\n'
         })
@@ -1763,7 +1763,7 @@ Ensure each test case has detailed steps with specific test data and expected re
                       setGenerationProgress(0)
                       setGenerationStep('')
                       // Trigger generation with existing documents
-                      handleGenerate()
+                      startGeneration()
                     }}
                   >
                     Generate More

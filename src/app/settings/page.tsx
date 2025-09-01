@@ -1,18 +1,18 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Layout } from '@/components/layout/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useSettings } from '@/contexts/SettingsContext'
 import { AIProviderSettings } from '@/components/settings/AIProviderSettings'
+import { notificationService, type NotificationPreferences } from '@/lib/notification-service'
 import { 
   User, 
   Bell, 
   Shield, 
   Database, 
-  Palette,
   Globe,
   Save,
   Key,
@@ -25,7 +25,12 @@ import {
   Plus,
   Brain,
   HelpCircle,
-  Info
+  Info,
+  Trash2,
+  CheckCheck,
+  AlertTriangle,
+  Download,
+  Clock
 } from 'lucide-react'
 
 export default function Settings() {
@@ -38,6 +43,11 @@ export default function Settings() {
     expiration: '90',
     ipRestrictions: ''
   })
+  
+  // Notification state
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>(notificationService.getPreferences())
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission | null>(notificationService.getBrowserPermissionStatus())
+  const [notifications, setNotifications] = useState(notificationService.getNotifications())
   const [widgetKeys, setWidgetKeys] = useState([
     {
       id: 'chatgpt-key',
@@ -69,6 +79,72 @@ export default function Settings() {
     }
   ])
   const { settings, updateSettings, updateAIConfig } = useSettings()
+
+  // Handle URL hash navigation (e.g., /settings#notifications)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.slice(1) // Remove the # symbol
+      if (hash && ['ai', 'profile', 'notifications', 'security', 'api', 'integrations'].includes(hash)) {
+        setActiveTab(hash)
+      }
+    }
+  }, [])
+
+  // Listen for notification updates
+  useEffect(() => {
+    const handleNotificationUpdate = () => {
+      setNotifications(notificationService.getNotifications())
+    }
+
+    window.addEventListener('notifications-updated', handleNotificationUpdate)
+    return () => window.removeEventListener('notifications-updated', handleNotificationUpdate)
+  }, [])
+
+  // Notification helper functions
+  const handleEnableBrowserNotifications = async () => {
+    const granted = await notificationService.requestBrowserPermission()
+    if (granted) {
+      setBrowserPermission('granted')
+      setNotificationPrefs(notificationService.getPreferences())
+    } else {
+      setBrowserPermission(notificationService.getBrowserPermissionStatus())
+    }
+  }
+
+  const handleNotificationPrefChange = (key: keyof NotificationPreferences, value: any) => {
+    const newPrefs = { ...notificationPrefs, [key]: value }
+    setNotificationPrefs(newPrefs)
+    notificationService.updatePreferences({ [key]: value })
+  }
+
+  const handleMarkAllRead = () => {
+    notificationService.markAllAsRead()
+    setNotifications(notificationService.getNotifications())
+  }
+
+  const handleClearAll = () => {
+    if (confirm('Are you sure you want to clear all notifications? This action cannot be undone.')) {
+      notificationService.clearAllNotifications()
+      setNotifications(notificationService.getNotifications())
+    }
+  }
+
+  const handleDeleteNotification = (id: string) => {
+    notificationService.deleteNotification(id)
+    setNotifications(notificationService.getNotifications())
+  }
+
+  const handleMarkAsUnread = (id: string) => {
+    const notification = notifications.find(n => n.id === id)
+    if (notification) {
+      notification.isRead = false
+      notificationService.addNotification({
+        ...notification,
+        isRead: false
+      })
+      setNotifications(notificationService.getNotifications())
+    }
+  }
 
   const generateWidgetKey = (keyName: string) => {
     const newKey = `tcw_widget_sk-${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`
@@ -164,7 +240,6 @@ export default function Settings() {
     { id: 'ai', label: 'AI Providers', icon: Brain },
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'preferences', label: 'Preferences', icon: Palette },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'api', label: 'API Management', icon: Key },
     { id: 'integrations', label: 'Integrations', icon: Database }
@@ -259,6 +334,202 @@ export default function Settings() {
       case 'notifications':
         return (
           <div className="space-y-6">
+            {/* Notification History */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Bell className="h-5 w-5" />
+                    <span>Notification History</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button variant="ghost" size="sm" onClick={handleMarkAllRead}>
+                      <CheckCheck className="h-4 w-4 mr-2" />
+                      Mark all read
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={handleClearAll}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Clear all
+                    </Button>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {notifications.length > 0 ? (
+                    notifications.map((notification) => {
+                      const getNotificationStyle = (type: string, isRead: boolean) => {
+                        if (isRead) {
+                          return {
+                            container: 'bg-gray-50 border border-gray-200',
+                            icon: 'text-gray-500',
+                            title: 'text-gray-900',
+                            description: 'text-gray-600',
+                            time: 'text-gray-500'
+                          }
+                        }
+                        
+                        switch (type) {
+                          case 'export_complete':
+                          case 'success':
+                            return {
+                              container: 'bg-green-50 border border-green-200',
+                              icon: 'text-green-600',
+                              title: 'text-green-900',
+                              description: 'text-green-700',
+                              time: 'text-green-700'
+                            }
+                          case 'export_failed':
+                          case 'error':
+                            return {
+                              container: 'bg-red-50 border border-red-200',
+                              icon: 'text-red-600',
+                              title: 'text-red-900',
+                              description: 'text-red-700',
+                              time: 'text-red-700'
+                            }
+                          case 'new_test_case':
+                            return {
+                              container: 'bg-blue-50 border border-blue-200',
+                              icon: 'text-blue-600',
+                              title: 'text-blue-900',
+                              description: 'text-blue-700',
+                              time: 'text-blue-700'
+                            }
+                          default:
+                            return {
+                              container: 'bg-gray-50 border border-gray-200',
+                              icon: 'text-gray-500',
+                              title: 'text-gray-900',
+                              description: 'text-gray-600',
+                              time: 'text-gray-500'
+                            }
+                        }
+                      }
+
+                      const getNotificationIcon = (type: string) => {
+                        switch (type) {
+                          case 'export_complete':
+                            return Download
+                          case 'export_failed':
+                            return AlertTriangle
+                          case 'new_test_case':
+                            return Check
+                          case 'system':
+                            return Clock
+                          default:
+                            return Bell
+                        }
+                      }
+
+                      const formatTimeAgo = (date: Date) => {
+                        const now = new Date()
+                        const diffMs = now.getTime() - date.getTime()
+                        const diffMinutes = Math.floor(diffMs / (1000 * 60))
+                        const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+                        if (diffMinutes < 60) {
+                          return `${diffMinutes} min ago`
+                        } else if (diffHours < 24) {
+                          return `${diffHours} hours ago`
+                        } else {
+                          return `${diffDays} days ago`
+                        }
+                      }
+
+                      const styles = getNotificationStyle(notification.type, notification.isRead)
+                      const IconComponent = getNotificationIcon(notification.type)
+
+                      return (
+                        <div key={notification.id} className={`flex items-start space-x-3 p-3 rounded-lg ${styles.container}`}>
+                          <div className="flex-shrink-0">
+                            <IconComponent className={`h-5 w-5 ${styles.icon} mt-0.5`} />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <p className={`font-medium ${styles.title}`}>{notification.title}</p>
+                              <div className="flex items-center space-x-2">
+                                <span className={`text-xs ${styles.time}`}>
+                                  {formatTimeAgo(notification.createdAt)}
+                                </span>
+                                {!notification.isRead && (
+                                  <div className={`w-2 h-2 rounded-full ${styles.icon.includes('green') ? 'bg-green-600' : styles.icon.includes('red') ? 'bg-red-600' : styles.icon.includes('blue') ? 'bg-blue-600' : 'bg-gray-600'}`}></div>
+                                )}
+                                {notification.isRead && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                    Read
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <p className={`text-sm ${styles.description} mt-1`}>
+                              {notification.description}
+                            </p>
+                            {notification.isRead && (
+                              <div className="mt-2 flex space-x-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="text-gray-600"
+                                  onClick={() => handleMarkAsUnread(notification.id)}
+                                >
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  Mark unread
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="text-gray-600"
+                                  onClick={() => handleDeleteNotification(notification.id)}
+                                >
+                                  <Trash2 className="h-3 w-3 mr-1" />
+                                  Delete
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Bell className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                      <p className="font-medium">No notifications</p>
+                      <p className="text-sm">You're all caught up!</p>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="mt-4 text-center flex flex-col gap-2">
+                  <div className="flex justify-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => {
+                        notificationService.notifyTestCasesGenerated(Math.floor(Math.random() * 20) + 5)
+                      }}
+                    >
+                      🧪 Test Generation Notification
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => {
+                        Math.random() > 0.5 
+                          ? notificationService.notifyExportComplete('Successfully exported 15 test cases to TestRail.')
+                          : notificationService.notifyExportFailed('Failed to export to Jira. Please check your API credentials.')
+                      }}
+                    >
+                      📤 Test Export Notification
+                    </Button>
+                  </div>
+                  <Button variant="ghost" size="sm">
+                    Load more notifications
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
@@ -267,53 +538,20 @@ export default function Settings() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900">Test Generation Complete</p>
-                      <p className="text-sm text-gray-500">When AI finishes generating test cases</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" defaultChecked className="sr-only peer" />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-900">Email Notifications</p>
+                    <p className="text-sm text-gray-500">Receive email alerts for important events</p>
                   </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900">Export Complete</p>
-                      <p className="text-sm text-gray-500">When test case export is ready for download</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" defaultChecked className="sr-only peer" />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900">API Errors</p>
-                      <p className="text-sm text-gray-500">When API requests fail or quota is exceeded</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" defaultChecked className="sr-only peer" />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900">Weekly Summary</p>
-                      <p className="text-sm text-gray-500">Weekly report of test generation activity</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" className="sr-only peer" />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
-                </div>
-                <div className="pt-4 border-t">
-                  <Button onClick={() => handleSave('notifications')}>
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Notifications
-                  </Button>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={notificationPrefs.emailNotifications}
+                      onChange={(e) => handleNotificationPrefChange('emailNotifications', e.target.checked)}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
                 </div>
               </CardContent>
             </Card>
@@ -326,172 +564,85 @@ export default function Settings() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                {/* Browser notification status */}
+                <div className={`border rounded-lg p-4 mb-4 ${
+                  browserPermission === 'granted' 
+                    ? 'bg-green-50 border-green-200' 
+                    : browserPermission === 'denied'
+                    ? 'bg-red-50 border-red-200'
+                    : 'bg-blue-50 border-blue-200'
+                }`}>
                   <div className="flex items-start space-x-3">
-                    <Bell className="h-5 w-5 text-blue-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-blue-900">Enable Browser Notifications</h4>
-                      <p className="text-sm text-blue-700 mt-1">
-                        Get real-time notifications in your browser for important events.
+                    <Bell className={`h-5 w-5 mt-0.5 ${
+                      browserPermission === 'granted' 
+                        ? 'text-green-600' 
+                        : browserPermission === 'denied'
+                        ? 'text-red-600'
+                        : 'text-blue-600'
+                    }`} />
+                    <div className="flex-1">
+                      <h4 className={`font-medium ${
+                        browserPermission === 'granted' 
+                          ? 'text-green-900' 
+                          : browserPermission === 'denied'
+                          ? 'text-red-900'
+                          : 'text-blue-900'
+                      }`}>
+                        {browserPermission === 'granted' 
+                          ? 'Browser Notifications Enabled' 
+                          : browserPermission === 'denied'
+                          ? 'Browser Notifications Blocked'
+                          : 'Enable Browser Notifications'
+                        }
+                      </h4>
+                      <p className={`text-sm mt-1 ${
+                        browserPermission === 'granted' 
+                          ? 'text-green-700' 
+                          : browserPermission === 'denied'
+                          ? 'text-red-700'
+                          : 'text-blue-700'
+                      }`}>
+                        {browserPermission === 'granted' 
+                          ? 'You\'ll receive system notifications for important events even when the app is minimized.' 
+                          : browserPermission === 'denied'
+                          ? 'Notifications have been blocked. To enable them, click the lock icon in your browser\'s address bar and allow notifications.'
+                          : 'Get real-time notifications in your browser for important events.'
+                        }
                       </p>
+                      
+                      {browserPermission === 'granted' && (
+                        <div className="mt-3 flex items-center space-x-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => notificationService.notifySystemMessage('Test Notification', 'This is a test browser notification to verify it\'s working correctly.')}
+                            className="text-green-600 hover:text-green-700"
+                          >
+                            <Bell className="h-3 w-3 mr-1" />
+                            Send Test Notification
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-                <Button variant="secondary" className="w-full">
-                  <Bell className="h-4 w-4 mr-2" />
-                  Enable Browser Notifications
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        )
 
-      case 'preferences':
-        return (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Palette className="h-5 w-5" />
-                  <span>Appearance</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">Theme</label>
-                  <div className="grid grid-cols-3 gap-4">
-                    <label className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                      <input type="radio" name="theme" value="light" defaultChecked className="text-blue-600" />
-                      <div>
-                        <p className="font-medium">Light</p>
-                        <p className="text-sm text-gray-500">Clean and bright</p>
-                      </div>
-                    </label>
-                    <label className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                      <input type="radio" name="theme" value="dark" className="text-blue-600" />
-                      <div>
-                        <p className="font-medium">Dark</p>
-                        <p className="text-sm text-gray-500">Easy on the eyes</p>
-                      </div>
-                    </label>
-                    <label className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                      <input type="radio" name="theme" value="auto" className="text-blue-600" />
-                      <div>
-                        <p className="font-medium">Auto</p>
-                        <p className="text-sm text-gray-500">Follow system</p>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Sidebar Position</label>
-                  <select className="input w-full md:w-48">
-                    <option>Left</option>
-                    <option>Right</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Table Density</label>
-                  <select className="input w-full md:w-48">
-                    <option>Comfortable</option>
-                    <option>Compact</option>
-                    <option>Spacious</option>
-                  </select>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Globe className="h-5 w-5" />
-                  <span>Localization</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Language</label>
-                    <select className="input w-full">
-                      <option>English (US)</option>
-                      <option>English (UK)</option>
-                      <option>Spanish</option>
-                      <option>French</option>
-                      <option>German</option>
-                      <option>Japanese</option>
-                      <option>Chinese (Simplified)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Date Format</label>
-                    <select className="input w-full">
-                      <option>MM/DD/YYYY</option>
-                      <option>DD/MM/YYYY</option>
-                      <option>YYYY-MM-DD</option>
-                      <option>DD MMM YYYY</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Time Format</label>
-                    <select className="input w-full">
-                      <option>12 Hour (AM/PM)</option>
-                      <option>24 Hour</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Number Format</label>
-                    <select className="input w-full">
-                      <option>1,234.56 (US)</option>
-                      <option>1.234,56 (EU)</option>
-                      <option>1 234,56 (FR)</option>
-                    </select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Default Settings</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Default Export Format</label>
-                    <select className="input w-full">
-                      <option>CSV</option>
-                      <option>Excel</option>
-                      <option>JSON</option>
-                      <option>PDF</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Rows Per Page</label>
-                    <select className="input w-full">
-                      <option>10</option>
-                      <option>25</option>
-                      <option>50</option>
-                      <option>100</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Auto-save Frequency</label>
-                  <select className="input w-full md:w-48">
-                    <option>Every 30 seconds</option>
-                    <option>Every minute</option>
-                    <option>Every 5 minutes</option>
-                    <option>Manual only</option>
-                  </select>
-                </div>
-                <div className="pt-4 border-t">
-                  <Button onClick={() => handleSave('preferences')}>
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Preferences
+                {/* Enable/Disable button */}
+                {browserPermission !== 'granted' && (
+                  <Button 
+                    variant="secondary" 
+                    className="w-full"
+                    onClick={handleEnableBrowserNotifications}
+                    disabled={browserPermission === 'denied'}
+                  >
+                    <Bell className="h-4 w-4 mr-2" />
+                    {browserPermission === 'denied' 
+                      ? 'Notifications Blocked - Check Browser Settings' 
+                      : 'Enable Browser Notifications'
+                    }
                   </Button>
-                </div>
+                )}
+
               </CardContent>
             </Card>
           </div>

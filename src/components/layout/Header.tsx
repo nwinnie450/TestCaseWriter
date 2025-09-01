@@ -17,7 +17,6 @@ import {
   Settings,
   User,
   Bell,
-  Search,
   Menu,
   X,
   LogOut,
@@ -30,16 +29,16 @@ import {
 import { useState } from 'react'
 import { NotificationDropdown } from '@/components/notifications/NotificationDropdown'
 
+// All navigation items (now we have space to show them all)
 const navigationItems = [
   { name: 'Dashboard', href: '/', icon: Home },
-  { name: 'Projects', href: '/projects', icon: Folder },
-  { name: 'Templates', href: '/templates', icon: FileText },
   { name: 'Generate', href: '/generate', icon: Wand2 },
   { name: 'Library', href: '/library', icon: Database },
   { name: 'Export', href: '/export', icon: Download },
+  { name: 'Projects', href: '/projects', icon: Folder },
+  { name: 'Templates', href: '/templates', icon: FileText },
   { name: 'Management', href: '/management', icon: GitPullRequest },
   { name: 'Docs', href: '/docs', icon: Book },
-  { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
 export function Header() {
@@ -92,24 +91,24 @@ export function Header() {
   }
 
   return (
-    <header className="border-b border-gray-200 bg-white">
+    <header className="border-b border-gray-200 bg-white shadow-sm">
       <div className="w-full px-8">
-        <div className="flex h-20 items-center justify-between">
+        <div className="flex h-16 items-center justify-between">
           {/* Logo and Brand */}
           <div className="flex items-center">
             <button 
               onClick={() => handleNavigation('/')} 
-              className="flex items-center space-x-4 cursor-pointer"
+              className="flex items-center space-x-3 cursor-pointer group"
             >
-              <div className="h-10 w-10 bg-primary-600 rounded-lg flex items-center justify-center">
-                <Wand2 className="h-6 w-6 text-white" />
+              <div className="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center group-hover:bg-primary-700 transition-colors">
+                <Wand2 className="h-5 w-5 text-white" />
               </div>
-              <span className="text-2xl font-bold text-gray-900">Test Case Manager</span>
+              <span className="text-lg font-bold text-gray-900 group-hover:text-primary-600 transition-colors">Test Case Manager</span>
             </button>
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="flex space-x-2">
+          <nav className="flex items-center space-x-1">
             {navigationItems.map((item) => {
               const Icon = item.icon
               const isActive = pathname === item.href
@@ -119,13 +118,13 @@ export function Header() {
                   key={item.name}
                   onClick={() => handleNavigation(item.href)}
                   className={cn(
-                    'flex items-center space-x-3 px-4 py-3 rounded-md text-base font-medium transition-colors',
+                    'flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200',
                     isActive
-                      ? 'bg-primary-100 text-primary-700'
+                      ? 'bg-primary-600 text-white shadow-md'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                   )}
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-4 w-4" />
                   <span>{item.name}</span>
                 </button>
               )
@@ -133,34 +132,33 @@ export function Header() {
           </nav>
 
           {/* Right side actions */}
-          <div className="flex items-center space-x-6">
-            {/* Search */}
-            <div className="block">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search test cases, projects, templates..."
-                  className="w-80 pl-12 pr-6 py-3 border border-gray-300 rounded-md text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-            </div>
-
+          <div className="flex items-center space-x-3">
             {/* Notifications */}
             <NotificationDropdown />
+
+            {/* Settings */}
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="p-2"
+              onClick={() => handleNavigation('/settings')}
+              title="Settings"
+            >
+              <Settings className="h-5 w-5 text-gray-600 hover:text-gray-900" />
+            </Button>
 
             {/* User Menu */}
             <div className="relative">
               <Button 
                 variant="ghost" 
-                size="md" 
-                className="flex items-center space-x-2"
+                size="sm" 
+                className="flex items-center space-x-2 px-3 py-2"
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
               >
-                <div className="h-8 w-8 bg-primary-600 rounded-full flex items-center justify-center">
-                  <User className="h-5 w-5 text-white" />
+                <div className="h-7 w-7 bg-primary-600 rounded-full flex items-center justify-center">
+                  <User className="h-4 w-4 text-white" />
                 </div>
-                <span className="hidden md:block text-sm font-medium">{user?.name || 'Guest'}</span>
+                <span className="hidden md:block text-sm font-medium text-gray-700">{user?.name || 'Guest'}</span>
               </Button>
 
               {/* User Dropdown */}
@@ -309,18 +307,6 @@ export function Header() {
                 </button>
               )
             })}
-          </div>
-          
-          {/* Mobile Search */}
-          <div className="px-4 py-3 border-t border-gray-200">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search test cases..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              />
-            </div>
           </div>
         </div>
       )}

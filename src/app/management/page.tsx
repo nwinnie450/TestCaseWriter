@@ -17,7 +17,11 @@ import {
   AlertTriangle,
   TrendingUp,
   Activity,
-  Database
+  Database,
+  Search,
+  Filter,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { VersionHistory } from '@/components/versioning/VersionHistory'
 import { ChangeRequestModal } from '@/components/versioning/ChangeRequestModal'
@@ -57,6 +61,12 @@ export default function ManagementPage() {
   const [settings, setSettings] = useState<ManagementSettings>(getManagementSettings())
   const [showConfigModal, setShowConfigModal] = useState(false)
   const [configModalType, setConfigModalType] = useState<'version-control' | 'change-requests' | 'notifications'>('version-control')
+  
+  // Pagination and filtering states
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(10)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterModule, setFilterModule] = useState('')
 
   // Load real data on component mount
   useEffect(() => {
@@ -101,6 +111,31 @@ export default function ManagementPage() {
     activeTestCases: testCases.filter(tc => tc.status === 'active').length,
     draftTestCases: testCases.filter(tc => tc.status === 'draft').length
   }
+
+  // Filter and pagination logic
+  const filteredTestCases = testCases.filter(testCase => {
+    const matchesSearch = !searchTerm || 
+      testCase.testCase?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      testCase.module?.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    const matchesModule = !filterModule || testCase.module === filterModule
+    
+    return matchesSearch && matchesModule
+  })
+
+  const totalPages = Math.ceil(filteredTestCases.length / itemsPerPage)
+  const paginatedTestCases = filteredTestCases.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
+
+  // Get unique modules for filter dropdown
+  const uniqueModules = Array.from(new Set(testCases.map(tc => tc.module).filter(Boolean)))
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, filterModule])
 
   const handleCreateChangeRequest = (testCase: TestCase) => {
     setSelectedTestCase(testCase)
@@ -459,44 +494,155 @@ export default function ManagementPage() {
         <TabsContent value="versions" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <History className="w-5 h-5" />
-                <span>Test Case Versions</span>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <History className="w-5 h-5" />
+                  <span>Test Case Versions</span>
+                </div>
+                <div className="text-sm text-gray-500">
+                  {filteredTestCases.length} of {testCases.length} test cases
+                </div>
               </CardTitle>
+              
+              {/* Search and Filter Controls */}
+              <div className="flex flex-col sm:flex-row gap-4 mt-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    placeholder="Search test cases..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                
+                <div className="flex gap-2">
+                  <div className="relative">
+                    <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <select
+                      value={filterModule}
+                      onChange={(e) => setFilterModule(e.target.value)}
+                      className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">All Modules</option>
+                      {uniqueModules.map(module => (
+                        <option key={module} value={module}>{module}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value))
+                      setCurrentPage(1)
+                    }}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value={5}>5 per page</option>
+                    <option value={10}>10 per page</option>
+                    <option value={25}>25 per page</option>
+                    <option value={50}>50 per page</option>
+                  </select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {testCases.length > 0 ? (
-                testCases.map((testCase) => (
-                  <div key={testCase.id} className="mb-6 last:mb-0">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-medium text-gray-900">{testCase.module}</h3>
-                        <p className="text-sm text-gray-600">{testCase.testCase}</p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge className="bg-blue-100 text-blue-800">
-                          v{testCase.version || 1}
-                        </Badge>
-                                                 <Button
-                           onClick={() => handleCreateChangeRequest(testCase)}
-                           size="sm"
-                           className="flex items-center space-x-1"
-                           title="Submit a change request for this test case - Propose modifications that will be reviewed before creating a new version"
-                         >
-                           <GitPullRequest className="w-4 h-4" />
-                           <span>Request Changes</span>
-                         </Button>
-                      </div>
+                <>
+                  {paginatedTestCases.length > 0 ? (
+                    <>
+                      {paginatedTestCases.map((testCase) => (
+                        <div key={testCase.id} className="mb-6 last:mb-0">
+                          <div className="flex items-center justify-between mb-4">
+                            <div>
+                              <h3 className="text-lg font-medium text-gray-900">{testCase.module}</h3>
+                              <p className="text-sm text-gray-600">{testCase.testCase}</p>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Badge className="bg-blue-100 text-blue-800">
+                                v{testCase.version || 1}
+                              </Badge>
+                              <Button
+                                onClick={() => handleCreateChangeRequest(testCase)}
+                                size="sm"
+                                className="flex items-center space-x-1"
+                                title="Submit a change request for this test case - Propose modifications that will be reviewed before creating a new version"
+                              >
+                                <GitPullRequest className="w-4 h-4" />
+                                <span>Request Changes</span>
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          <VersionHistory
+                            versions={versions.filter(v => v.testCaseId === testCase.id)}
+                            currentVersion={testCase.version || 1}
+                            onRevert={handleRevertVersion}
+                            onViewVersion={handleViewVersion}
+                          />
+                        </div>
+                      ))}
+                      
+                      {/* Pagination Controls */}
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
+                          <div className="text-sm text-gray-600">
+                            Showing {(currentPage - 1) * itemsPerPage + 1} to{' '}
+                            {Math.min(currentPage * itemsPerPage, filteredTestCases.length)} of{' '}
+                            {filteredTestCases.length} results
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                              disabled={currentPage === 1}
+                              className="flex items-center space-x-1"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                              <span>Previous</span>
+                            </Button>
+                            
+                            <span className="text-sm text-gray-600">
+                              Page {currentPage} of {totalPages}
+                            </span>
+                            
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                              disabled={currentPage === totalPages}
+                              className="flex items-center space-x-1"
+                            >
+                              <span>Next</span>
+                              <ChevronRight className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Search className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                      <p className="font-medium">No test cases found</p>
+                      <p className="text-sm">Try adjusting your search or filter criteria</p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSearchTerm('')
+                          setFilterModule('')
+                        }}
+                        className="mt-2"
+                      >
+                        Clear filters
+                      </Button>
                     </div>
-                    
-                    <VersionHistory
-                      versions={versions.filter(v => v.testCaseId === testCase.id)}
-                      currentVersion={testCase.version || 1}
-                      onRevert={handleRevertVersion}
-                      onViewVersion={handleViewVersion}
-                    />
-                  </div>
-                ))
+                  )}
+                </>
               ) : (
                                  <div className="text-center py-12 text-gray-500">
                    <Database className="w-16 h-16 mx-auto mb-4 text-gray-300" />
