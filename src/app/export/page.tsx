@@ -23,36 +23,8 @@ import {
 } from 'lucide-react'
 
 
-// Mock export history
-const mockExportHistory = [
-  {
-    id: 'export-1',
-    profileName: 'TestRail Integration',
-    format: 'testrail',
-    testCaseCount: 45,
-    status: 'completed',
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-    duration: 12000 // ms
-  },
-  {
-    id: 'export-2',
-    profileName: 'Excel Export - Standard',
-    format: 'excel',
-    testCaseCount: 23,
-    status: 'completed',
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-    duration: 3000
-  },
-  {
-    id: 'export-3',
-    profileName: 'Jira Xray Integration',
-    format: 'jira',
-    testCaseCount: 15,
-    status: 'failed',
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
-    error: 'Authentication failed'
-  }
-]
+// No mock export history for production - start clean
+const mockExportHistory: any[] = []
 
 // Default profiles
 const defaultProfiles: ExportProfile[] = [

@@ -51,68 +51,8 @@ const formatLabels = {
   json: 'JSON File'
 }
 
-// Mock data for demonstration
-const mockProfiles: ExportProfile[] = [
-  {
-    id: 'profile-1',
-    name: 'TestRail Integration',
-    description: 'Export test cases to TestRail project suite',
-    format: 'testrail',
-    fieldMappings: [
-      { sourceField: 'id', targetField: 'custom_case_id', required: true },
-      { sourceField: 'title', targetField: 'title', required: true },
-      { sourceField: 'priority', targetField: 'priority_id', required: false }
-    ],
-    connectionConfig: {
-      type: 'testrail',
-      baseUrl: 'https://company.testrail.io',
-      username: 'testuser@company.com',
-      apiKey: '***hidden***',
-      projectKey: 'PROJ1',
-      suiteId: '123'
-    },
-    isDefault: true,
-    createdAt: new Date('2024-01-15'),
-    updatedAt: new Date('2024-01-20')
-  },
-  {
-    id: 'profile-2',
-    name: 'Excel Export - Standard',
-    description: 'Standard Excel format for test case documentation',
-    format: 'excel',
-    fieldMappings: [
-      { sourceField: 'id', targetField: 'Test case ID', required: true },
-      { sourceField: 'title', targetField: 'Test Title', required: true },
-      { sourceField: 'description', targetField: 'Description', required: false },
-      { sourceField: 'priority', targetField: 'Priority', required: false },
-      { sourceField: 'status', targetField: 'Status', required: false }
-    ],
-    isDefault: false,
-    createdAt: new Date('2024-01-10'),
-    updatedAt: new Date('2024-01-18')
-  },
-  {
-    id: 'profile-3',
-    name: 'Jira Xray Integration',
-    description: 'Export test cases to Jira Xray for execution',
-    format: 'jira',
-    fieldMappings: [
-      { sourceField: 'id', targetField: 'testKey', required: true },
-      { sourceField: 'title', targetField: 'summary', required: true },
-      { sourceField: 'description', targetField: 'description', required: false }
-    ],
-    connectionConfig: {
-      type: 'jira',
-      baseUrl: 'https://company.atlassian.net',
-      username: 'testuser@company.com',
-      apiKey: '***hidden***',
-      projectKey: 'TEST'
-    },
-    isDefault: false,
-    createdAt: new Date('2024-01-12'),
-    updatedAt: new Date('2024-01-22')
-  }
-]
+// No mock profiles for production - start clean
+const mockProfiles: ExportProfile[] = []
 
 export function ExportProfileList({
   profiles,

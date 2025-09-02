@@ -498,28 +498,7 @@ export default function TestCaseLibrary() {
     window.location.href = `/generate?${projectParam}continue=true`
   }
 
-  const handleLoadMockData = async () => {
-    try {
-      console.log('🎭 Loading mock test cases...')
-      const { loadMockTestCases, getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
-      
-      // Load mock data
-      const sessionId = loadMockTestCases()
-      
-      // Refresh the UI
-      const updatedTestCases = getAllStoredTestCases()
-      const updatedStats = getStorageStats()
-      
-      setTestCases(updatedTestCases)
-      setStorageStats(updatedStats)
-      
-      console.log('✅ Mock test cases loaded successfully!')
-      alert(`✅ Loaded 3 mock test cases with 8-10 steps each for testing expand/collapse functionality!`)
-    } catch (error) {
-      console.error('❌ Failed to load mock data:', error)
-      alert('❌ Failed to load mock data. Please try again.')
-    }
-  }
+  // Removed mock data loading function for production
 
   // Group test cases by selected field
   const groupTestCases = (testCases: TestCase[], groupField: string) => {
@@ -675,10 +654,7 @@ export default function TestCaseLibrary() {
       )}
       
 
-      <Button variant="secondary" onClick={handleLoadMockData} className="border-blue-300 text-blue-600 hover:bg-blue-50">
-        <FileText className="h-4 w-4 mr-2" />
-        Load Test Data
-      </Button>
+      {/* Removed Load Test Data button for production */}
       
       {/* Only show generate button if NOT coming from generate page */}
       {!isFromGenerate && (
