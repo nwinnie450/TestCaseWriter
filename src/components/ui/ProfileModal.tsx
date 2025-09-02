@@ -8,7 +8,7 @@ import { X, Save, User } from 'lucide-react'
 interface ProfileModalProps {
   isOpen: boolean
   onClose: () => void
-  user: {name: string, email: string, avatar?: string} | null
+  user: {id: string, name: string, email: string, avatar?: string} | null
 }
 
 export function ProfileModal({ isOpen, onClose, user }: ProfileModalProps) {
@@ -124,6 +124,16 @@ export function ProfileModal({ isOpen, onClose, user }: ProfileModalProps) {
 
           {/* Form */}
           <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                User ID
+              </label>
+              <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700">
+                {user?.id || 'N/A'}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Your unique user identifier (cannot be changed)</p>
+            </div>
+            
             <Input
               label="Full Name"
               value={formData.name}

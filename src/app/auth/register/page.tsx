@@ -12,6 +12,7 @@ export default function RegisterPage() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    userId: '',
     password: '',
     confirmPassword: ''
   })
@@ -43,13 +44,13 @@ export default function RegisterPage() {
         return
       }
 
-      if (!formData.name || !formData.email || !formData.password) {
+      if (!formData.name || !formData.email || !formData.userId || !formData.password) {
         setError('Please fill in all fields')
         return
       }
 
       // Use the proper registration function
-      const newUser = registerUser(formData.email, formData.name, formData.password)
+      const newUser = registerUser(formData.email, formData.name, formData.password, formData.userId)
       
       if (newUser) {
         // Auto-login the newly registered user
@@ -118,6 +119,15 @@ export default function RegisterPage() {
                 value={formData.email}
                 onChange={(e) => updateField('email', e.target.value)}
                 placeholder="john@company.com"
+                required
+              />
+
+              <Input
+                label="User ID"
+                type="text"
+                value={formData.userId}
+                onChange={(e) => updateField('userId', e.target.value)}
+                placeholder="johndoe123"
                 required
               />
 

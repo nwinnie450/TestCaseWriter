@@ -13,6 +13,9 @@ export function DemoDataLoader({ onDataLoaded }: DemoDataLoaderProps) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState('')
   const [debugInfo, setDebugInfo] = useState<string>('')
+  
+  // Check if we're in production
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.NEXT_PUBLIC_DISABLE_MOCK_DATA === 'true'
 
   const loadDemoData = async () => {
     setLoading(true)
@@ -235,6 +238,11 @@ export function DemoDataLoader({ onDataLoaded }: DemoDataLoaderProps) {
       setStatus('error')
       setMessage('Error checking data')
     }
+  }
+
+  // Don't render in production
+  if (isProduction) {
+    return null
   }
 
   return (

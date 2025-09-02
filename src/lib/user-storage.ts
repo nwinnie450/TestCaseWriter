@@ -32,19 +32,28 @@ function verifyPassword(password: string, hashedPassword: string): boolean {
 }
 
 // User Management
-export function registerUser(email: string, name: string, password: string): User {
+export function registerUser(email: string, name: string, password: string, userId?: string): User {
   const users = getAllUsers()
-  console.log('registerUser called with:', email, name)
+  console.log('registerUser called with:', email, name, userId)
   console.log('Current users before registration:', users)
   
-  // Check if user already exists
-  const existingUser = users.find(u => u.email.toLowerCase() === email.toLowerCase())
-  if (existingUser) {
+  // Check if user already exists by email
+  const existingUserByEmail = users.find(u => u.email.toLowerCase() === email.toLowerCase())
+  if (existingUserByEmail) {
     throw new Error('User with this email already exists')
   }
   
+  // Generate user ID if not provided
+  const finalUserId = userId?.trim() || `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  
+  // Check if user ID already exists
+  const existingUserById = users.find(u => u.id.toLowerCase() === finalUserId.toLowerCase())
+  if (existingUserById) {
+    throw new Error('User with this ID already exists')
+  }
+  
   const newUser: User = {
-    id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    id: finalUserId,
     email: email.toLowerCase().trim(),
     name: name.trim(),
     password: hashPassword(password),
@@ -60,14 +69,18 @@ export function registerUser(email: string, name: string, password: string): Use
   return newUser
 }
 
-export function loginUser(email: string, password: string): User | null {
-  console.log('loginUser called with:', email)
+export function loginUser(emailOrId: string, password: string): User | null {
+  console.log('loginUser called with:', emailOrId)
   const users = getAllUsers()
   console.log('All users:', users)
   console.log('User emails:', users.map(u => u.email))
-  console.log('Searching for email (lowercase):', email.toLowerCase())
+  console.log('Searching for email/ID (lowercase):', emailOrId.toLowerCase())
   
-  const user = users.find(u => u.email.toLowerCase() === email.toLowerCase())
+  // Search by email or user ID
+  const user = users.find(u => 
+    u.email.toLowerCase() === emailOrId.toLowerCase() || 
+    u.id.toLowerCase() === emailOrId.toLowerCase()
+  )
   console.log('Found user:', user)
   
   if (user && verifyPassword(password, user.password)) {
@@ -262,7 +275,22 @@ export function resetUserStorage(): void {
   localStorage.removeItem(PROJECT_MEMBERS_KEY)
 }
 
-// Initialize with some default users for testing
+// Remove test users and setup admin
+export function removeTestUsers(): void {
+  const users = getAllUsers()
+  const cleanUsers = users.filter(u => 
+    !u.email.includes('test') && 
+    !u.name.toLowerCase().includes('test') &&
+    !u.id.includes('test') &&
+    u.email !== 'admin@test.com' &&
+    u.email !== 'user@test.com'
+  )
+  
+  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(cleanUsers))
+  console.log('Test users removed successfully')
+}
+
+// Initialize with admin user only
 export function initializeDefaultUsers(): void {
   const users = getAllUsers()
   
@@ -272,42 +300,27 @@ export function initializeDefaultUsers(): void {
     resetUserStorage()
   }
   
-  if (getAllUsers().length === 0) {
-    const defaultUsers = [
-      {
-        id: 'user_1',
-        email: 'john.doe@example.com',
-        name: 'John Doe',
-        password: hashPassword('password123'),
-        role: 'user',
-        avatar: 'https://ui-avatars.com/api/?name=John%20Doe&background=6366f1&color=fff'
-      },
-      {
-        id: 'user_2', 
-        email: 'jane.smith@example.com',
-        name: 'Jane Smith',
-        password: hashPassword('password123'),
-        role: 'user',
-        avatar: 'https://ui-avatars.com/api/?name=Jane%20Smith&background=10b981&color=fff'
-      },
-      {
-        id: 'user_3',
-        email: 'admin@testcasewriter.com',
-        name: 'Admin User',
-        password: hashPassword('admin123'),
-        role: 'admin',
-        avatar: 'https://ui-avatars.com/api/?name=Admin%20User&background=f59e0b&color=fff'
-      },
-      {
-        id: 'user_4',
-        email: 'admin',
-        name: 'Administrator',
-        password: hashPassword('Orion888!'),
-        role: 'admin',
-        avatar: 'https://ui-avatars.com/api/?name=Administrator&background=dc2626&color=fff'
-      }
-    ]
+  // Remove any existing test users first
+  removeTestUsers()
+  
+  // Check if admin already exists
+  const updatedUsers = getAllUsers()
+  const existingAdmin = updatedUsers.find(u => u.email === 'admin@merquri.io')
+  
+  if (!existingAdmin) {
+    const adminUser = {
+      id: 'admin',
+      email: 'admin@merquri.io',
+      name: 'admin',
+      password: hashPassword('Orion888!'),
+      role: 'admin' as const,
+      avatar: 'https://ui-avatars.com/api/?name=admin&background=1f2937&color=fff'
+    }
     
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(defaultUsers))
+    updatedUsers.push(adminUser)
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(updatedUsers))
+    console.log('Admin user initialized successfully')
+  } else {
+    console.log('Admin user already exists')
   }
 }

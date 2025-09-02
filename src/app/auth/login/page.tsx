@@ -9,7 +9,7 @@ import { Wand2, Eye, EyeOff } from 'lucide-react'
 import { loginUser } from '@/lib/user-storage'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
+  const [emailOrId, setEmailOrId] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -22,13 +22,13 @@ export default function LoginPage() {
 
     try {
       // Use the proper login function from user-storage
-      const user = loginUser(email, password)
+      const user = loginUser(emailOrId, password)
       
       if (user) {
         alert('✅ Login successful!\n\nWelcome back!')
         window.location.href = '/'
       } else {
-        setError('Invalid email or password. Please try again.')
+        setError('Invalid email/user ID or password. Please try again.')
       }
     } catch (error) {
       setError('Login failed. Please try again.')
@@ -64,11 +64,11 @@ export default function LoginPage() {
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               <Input
-                label="Email Address"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="john@company.com"
+                label="Email or User ID"
+                type="text"
+                value={emailOrId}
+                onChange={(e) => setEmailOrId(e.target.value)}
+                placeholder="admin@merquri.io or admin"
                 required
               />
 
@@ -128,12 +128,12 @@ export default function LoginPage() {
                   variant="secondary" 
                   className="w-full"
                   onClick={() => {
-                    // Demo login
-                    setEmail('admin@testcasewriter.com')
-                    setPassword('admin123')
+                    // Demo login with new admin credentials
+                    setEmailOrId('admin@merquri.io')
+                    setPassword('Orion888!')
                   }}
                 >
-                  Use Demo Account
+                  Use Admin Account
                 </Button>
               </div>
             </div>

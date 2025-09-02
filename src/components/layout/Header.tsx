@@ -48,7 +48,7 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [user, setUser] = useState<{name: string, email: string, avatar?: string} | null>(null)
+  const [user, setUser] = useState<{id: string, name: string, email: string, avatar?: string} | null>(null)
   const [showProfileModal, setShowProfileModal] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
 

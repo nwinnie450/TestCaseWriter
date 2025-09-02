@@ -41,7 +41,7 @@ const ROLE_PERMISSIONS: Record<UserRole, AccessPermissions> = {
     canDeleteTestCases: true,
     canExport: true,
     canManageTemplates: true,
-    canManageProjects: false,
+    canManageProjects: true,
     canManageUsers: false,
     canViewSettings: true,
     canEditSettings: true,
@@ -98,10 +98,12 @@ export function canAccessPage(user: User | null, page: string): boolean {
       return permissions.canGenerateTestCases
     case '/settings':
       return permissions.canViewSettings
-    case '/management':
     case '/projects':
-    case '/users':
+      return permissions.canManageProjects
     case '/templates':
+      return permissions.canManageTemplates
+    case '/management':
+    case '/users':
       return permissions.canAccessManagementPages
     default:
       return true // Allow access to public pages by default
@@ -114,8 +116,10 @@ export function getRestrictedPagesForRole(role: UserRole): string[] {
   
   if (!permissions.canGenerateTestCases) restrictedPages.push('/generate')
   if (!permissions.canViewSettings) restrictedPages.push('/settings')
+  if (!permissions.canManageProjects) restrictedPages.push('/projects')
+  if (!permissions.canManageTemplates) restrictedPages.push('/templates')
   if (!permissions.canAccessManagementPages) {
-    restrictedPages.push('/management', '/projects', '/users', '/templates')
+    restrictedPages.push('/management', '/users')
   }
   
   return restrictedPages

@@ -17,6 +17,7 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
+  const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -38,6 +39,11 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
     if (mode === 'register') {
       if (!name.trim()) {
         setError('Please enter your full name')
+        return
+      }
+      
+      if (!userId.trim()) {
+        setError('Please enter a user ID')
         return
       }
       
@@ -78,7 +84,7 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
         }
       } else {
         try {
-          const newUser = registerUser(email, name, password)
+          const newUser = registerUser(email, name, password, userId)
           console.log('User registered:', newUser)
           
           // Try to login the new user
@@ -114,6 +120,7 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
   const resetForm = () => {
     setEmail('')
     setName('')
+    setUserId('')
     setPassword('')
     setConfirmPassword('')
     setError('')
@@ -168,34 +175,20 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
           </p>
         </div>
 
-        {/* Quick Login for Testing */}
+        {/* Quick Login for Admin */}
         {mode === 'login' && (
           <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-xs font-medium text-blue-900 mb-2">Quick Login (Test Accounts):</p>
+            <p className="text-xs font-medium text-blue-900 mb-2">Quick Login (Admin Account):</p>
             <div className="space-y-2">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded p-2 border">
                 <div className="text-xs">
-                  <div className="font-medium text-gray-700">john.doe@example.com</div>
-                  <div className="text-gray-500">Password: password123</div>
+                  <div className="font-medium text-gray-700">admin@merquri.io</div>
+                  <div className="text-gray-500">Password: Orion888!</div>
                 </div>
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  onClick={() => quickLogin('john.doe@example.com', 'password123')}
-                  className="text-blue-600 text-xs mt-1 sm:mt-0"
-                >
-                  Use
-                </Button>
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded p-2 border">
-                <div className="text-xs">
-                  <div className="font-medium text-gray-700">admin@testcasewriter.com</div>
-                  <div className="text-gray-500">Password: admin123</div>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => quickLogin('admin@testcasewriter.com', 'admin123')}
+                  onClick={() => quickLogin('admin@merquri.io', 'Orion888!')}
                   className="text-blue-600 text-xs mt-1 sm:mt-0"
                 >
                   Use
@@ -222,15 +215,15 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email Address
+              Email or User ID
             </label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
-                type="email"
+                type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
+                placeholder="Enter your email or user ID"
                 className="pl-10"
                 disabled={loading}
               />
@@ -274,22 +267,41 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
           )}
 
           {mode === 'register' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name
-              </label>
-              <div className="relative">
-                <UserPlus className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter your full name"
-                  className="pl-10"
-                  disabled={loading}
-                />
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <UserPlus className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Enter your full name"
+                    className="pl-10"
+                    disabled={loading}
+                  />
+                </div>
               </div>
-            </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  User ID
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="text"
+                    value={userId}
+                    onChange={(e) => setUserId(e.target.value)}
+                    placeholder="Enter a unique user ID"
+                    className="pl-10"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            </>
           )}
 
           {error && (

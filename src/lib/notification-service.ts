@@ -79,47 +79,16 @@ class NotificationService {
           createdAt: new Date(n.createdAt)
         }))
       } else {
-        // Load mock data for demo
-        this.notifications = this.getMockNotifications()
+        // Start with empty notifications - no mock data
+        this.notifications = []
         this.saveNotifications()
       }
     } catch (error) {
       console.warn('Failed to load notifications:', error)
-      this.notifications = this.getMockNotifications()
+      this.notifications = []
     }
   }
 
-  private getMockNotifications(): Notification[] {
-    return [
-      {
-        id: '1',
-        type: 'export_complete',
-        title: 'Export Complete',
-        description: 'Your export to TestRail was successful. 25 test cases exported.',
-        createdAt: new Date(Date.now() - 10 * 60 * 1000),
-        isRead: false,
-        category: 'export'
-      },
-      {
-        id: '2',
-        type: 'new_test_case',
-        title: 'New Test Cases Generated',
-        description: '15 new test cases were generated from your document.',
-        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        isRead: false,
-        category: 'generation'
-      },
-      {
-        id: '3',
-        type: 'export_failed',
-        title: 'Export Failed',
-        description: 'Your export to Jira failed due to an authentication error.',
-        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        isRead: true,
-        category: 'export'
-      }
-    ]
-  }
 
   private saveNotifications(): void {
     if (typeof window !== 'undefined') {
@@ -150,13 +119,6 @@ class NotificationService {
       if (permission === 'granted') {
         this.preferences.browserNotifications = true
         this.savePreferences()
-        
-        // Show welcome notification
-        this.sendBrowserNotification({
-          title: 'Browser Notifications Enabled',
-          body: 'You\'ll now receive notifications for important events.',
-          icon: '/favicon.ico'
-        })
         
         return true
       }

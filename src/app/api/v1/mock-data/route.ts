@@ -307,6 +307,15 @@ const mockData = {
 
 export async function GET(request: NextRequest) {
   try {
+    // Disable mock data in production
+    if (process.env.NODE_ENV === 'production' || process.env.DISABLE_MOCK_DATA === 'true') {
+      return NextResponse.json({
+        success: false,
+        message: "Mock data is disabled in production environment",
+        data: { projects: [], testCases: [] }
+      }, { status: 403 })
+    }
+
     return NextResponse.json({
       success: true,
       message: "Mock data retrieved successfully",
@@ -322,6 +331,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Disable mock data in production
+    if (process.env.NODE_ENV === 'production' || process.env.DISABLE_MOCK_DATA === 'true') {
+      return NextResponse.json({
+        success: false,
+        message: "Mock data population is disabled in production environment",
+        data: { projects: [], testCases: [] }
+      }, { status: 403 })
+    }
+
     const { action } = await request.json()
     
     if (action === 'populate') {

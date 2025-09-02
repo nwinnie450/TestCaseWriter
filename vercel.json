@@ -1,0 +1,17 @@
+{
+  "build": {
+    "env": {
+      "DISABLE_MOCK_DATA": "true",
+      "NEXT_PUBLIC_DISABLE_MOCK_DATA": "true"
+    }
+  },
+  "env": {
+    "DISABLE_MOCK_DATA": "true",
+    "NEXT_PUBLIC_DISABLE_MOCK_DATA": "true"
+  },
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  }
+}
