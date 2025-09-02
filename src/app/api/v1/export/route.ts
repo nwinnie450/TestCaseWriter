@@ -1,69 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
-// Mock test cases data - in a real app, this would come from a database
-const mockTestCases = [
-  {
-    id: 'TC-0001',
-    module: 'Authentication',
-    testCase: 'User Login with Valid Credentials',
-    testSteps: [
-      {
-        step: 1,
-        description: 'Navigate to login page',
-        testData: '',
-        expectedResult: 'Login page displays'
-      },
-      {
-        step: 2,
-        description: 'Enter valid credentials',
-        testData: 'user@example.com, password123',
-        expectedResult: 'Credentials accepted'
-      },
-      {
-        step: 3,
-        description: 'Click login button',
-        testData: '',
-        expectedResult: 'User redirected to dashboard'
-      }
-    ],
-    testResult: 'Not Executed',
-    qa: '',
-    remarks: 'Generated from requirements document',
-    priority: 'high',
-    tags: ['login', 'authentication', 'positive']
-  },
-  {
-    id: 'TC-0002',
-    module: 'Authentication',
-    testCase: 'User Login with Invalid Password',
-    testSteps: [
-      {
-        step: 1,
-        description: 'Navigate to login page',
-        testData: '',
-        expectedResult: 'Login page displays'
-      },
-      {
-        step: 2,
-        description: 'Enter valid username, invalid password',
-        testData: 'user@example.com, wrongpassword',
-        expectedResult: 'Error message shown'
-      },
-      {
-        step: 3,
-        description: 'Verify user remains on login page',
-        testData: '',
-        expectedResult: 'User not logged in'
-      }
-    ],
-    testResult: 'Not Executed',
-    qa: '',
-    remarks: 'Negative test case - Generated from security requirements',
-    priority: 'medium',
-    tags: ['login', 'authentication', 'negative']
-  }
-]
+// Empty mock data for production - test cases come from actual data
+const mockTestCases: any[] = []
 
 // Validation schemas
 const FieldMappingSchema = z.object({

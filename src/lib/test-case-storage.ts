@@ -15,110 +15,9 @@ export interface TestCaseSession {
   projectName?: string
 }
 
-// Mock test cases with many steps for testing expand/collapse
+// Empty mock test cases for production
 const mockTestCasesForTesting: TestCase[] = [
-  {
-    id: 'TC-MOCK-001',
-    testCase: 'Comprehensive User Login Flow Validation',
-    module: 'Authentication',
-    priority: 'high',
-    status: 'active',
-    projectId: 'PROJ-AUTH-001',
-    enhancement: 'ENH-2024-001',
-    ticketId: 'TICKET-AUTH-501',
-    testSteps: [
-      { step: 1, description: 'Navigate to the application login page', testData: 'Browser URL: https://app.example.com/login', expectedResult: 'Login page loads with username and password fields visible' },
-      { step: 2, description: 'Verify page elements are present', testData: 'N/A', expectedResult: 'Username field, password field, login button, and forgot password link are visible' },
-      { step: 3, description: 'Enter valid username in username field', testData: 'username: testuser@company.com', expectedResult: 'Username is entered without validation errors' },
-      { step: 4, description: 'Enter valid password in password field', testData: 'password: SecurePass123!', expectedResult: 'Password is masked with asterisks or dots' },
-      { step: 5, description: 'Click the Login button', testData: 'N/A', expectedResult: 'Login button triggers authentication process with loading indicator' },
-      { step: 6, description: 'Verify successful authentication', testData: 'N/A', expectedResult: 'User is redirected to dashboard page' },
-      { step: 7, description: 'Check user session is established', testData: 'N/A', expectedResult: 'User profile menu displays logged-in user name' },
-      { step: 8, description: 'Verify dashboard content loads', testData: 'N/A', expectedResult: 'Dashboard widgets and navigation menu are fully loaded' }
-    ],
-    testResult: 'Not Executed',
-    qa: 'QA Team',
-    remarks: 'Mock data for testing expand/collapse functionality',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    data: {
-      title: 'Comprehensive User Login Flow Validation',
-      description: 'This test validates the complete user login process from page load to successful authentication',
-      tags: ['authentication', 'login', 'security', 'user-interface'],
-      projectId: 'PROJ-AUTH-001',
-      enhancement: 'ENH-2024-001',
-      ticketId: 'TICKET-AUTH-501'
-    }
-  },
-  {
-    id: 'TC-MOCK-002',
-    testCase: 'E-commerce Shopping Cart Full Workflow',
-    module: 'Shopping',
-    priority: 'critical',
-    status: 'active',
-    projectId: 'PROJ-ECOM-002',
-    enhancement: 'ENH-2024-007',
-    ticketId: 'TICKET-SHOP-401',
-    testSteps: [
-      { step: 1, description: 'Navigate to product catalog page', testData: 'URL: /products', expectedResult: 'Product catalog displays with search and filter options' },
-      { step: 2, description: 'Search for specific product', testData: 'search term: "wireless headphones"', expectedResult: 'Search results show relevant products with images and prices' },
-      { step: 3, description: 'Select a product from search results', testData: 'product: Sony WH-1000XM4', expectedResult: 'Product detail page opens with specifications and reviews' },
-      { step: 4, description: 'Choose product variant and quantity', testData: 'color: black, quantity: 2', expectedResult: 'Selected options are highlighted, price updates accordingly' },
-      { step: 5, description: 'Add product to shopping cart', testData: 'N/A', expectedResult: 'Success message appears, cart icon shows updated item count' },
-      { step: 6, description: 'Navigate to shopping cart page', testData: 'N/A', expectedResult: 'Cart page displays added items with correct quantities and prices' },
-      { step: 7, description: 'Update item quantity in cart', testData: 'new quantity: 1', expectedResult: 'Quantity updates, total price recalculates automatically' },
-      { step: 8, description: 'Apply discount coupon', testData: 'coupon code: SAVE10', expectedResult: 'Discount is applied, total price reduces by 10%' },
-      { step: 9, description: 'Proceed to checkout', testData: 'N/A', expectedResult: 'Checkout page loads with order summary and payment options' },
-      { step: 10, description: 'Complete payment process', testData: 'card: 4111111111111111, cvv: 123', expectedResult: 'Order confirmation page displays with order number' }
-    ],
-    testResult: 'Not Executed',
-    qa: 'E-commerce Team',
-    remarks: 'Mock data for testing expand/collapse functionality',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    data: {
-      title: 'E-commerce Shopping Cart Full Workflow',
-      description: 'End-to-end test of shopping cart functionality from product search to order completion',
-      tags: ['e-commerce', 'shopping-cart', 'payment', 'checkout', 'integration'],
-      projectId: 'PROJ-ECOM-002',
-      enhancement: 'ENH-2024-007',
-      ticketId: 'TICKET-SHOP-401'
-    }
-  },
-  {
-    id: 'TC-MOCK-003',
-    testCase: 'File Upload and Processing System Test',
-    module: 'File Management',
-    priority: 'medium',
-    status: 'active',
-    projectId: 'PROJ-FILE-003',
-    enhancement: 'ENH-2024-012',
-    ticketId: 'TICKET-FILE-201',
-    testSteps: [
-      { step: 1, description: 'Navigate to file upload section', testData: 'URL: /upload', expectedResult: 'Upload interface displays with drag-drop area and browse button' },
-      { step: 2, description: 'Select multiple files for upload', testData: 'files: document.pdf, image.jpg, spreadsheet.xlsx', expectedResult: 'Selected files appear in upload queue with file details' },
-      { step: 3, description: 'Validate file type restrictions', testData: 'forbidden file: executable.exe', expectedResult: 'Error message appears for unsupported file types' },
-      { step: 4, description: 'Check file size limitations', testData: 'large file: 50MB video.mp4', expectedResult: 'Warning message for files exceeding size limit' },
-      { step: 5, description: 'Start upload process', testData: 'N/A', expectedResult: 'Progress bars appear showing upload status for each file' },
-      { step: 6, description: 'Monitor upload progress', testData: 'N/A', expectedResult: 'Progress updates in real-time, estimated time remaining shown' },
-      { step: 7, description: 'Verify successful file upload', testData: 'N/A', expectedResult: 'Success checkmarks appear, uploaded files listed in file manager' },
-      { step: 8, description: 'Test file preview functionality', testData: 'preview: document.pdf', expectedResult: 'PDF document opens in preview mode within the application' },
-      { step: 9, description: 'Download uploaded file', testData: 'download: image.jpg', expectedResult: 'File downloads to default download location with original filename' }
-    ],
-    testResult: 'Not Executed',
-    qa: 'File System Team',
-    remarks: 'Mock data for testing expand/collapse functionality',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    data: {
-      title: 'File Upload and Processing System Test',
-      description: 'Comprehensive testing of file upload, validation, processing, and download features',
-      tags: ['file-upload', 'validation', 'processing', 'download', 'ui-testing'],
-      projectId: 'PROJ-FILE-003',
-      enhancement: 'ENH-2024-012',
-      ticketId: 'TICKET-FILE-201'
-    }
-  }
+  // No mock data for production
 ]
 
 export interface SaveResult {
@@ -404,42 +303,9 @@ export function loadMockTestCases(): string {
   try {
     console.log('🎭 Loading mock test cases for expand/collapse testing...')
     
-    // Create sample projects if they don't exist
-    const sampleProjects = [
-      {
-        id: 'PROJ-AUTH-001',
-        name: 'Authentication System',
-        description: 'User authentication and login functionality',
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        id: 'PROJ-ECOM-002',
-        name: 'E-commerce Platform',
-        description: 'Online shopping cart and checkout system',
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        id: 'PROJ-FILE-003',
-        name: 'File Management System',
-        description: 'File upload, processing, and storage functionality',
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ]
+    // No sample projects for production - start clean
     
-    // Save projects to localStorage
-    const existingProjects = localStorage.getItem('testCaseWriter_projects')
-    if (!existingProjects) {
-      console.log('🎭 Creating sample projects...')
-      localStorage.setItem('testCaseWriter_projects', JSON.stringify(sampleProjects))
-    }
-    
-    return saveGeneratedTestCases(mockTestCasesForTesting, ['Mock Data'], 'mock-generator')
+    return 'session-empty' // No mock data for production
   } catch (error) {
     console.error('❌ Failed to load mock test cases:', error)
     throw new Error('Failed to load mock test cases')

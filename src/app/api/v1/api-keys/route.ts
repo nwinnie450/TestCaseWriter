@@ -56,27 +56,9 @@ function saveAPIKeys(apiKeys: APIKey[]): void {
   }
 }
 
-// Initialize with demo key if no keys exist
+// Initialize with empty keys - no demo data in production
 function initializeAPIKeys(): APIKey[] {
-  const stored = getStoredAPIKeys()
-  if (stored.length === 0) {
-    const demoKey: APIKey = {
-      id: '1',
-      key: 'demo-api-key-123',
-      companyName: 'Demo Company',
-      contactEmail: 'demo@example.com',
-      isActive: true,
-      rateLimit: 100,
-      monthlyUsage: 0,
-      monthlyLimit: 1000,
-      createdAt: new Date('2024-01-01'),
-      lastUsed: new Date(),
-      usageHistory: []
-    }
-    saveAPIKeys([demoKey])
-    return [demoKey]
-  }
-  return stored
+  return getStoredAPIKeys()
 }
 
 // Get current API keys (with persistence)
