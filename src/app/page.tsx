@@ -26,6 +26,40 @@ export default function Dashboard() {
   const { stats } = useTokenUsage()
   const [currentUser, setCurrentUser] = useState<any>(null)
   
+  // Clear all mock data on production startup
+  useEffect(() => {
+    // Clear all mock data keys to ensure clean production environment
+    const clearProductionData = () => {
+      try {
+        // Only keep user authentication data
+        const currentUserData = localStorage.getItem('testCaseWriter_currentUser')
+        const userData = localStorage.getItem('testCaseWriter_users')
+        const settingsData = localStorage.getItem('testCaseWriterSettings')
+        
+        // Clear all test case writer keys
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('testCaseWriter_') || key.startsWith('testCaseManager_')) {
+            localStorage.removeItem(key)
+          }
+        })
+        
+        // Restore essential data
+        if (currentUserData) localStorage.setItem('testCaseWriter_currentUser', currentUserData)
+        if (userData) localStorage.setItem('testCaseWriter_users', userData)
+        if (settingsData) localStorage.setItem('testCaseWriterSettings', settingsData)
+        
+        console.log('🧹 Production environment cleaned - all mock data removed')
+      } catch (error) {
+        console.log('Failed to clear production data:', error)
+      }
+    }
+    
+    // Only run in production or when explicitly cleaning
+    if (process.env.NODE_ENV === 'production' || window.location.hostname !== 'localhost') {
+      clearProductionData()
+    }
+  }, [])
+
   // Check for current user and listen for changes
   useEffect(() => {
     const checkUser = () => {
