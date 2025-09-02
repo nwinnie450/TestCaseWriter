@@ -41,45 +41,8 @@ interface Project {
   ownerId?: string // User ID of the project owner
 }
 
-// Default projects in localStorage
-const defaultProjects: Project[] = [
-  {
-    id: 'proj-1',
-    name: 'E-Commerce Platform Testing',
-    description: 'Comprehensive testing suite for online shopping platform',
-    status: 'active',
-    createdAt: new Date('2024-01-15'),
-    updatedAt: new Date('2024-01-20'),
-    testCaseCount: 145,
-    templateCount: 8,
-    memberCount: 5,
-    ownerId: 'current-user' // Will be set to current user
-  },
-  {
-    id: 'proj-2', 
-    name: 'Mobile Banking App QA',
-    description: 'Security and functionality testing for mobile banking',
-    status: 'active',
-    createdAt: new Date('2024-01-10'),
-    updatedAt: new Date('2024-01-25'),
-    testCaseCount: 89,
-    templateCount: 6,
-    memberCount: 3,
-    ownerId: 'current-user'
-  },
-  {
-    id: 'proj-3',
-    name: 'Legacy System Migration',
-    description: 'Testing data migration and system compatibility',
-    status: 'archived',
-    createdAt: new Date('2023-11-05'),
-    updatedAt: new Date('2023-12-20'),
-    testCaseCount: 267,
-    templateCount: 12,
-    memberCount: 8,
-    ownerId: 'current-user'
-  }
-]
+// No default projects for production - start clean
+const defaultProjects: Project[] = []
 
 function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([])
@@ -111,13 +74,12 @@ function ProjectsPage() {
         }))
         setProjects(parsedProjects)
       } else {
-        // Set default projects
-        setProjects(defaultProjects)
-        localStorage.setItem('testCaseWriter_projects', JSON.stringify(defaultProjects))
+        // No default projects - start clean
+        setProjects([])
       }
     } catch (error) {
       console.error('Failed to load projects:', error)
-      setProjects(defaultProjects)
+      setProjects([])
     }
   }, [])
 

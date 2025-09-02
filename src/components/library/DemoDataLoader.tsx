@@ -14,8 +14,8 @@ export function DemoDataLoader({ onDataLoaded }: DemoDataLoaderProps) {
   const [message, setMessage] = useState('')
   const [debugInfo, setDebugInfo] = useState<string>('')
   
-  // Check if we're in production
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.NEXT_PUBLIC_DISABLE_MOCK_DATA === 'true'
+  // Always disable in production - no demo data
+  const isProduction = true
 
   const loadDemoData = async () => {
     setLoading(true)

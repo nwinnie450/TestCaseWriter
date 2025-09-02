@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
-// Mock templates data - in a real app, this would come from a database
+// Only keep the custom QA template for production
 const mockTemplates = [
   {
-    id: 'standard_test_case',
-    name: 'Standard Test Case',
-    description: 'Basic test case template with essential fields',
+    id: 'custom_qa_template',
+    name: 'Your Custom QA Template',
+    description: 'Customizable template for QA test cases',
     fields: [
       {
         id: 'test_case_id',
@@ -67,152 +67,8 @@ const mockTemplates = [
     ],
     version: 1,
     isPublished: true,
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    createdBy: 'system',
-    projectId: null
-  },
-  {
-    id: 'user_story_test',
-    name: 'User Story Test Case',
-    description: 'Test case template designed for user story validation',
-    fields: [
-      {
-        id: 'user_story_id',
-        type: 'text',
-        label: 'User Story ID',
-        required: true,
-        options: []
-      },
-      {
-        id: 'acceptance_criteria',
-        type: 'textarea',
-        label: 'Acceptance Criteria',
-        required: true,
-        options: []
-      },
-      {
-        id: 'test_scenarios',
-        type: 'table',
-        label: 'Test Scenarios',
-        required: true,
-        options: []
-      },
-      {
-        id: 'business_value',
-        type: 'select',
-        label: 'Business Value',
-        required: false,
-        options: ['Low', 'Medium', 'High', 'Critical']
-      }
-    ],
-    version: 1,
-    isPublished: true,
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    createdBy: 'system',
-    projectId: null
-  },
-  {
-    id: 'api_test_case',
-    name: 'API Test Case',
-    description: 'Specialized template for API testing scenarios',
-    fields: [
-      {
-        id: 'endpoint',
-        type: 'text',
-        label: 'API Endpoint',
-        required: true,
-        options: []
-      },
-      {
-        id: 'http_method',
-        type: 'select',
-        label: 'HTTP Method',
-        required: true,
-        options: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
-      },
-      {
-        id: 'request_headers',
-        type: 'textarea',
-        label: 'Request Headers',
-        required: false,
-        options: []
-      },
-      {
-        id: 'request_body',
-        type: 'textarea',
-        label: 'Request Body',
-        required: false,
-        options: []
-      },
-      {
-        id: 'expected_status',
-        type: 'number',
-        label: 'Expected Status Code',
-        required: true,
-        options: []
-      },
-      {
-        id: 'expected_response',
-        type: 'textarea',
-        label: 'Expected Response',
-        required: false,
-        options: []
-      }
-    ],
-    version: 1,
-    isPublished: true,
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    createdBy: 'system',
-    projectId: null
-  },
-  {
-    id: 'performance_test',
-    name: 'Performance Test Case',
-    description: 'Template for performance and load testing scenarios',
-    fields: [
-      {
-        id: 'performance_metric',
-        type: 'text',
-        label: 'Performance Metric',
-        required: true,
-        options: []
-      },
-      {
-        id: 'target_value',
-        type: 'number',
-        label: 'Target Value',
-        required: true,
-        options: []
-      },
-      {
-        id: 'test_duration',
-        type: 'number',
-        label: 'Test Duration (minutes)',
-        required: true,
-        options: []
-      },
-      {
-        id: 'concurrent_users',
-        type: 'number',
-        label: 'Concurrent Users',
-        required: false,
-        options: []
-      },
-      {
-        id: 'success_criteria',
-        type: 'textarea',
-        label: 'Success Criteria',
-        required: true,
-        options: []
-      }
-    ],
-    version: 1,
-    isPublished: true,
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     createdBy: 'system',
     projectId: null
   }
