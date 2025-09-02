@@ -63,14 +63,17 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
+              {/* DEBUG: LOGIN FIELD UPDATED TO SUPPORT USER ID */}
               <Input
-                label="Email or User ID"
+                label="Email or User ID (UPDATED)"
                 type="text"
                 value={emailOrId}
                 onChange={(e) => setEmailOrId(e.target.value)}
-                placeholder="admin@merquri.io or admin"
+                placeholder="admin@merquri.io OR admin"
                 required
+                style={{ border: '2px solid blue' }}
               />
+              {/* END DEBUG LOGIN FIELD */}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

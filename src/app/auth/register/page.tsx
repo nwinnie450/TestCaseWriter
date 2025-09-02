@@ -122,14 +122,17 @@ export default function RegisterPage() {
                 required
               />
 
+              {/* DEBUG: USER ID FIELD - UPDATED VERSION */}
               <Input
-                label="User ID"
+                label="User ID (Required)"
                 type="text"
                 value={formData.userId}
                 onChange={(e) => updateField('userId', e.target.value)}
-                placeholder="johndoe123"
+                placeholder="Enter your unique user ID (e.g., johndoe123)"
                 required
+                style={{ border: '2px solid red' }}
               />
+              {/* END DEBUG USER ID FIELD */}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

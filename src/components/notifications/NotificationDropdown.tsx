@@ -6,6 +6,7 @@ import { NotificationItem } from './NotificationItem'
 import { Button } from '@/components/ui/Button'
 import { Bell, CheckCheck, X } from 'lucide-react'
 import { notificationService, type Notification } from '@/lib/notification-service'
+import { getCurrentUser } from '@/lib/user-storage'
 
 export function NotificationDropdown() {
   const router = useRouter()
@@ -15,30 +16,52 @@ export function NotificationDropdown() {
   // Start with empty state to avoid hydration mismatch
   const [notifications, setNotifications] = useState<Notification[]>([])
 
-  // Load notifications from service after hydration
+  // Load notifications from service after hydration, but only if user is logged in
   useEffect(() => {
     setIsHydrated(true)
-    setNotifications(notificationService.getNotifications())
+    const currentUser = getCurrentUser()
+    if (currentUser) {
+      setNotifications(notificationService.getNotifications())
+    } else {
+      setNotifications([])
+    }
   }, [])
 
-  // Listen for notification updates
+  // Listen for notification updates, but only if user is logged in
   useEffect(() => {
     const handleNotificationUpdate = () => {
-      setNotifications(notificationService.getNotifications())
+      const currentUser = getCurrentUser()
+      if (currentUser) {
+        setNotifications(notificationService.getNotifications())
+      } else {
+        setNotifications([])
+      }
+    }
+
+    // Also listen for user login/logout events
+    const handleUserUpdate = () => {
+      const currentUser = getCurrentUser()
+      if (currentUser) {
+        setNotifications(notificationService.getNotifications())
+      } else {
+        setNotifications([])
+      }
     }
 
     window.addEventListener('notifications-updated', handleNotificationUpdate)
     // Keep the old event for backward compatibility
     window.addEventListener('notification-added', handleNotificationUpdate)
+    window.addEventListener('userUpdated', handleUserUpdate)
     
     return () => {
       window.removeEventListener('notifications-updated', handleNotificationUpdate)
       window.removeEventListener('notification-added', handleNotificationUpdate)
+      window.removeEventListener('userUpdated', handleUserUpdate)
     }
   }, [])
 
-  // Only calculate unread count after hydration to avoid SSR mismatch
-  const unreadCount = isHydrated ? notificationService.getUnreadCount() : 0
+  // Only calculate unread count after hydration and if user is logged in to avoid SSR mismatch
+  const unreadCount = isHydrated && getCurrentUser() ? notificationService.getUnreadCount() : 0
 
   const handleMarkAsRead = (id: string) => {
     console.log('📍 Marking notification as read:', id)
