@@ -24,59 +24,8 @@ interface ActivityItem {
   createdAt: Date
 }
 
-// Mock data for demonstration
-const recentActivities: ActivityItem[] = [
-  {
-    id: '1',
-    type: 'generate',
-    entityType: 'testcase',
-    entityName: 'User Authentication Flow',
-    userId: 'user1',
-    userName: 'John Doe',
-    description: 'Generated 15 test cases from requirements document',
-    createdAt: new Date(Date.now() - 2 * 60 * 1000) // 2 minutes ago
-  },
-  {
-    id: '2',
-    type: 'create',
-    entityType: 'template',
-    entityName: 'API Testing Template v2.1',
-    userId: 'user2',
-    userName: 'Jane Smith',
-    description: 'Created new template with enhanced field validations',
-    createdAt: new Date(Date.now() - 15 * 60 * 1000) // 15 minutes ago
-  },
-  {
-    id: '3',
-    type: 'export',
-    entityType: 'testcase',
-    entityName: 'Payment Gateway Tests',
-    userId: 'user1',
-    userName: 'John Doe',
-    description: 'Exported 23 test cases to TestRail',
-    createdAt: new Date(Date.now() - 45 * 60 * 1000) // 45 minutes ago
-  },
-  {
-    id: '4',
-    type: 'update',
-    entityType: 'template',
-    entityName: 'E2E Testing Template',
-    userId: 'user3',
-    userName: 'Bob Wilson',
-    description: 'Updated template fields and validation rules',
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000) // 2 hours ago
-  },
-  {
-    id: '5',
-    type: 'create',
-    entityType: 'project',
-    entityName: 'Mobile App Testing',
-    userId: 'user2',
-    userName: 'Jane Smith',
-    description: 'Created new project for mobile application testing',
-    createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000) // 4 hours ago
-  }
-]
+// Empty state - no mock data for production
+const recentActivities: ActivityItem[] = []
 
 const activityIcons = {
   create: Plus,

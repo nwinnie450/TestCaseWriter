@@ -110,38 +110,34 @@ export default function Dashboard() {
         <div className="grid grid-cols-6 gap-4">
           <StatCard
             title="Total Projects"
-            value="12"
-            description="3 active projects"
+            value="0"
+            description="No projects yet"
             icon={FolderOpen}
             color="primary"
-            trend={{ value: 20, label: 'vs last month', positive: true }}
           />
           
           <StatCard
             title="Test Cases"
-            value="1,245"
-            description="Generated this month"
+            value="0"
+            description="Ready to generate"
             icon={FileText}
             color="success"
-            trend={{ value: 15.3, label: 'vs last month', positive: true }}
           />
           
           <StatCard
             title="Templates"
-            value="28"
-            description="8 published templates"
+            value="0"
+            description="Create your first template"
             icon={Wand2}
             color="warning"
-            trend={{ value: 5, label: 'vs last month', positive: true }}
           />
           
           <StatCard
             title="Export Success"
-            value="98.5%"
-            description="Last 30 days"
+            value="--"
+            description="No exports yet"
             icon={Download}
             color="success"
-            trend={{ value: 2.1, label: 'vs last month', positive: true }}
           />
 
           <StatCard

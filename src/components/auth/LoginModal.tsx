@@ -175,42 +175,6 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
           </p>
         </div>
 
-        {/* Quick Login for Admin */}
-        {mode === 'login' && (
-          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-xs font-medium text-blue-900 mb-2">Quick Login (Admin Account):</p>
-            <div className="space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded p-2 border">
-                <div className="text-xs">
-                  <div className="font-medium text-gray-700">admin@merquri.io</div>
-                  <div className="text-gray-500">Password: Orion888!</div>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => quickLogin('admin@merquri.io', 'Orion888!')}
-                  className="text-blue-600 text-xs mt-1 sm:mt-0"
-                >
-                  Use
-                </Button>
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded p-2 border">
-                <div className="text-xs">
-                  <div className="font-medium text-gray-700">admin</div>
-                  <div className="text-gray-500">Password: Orion888!</div>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => quickLogin('admin', 'Orion888!')}
-                  className="text-blue-600 text-xs mt-1 sm:mt-0"
-                >
-                  Use
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

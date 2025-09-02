@@ -63,17 +63,14 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
-              {/* DEBUG: LOGIN FIELD UPDATED TO SUPPORT USER ID */}
               <Input
-                label="Email or User ID (UPDATED)"
+                label="Email or User ID"
                 type="text"
                 value={emailOrId}
                 onChange={(e) => setEmailOrId(e.target.value)}
-                placeholder="admin@merquri.io OR admin"
+                placeholder="admin@merquri.io or admin"
                 required
-                style={{ border: '2px solid blue' }}
               />
-              {/* END DEBUG LOGIN FIELD */}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -127,17 +124,6 @@ export default function LoginPage() {
               </div>
 
               <div className="mt-6">
-                <Button 
-                  variant="secondary" 
-                  className="w-full"
-                  onClick={() => {
-                    // Demo login with new admin credentials
-                    setEmailOrId('admin@merquri.io')
-                    setPassword('Orion888!')
-                  }}
-                >
-                  Use Admin Account
-                </Button>
               </div>
             </div>
 

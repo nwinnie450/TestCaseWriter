@@ -23,49 +23,8 @@ interface ProjectItem {
   memberCount: number
 }
 
-// Mock data
-const recentProjects: ProjectItem[] = [
-  {
-    id: 'proj1',
-    name: 'E-Commerce Platform Testing',
-    description: 'Comprehensive test suite for the new e-commerce platform',
-    testCaseCount: 142,
-    templateCount: 8,
-    lastModified: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
-    status: 'active',
-    memberCount: 5
-  },
-  {
-    id: 'proj2',
-    name: 'Mobile App QA',
-    description: 'Testing mobile application across iOS and Android',
-    testCaseCount: 89,
-    templateCount: 5,
-    lastModified: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-    status: 'active',
-    memberCount: 3
-  },
-  {
-    id: 'proj3',
-    name: 'API Integration Testing',
-    description: 'RESTful API testing and validation',
-    testCaseCount: 67,
-    templateCount: 3,
-    lastModified: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 1 week ago
-    status: 'active',
-    memberCount: 2
-  },
-  {
-    id: 'proj4',
-    name: 'Security Testing Suite',
-    description: 'Security vulnerability assessment and penetration testing',
-    testCaseCount: 34,
-    templateCount: 4,
-    lastModified: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
-    status: 'active',
-    memberCount: 4
-  }
-]
+// Empty state - no mock data for production
+const recentProjects: ProjectItem[] = []
 
 export function RecentProjects() {
   return (
