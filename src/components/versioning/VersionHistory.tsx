@@ -148,7 +148,7 @@ export function VersionHistory({
           <div className="flex items-center space-x-2">
             {onViewVersion && (
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => onViewVersion(version)}
                 className="flex items-center space-x-1"
@@ -159,7 +159,7 @@ export function VersionHistory({
             )}
             {canRevert && (
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => onRevert(version)}
                 className="flex items-center space-x-1 text-orange-600 border-orange-200 hover:bg-orange-50"

@@ -224,7 +224,7 @@ export function ConfigurationModal({
         
         <div className="flex justify-end space-x-3 mt-6">
           <Button
-            variant="outline"
+            variant="secondary"
             onClick={onClose}
             disabled={isLoading}
           >

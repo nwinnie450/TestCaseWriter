@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { TemplateField } from '@/types'
 import { generateId } from '@/lib/utils'
 import { Save, Eye, EyeOff, Settings, ArrowLeft } from 'lucide-react'
+import { withAuth } from '@/components/auth/withAuth'
 
 // Load custom template data
 const loadCustomTemplate = () => {
@@ -95,7 +96,7 @@ const loadCustomTemplate = () => {
   return customTemplateFields
 }
 
-export default function TemplateEditor() {
+function TemplateEditor() {
   const [showTemplateSelection, setShowTemplateSelection] = useState(true)
   const [fields, setFields] = useState<TemplateField[]>([])
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
@@ -365,3 +366,5 @@ export default function TemplateEditor() {
     </DndContext>
   )
 }
+
+export default withAuth(TemplateEditor)

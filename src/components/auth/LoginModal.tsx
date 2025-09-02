@@ -126,6 +126,23 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
     onClose()
   }
 
+  const handleGuestLogin = () => {
+    const guestUser = {
+      id: 'guest_user',
+      email: 'guest@testcasewriter.com',
+      name: 'Guest User',
+      role: 'guest',
+      avatar: 'https://ui-avatars.com/api/?name=Guest%20User&background=9ca3af&color=fff'
+    }
+
+    setSuccess('Logged in as Guest - Limited access mode')
+    setTimeout(() => {
+      onSuccess?.(guestUser)
+      onClose()
+      resetForm()
+    }, 1000)
+  }
+
   const quickLogin = (testEmail: string, testPassword: string) => {
     setEmail(testEmail)
     setPassword(testPassword)
@@ -179,6 +196,20 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
                   variant="ghost" 
                   size="sm" 
                   onClick={() => quickLogin('admin@testcasewriter.com', 'admin123')}
+                  className="text-blue-600 text-xs mt-1 sm:mt-0"
+                >
+                  Use
+                </Button>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded p-2 border">
+                <div className="text-xs">
+                  <div className="font-medium text-gray-700">admin</div>
+                  <div className="text-gray-500">Password: Orion888!</div>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => quickLogin('admin', 'Orion888!')}
                   className="text-blue-600 text-xs mt-1 sm:mt-0"
                 >
                   Use
@@ -292,7 +323,7 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
               )}
             </Button>
 
-            <div className="text-center">
+            <div className="text-center space-y-2">
               <button
                 type="button"
                 onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
@@ -304,6 +335,31 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
                   : "Already have an account? Sign in"
                 }
               </button>
+              
+              {mode === 'login' && (
+                <div>
+                  <div className="relative my-4">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-300" />
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="px-2 bg-white text-gray-500">or</span>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full"
+                    disabled={loading}
+                    onClick={() => handleGuestLogin()}
+                  >
+                    Continue as Guest
+                  </Button>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Limited access - Read-only mode with basic features
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </form>

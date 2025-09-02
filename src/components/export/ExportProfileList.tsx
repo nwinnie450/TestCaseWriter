@@ -279,9 +279,6 @@ export function ExportProfileList({
                         </Tooltip>
                       }
                     >
-                      <DropdownItem onClick={() => onDuplicateProfile(profile.id)}>
-                        Duplicate
-                      </DropdownItem>
                       <DropdownItem onClick={() => onDeleteProfile(profile.id)}>
                         Delete
                       </DropdownItem>

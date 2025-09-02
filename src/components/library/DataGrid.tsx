@@ -37,6 +37,8 @@ import {
   FileText
 } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
+import { getCurrentUser } from '@/lib/user-storage'
+import { hasPermission, isGuest } from '@/lib/access-control'
 
 interface DataGridProps {
   data: TestCase[]
@@ -75,6 +77,7 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory }: {
   onVersionHistory?: (testCase: TestCase) => void
 }) {
   const [showDropdown, setShowDropdown] = React.useState(false)
+  const currentUser = getCurrentUser()
   
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -252,14 +255,16 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory }: {
         pointerEvents: 'auto'
       }}
     >
-      <button 
-        className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-100 rounded-md border border-gray-200 hover:border-blue-300 bg-white shadow-sm transition-all duration-200"
-        onMouseDown={handleEdit}
-        title="Edit test case"
-        type="button"
-      >
-        <Edit className="h-4 w-4" />
-      </button>
+      {hasPermission(currentUser, 'canEditTestCases') && (
+        <button 
+          className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-100 rounded-md border border-gray-200 hover:border-blue-300 bg-white shadow-sm transition-all duration-200"
+          onMouseDown={handleEdit}
+          title="Edit test case"
+          type="button"
+        >
+          <Edit className="h-4 w-4" />
+        </button>
+      )}
       
       <button 
         className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-100 rounded-md border border-gray-200 hover:border-green-300 bg-white shadow-sm transition-all duration-200"
@@ -300,17 +305,19 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory }: {
                 Copy Test Case ID
               </button>
               
-              <button
-                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
-                onClick={(e) => {
-                  console.log('🟡 Duplicate menu item clicked')
-                  setShowDropdown(false)
-                  handleDuplicate(e)
-                }}
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Duplicate Test Case
-              </button>
+              {hasPermission(currentUser, 'canCreateTestCases') && (
+                <button
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
+                  onClick={(e) => {
+                    console.log('🟡 Duplicate menu item clicked')
+                    setShowDropdown(false)
+                    handleDuplicate(e)
+                  }}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Duplicate Test Case
+                </button>
+              )}
               
               <button
                 className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
@@ -329,31 +336,52 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory }: {
                 Version History
               </button>
               
-              <button
-                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
-                onClick={(e) => {
-                  console.log('🟡 Export menu item clicked')
-                  setShowDropdown(false)
-                  handleExportSingle(e)
-                }}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export as CSV
-              </button>
+              {hasPermission(currentUser, 'canExport') && (
+                <button
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
+                  onClick={(e) => {
+                    console.log('🟡 Export menu item clicked')
+                    setShowDropdown(false)
+                    handleExportSingle(e)
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Export as CSV
+                </button>
+              )}
               
-              <div className="border-t border-gray-100 my-1"></div>
+              {hasPermission(currentUser, 'canDeleteTestCases') && (
+                <>
+                  <div className="border-t border-gray-100 my-1"></div>
+                  
+                  <button
+                    className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50 cursor-pointer"
+                    onClick={(e) => {
+                      console.log('🟡 Delete menu item clicked')
+                      setShowDropdown(false)
+                      handleDelete(e)
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Test Case
+                  </button>
+                </>
+              )}
               
-              <button
-                className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50 cursor-pointer"
-                onClick={(e) => {
-                  console.log('🟡 Delete menu item clicked')
-                  setShowDropdown(false)
-                  handleDelete(e)
-                }}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Test Case
-              </button>
+              {/* Show message for guest users */}
+              {isGuest(currentUser) && (
+                <>
+                  <div className="border-t border-gray-100 my-1"></div>
+                  <div className="px-4 py-3 text-xs text-gray-500 bg-gray-50">
+                    <div className="flex items-center space-x-2">
+                      <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <span>Guest mode: Read-only access</span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

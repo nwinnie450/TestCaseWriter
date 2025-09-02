@@ -28,6 +28,7 @@ import { ChangeRequestModal } from '@/components/versioning/ChangeRequestModal'
 import { ChangeRequestList } from '@/components/versioning/ChangeRequestList'
 import { TestCase, TestCaseVersion, TestCaseChangeRequest } from '@/types'
 import { createTestCaseVersion, applyChangeRequest } from '@/lib/versioning-utils'
+import { withAuth } from '@/components/auth/withAuth'
 import { 
   getAllStoredTestCases, 
   getTestCasesByProjectId 
@@ -48,7 +49,7 @@ import {
 } from '@/lib/management-settings'
 import { ConfigurationModal } from '@/components/versioning/ConfigurationModal'
 
-export default function ManagementPage() {
+function ManagementPage() {
   const [activeTab, setActiveTab] = useState('overview')
   const [showChangeRequestModal, setShowChangeRequestModal] = useState(false)
   const [selectedTestCase, setSelectedTestCase] = useState<TestCase | null>(null)
@@ -281,7 +282,7 @@ export default function ManagementPage() {
       actions={
         <Button
           onClick={handleRefresh}
-          variant="outline"
+          variant="secondary"
           className="flex items-center space-x-2"
           disabled={isLoading}
         >
@@ -454,7 +455,7 @@ export default function ManagementPage() {
                     <Button
                       onClick={() => handleCreateChangeRequest(testCases[0])}
                       className="w-full justify-start"
-                      variant="outline"
+                      variant="secondary"
                       title="Create a new change request to propose modifications to test cases - Change requests go through review and approval process before creating new versions"
                     >
                       <GitPullRequest className="w-4 h-4 mr-2" />
@@ -469,7 +470,7 @@ export default function ManagementPage() {
                                      <Button
                      onClick={() => setActiveTab('versions')}
                      className="w-full justify-start"
-                     variant="outline"
+                     variant="secondary"
                      title="View complete version history for all test cases - See how test cases have evolved over time with detailed change tracking"
                    >
                      <History className="w-4 h-4 mr-2" />
@@ -478,7 +479,7 @@ export default function ManagementPage() {
                                      <Button
                      onClick={() => setActiveTab('change-requests')}
                      className="w-full justify-start"
-                     variant="outline"
+                     variant="secondary"
                      title="Review and approve/reject proposed changes to test cases - Manage the change request workflow and ensure quality control"
                    >
                      <GitPullRequest className="w-4 h-4 mr-2" />
@@ -596,7 +597,7 @@ export default function ManagementPage() {
                           
                           <div className="flex items-center space-x-2">
                             <Button
-                              variant="outline"
+                              variant="secondary"
                               size="sm"
                               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                               disabled={currentPage === 1}
@@ -611,7 +612,7 @@ export default function ManagementPage() {
                             </span>
                             
                             <Button
-                              variant="outline"
+                              variant="secondary"
                               size="sm"
                               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                               disabled={currentPage === totalPages}
@@ -690,7 +691,7 @@ export default function ManagementPage() {
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="text-lg font-medium text-gray-900">Version Control Settings</h4>
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => handleOpenConfigModal('version-control')}
                     >
@@ -751,7 +752,7 @@ export default function ManagementPage() {
                          </p>
                        </div>
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
                         onClick={() => handleOpenConfigModal('version-control')}
                       >
@@ -765,7 +766,7 @@ export default function ManagementPage() {
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="text-lg font-medium text-gray-900">Change Request Settings</h4>
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => handleOpenConfigModal('change-requests')}
                     >
@@ -823,7 +824,7 @@ export default function ManagementPage() {
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="text-lg font-medium text-gray-900">Notification Settings</h4>
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => handleOpenConfigModal('notifications')}
                     >
@@ -861,7 +862,7 @@ export default function ManagementPage() {
                       <p className="text-sm text-gray-600">Reset all settings to defaults</p>
                     </div>
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={handleResetSettings}
                       className="text-red-600 border-red-200 hover:bg-red-50"
@@ -896,4 +897,6 @@ export default function ManagementPage() {
       />
     </Layout>
   )
-} 
+}
+
+export default withAuth(ManagementPage) 

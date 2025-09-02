@@ -425,7 +425,7 @@ export function TestCaseSelectionModal({
                     <div className="text-sm text-gray-600">
                       {group.selectedCount} / {group.testCases.length} selected
                     </div>
-                    <Badge variant="outline">
+                    <Badge variant="secondary">
                       {group.testCases.length} test cases
                     </Badge>
                   </div>
@@ -477,7 +477,7 @@ export function TestCaseSelectionModal({
                             <div className="flex items-center space-x-1 flex-wrap">
                               <Tag className="h-3 w-3 text-gray-400" />
                               {testCase.tags.map((tag) => (
-                                <Badge key={tag} variant="outline" className="text-xs">
+                                <Badge key={tag} variant="secondary" className="text-xs">
                                   {tag}
                                 </Badge>
                               ))}

@@ -405,7 +405,7 @@ export function ChangeRequestModal({
         {/* Submit Button */}
         <div className="flex justify-end space-x-3">
           <Button
-            variant="outline"
+            variant="secondary"
             onClick={handleClose}
             disabled={isSubmitting}
           >

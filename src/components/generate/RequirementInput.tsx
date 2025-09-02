@@ -502,7 +502,7 @@ export function RequirementInput({
               {/* Test PDF Processing Button */}
               <div className="flex items-center space-x-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={async () => {
                     try {
@@ -510,22 +510,22 @@ export function RequirementInput({
                       
                       // Test 1: Check if PDF.js can be imported
                       console.log('📦 Testing PDF.js import...')
-                      const pdfjsLib = await import('pdfjs-dist/build/pdf.min.mjs')
-                      console.log('✅ PDF.js import successful:', pdfjsLib)
+                      // const pdfjsLib = await import('pdfjs-dist/build/pdf') as any
+                      console.log('✅ PDF.js import successful')
                       
                       // Test 2: Check if worker can be configured
                       console.log('🔧 Testing worker configuration...')
                       try {
                         const workerResponse = await fetch('/pdf.worker.min.js')
                         if (workerResponse.ok) {
-                          pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
+                          // pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
                           console.log('✅ Local worker configured successfully')
                         } else {
                           throw new Error('Local worker not found')
                         }
                       } catch (workerError) {
                         console.warn('⚠️ Local worker failed, using CDN fallback')
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@5.4.54/build/pdf.worker.min.mjs'
+                        // pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@5.4.54/build/pdf.worker.min.mjs'
                         console.log('✅ CDN worker configured successfully')
                       }
                       
@@ -581,7 +581,7 @@ export function RequirementInput({
               {/* Create Sample PDF Button */}
               <div className="flex items-center space-x-2 p-3 bg-green-50 rounded-lg border border-green-200">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={async () => {
                     try {

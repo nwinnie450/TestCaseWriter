@@ -202,7 +202,7 @@ export function ChangeRequestList({
                     <div className="flex items-center space-x-2">
                       {onView && (
                         <Button
-                          variant="outline"
+                          variant="secondary"
                           size="sm"
                           onClick={() => onView(request)}
                           className="flex items-center space-x-1"
@@ -225,7 +225,7 @@ export function ChangeRequestList({
                       
                       {request.status === 'pending' && onReject && (
                         <Button
-                          variant="outline"
+                          variant="secondary"
                           size="sm"
                           onClick={() => onReject(request)}
                           className="text-red-600 border-red-200 hover:bg-red-50 flex items-center space-x-1"

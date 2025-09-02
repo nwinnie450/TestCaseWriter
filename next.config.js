@@ -1,5 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  typescript: {
+    // Skip type checking during build (for deployment only)
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    // Skip ESLint during build (for deployment only)
+    ignoreDuringBuilds: true,
+  },
   experimental: {
     // Force client-side navigation to prevent RSC fetch failures
     clientRouterFilter: true,

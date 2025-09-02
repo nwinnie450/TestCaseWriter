@@ -26,6 +26,7 @@ import {
   Settings,
   UserPlus
 } from 'lucide-react'
+import { withAuth } from '@/components/auth/withAuth'
 
 interface Project {
   id: string
@@ -80,7 +81,7 @@ const defaultProjects: Project[] = [
   }
 ]
 
-export default function ProjectsPage() {
+function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -759,3 +760,5 @@ export default function ProjectsPage() {
     </Layout>
   )
 }
+
+export default withAuth(ProjectsPage)

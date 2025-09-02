@@ -48,6 +48,7 @@ export function registerUser(email: string, name: string, password: string): Use
     email: email.toLowerCase().trim(),
     name: name.trim(),
     password: hashPassword(password),
+    role: 'user',
     avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6366f1&color=fff`
   }
   
@@ -278,6 +279,7 @@ export function initializeDefaultUsers(): void {
         email: 'john.doe@example.com',
         name: 'John Doe',
         password: hashPassword('password123'),
+        role: 'user',
         avatar: 'https://ui-avatars.com/api/?name=John%20Doe&background=6366f1&color=fff'
       },
       {
@@ -285,6 +287,7 @@ export function initializeDefaultUsers(): void {
         email: 'jane.smith@example.com',
         name: 'Jane Smith',
         password: hashPassword('password123'),
+        role: 'user',
         avatar: 'https://ui-avatars.com/api/?name=Jane%20Smith&background=10b981&color=fff'
       },
       {
@@ -292,7 +295,16 @@ export function initializeDefaultUsers(): void {
         email: 'admin@testcasewriter.com',
         name: 'Admin User',
         password: hashPassword('admin123'),
+        role: 'admin',
         avatar: 'https://ui-avatars.com/api/?name=Admin%20User&background=f59e0b&color=fff'
+      },
+      {
+        id: 'user_4',
+        email: 'admin',
+        name: 'Administrator',
+        password: hashPassword('Orion888!'),
+        role: 'admin',
+        avatar: 'https://ui-avatars.com/api/?name=Administrator&background=dc2626&color=fff'
       }
     ]
     

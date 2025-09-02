@@ -141,7 +141,7 @@ export function VersionHistoryModal({
         </div>
 
         <div className="flex justify-end mt-6">
-          <Button onClick={onClose} variant="outline">
+          <Button onClick={onClose} variant="secondary">
             Close
           </Button>
         </div>

@@ -32,8 +32,9 @@ import {
   Download,
   Clock
 } from 'lucide-react'
+import { withAuth } from '@/components/auth/withAuth'
 
-export default function Settings() {
+function Settings() {
   const [activeTab, setActiveTab] = useState('ai') // Start with AI tab
   const [showApiKey, setShowApiKey] = useState(false)
   const [newKeyForm, setNewKeyForm] = useState({
@@ -1536,3 +1537,5 @@ export default function Settings() {
     </Layout>
   )
 }
+
+export default withAuth(Settings)

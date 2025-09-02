@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { ProfileModal } from '@/components/ui/ProfileModal'
 import { LoginModal } from '@/components/auth/LoginModal'
 import { getCurrentUser, logoutUser } from '@/lib/user-storage'
+import { hasPermission, shouldShowNotifications, canAccessPage } from '@/lib/access-control'
 import { 
   Home, 
   FileText, 
@@ -109,7 +110,7 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="flex items-center space-x-1">
-            {navigationItems.map((item) => {
+            {navigationItems.filter(item => canAccessPage(user, item.href)).map((item) => {
               const Icon = item.icon
               const isActive = pathname === item.href
               
@@ -134,18 +135,20 @@ export function Header() {
           {/* Right side actions */}
           <div className="flex items-center space-x-3">
             {/* Notifications */}
-            <NotificationDropdown />
+            {shouldShowNotifications(user) && <NotificationDropdown />}
 
             {/* Settings */}
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="p-2"
-              onClick={() => handleNavigation('/settings')}
-              title="Settings"
-            >
-              <Settings className="h-5 w-5 text-gray-600 hover:text-gray-900" />
-            </Button>
+            {hasPermission(user, 'canViewSettings') && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="p-2"
+                onClick={() => handleNavigation('/settings')}
+                title="Settings"
+              >
+                <Settings className="h-5 w-5 text-gray-600 hover:text-gray-900" />
+              </Button>
+            )}
 
             {/* User Menu */}
             <div className="relative">
@@ -196,19 +199,21 @@ export function Header() {
                             <UserIcon className="h-4 w-4 mr-3" />
                             Profile Settings
                           </button>
-                          <button 
-                            className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              console.log('App settings clicked, navigating to /settings')
-                              setUserMenuOpen(false)
-                              handleNavigation('/settings')
-                            }}
-                          >
-                            <Settings className="h-4 w-4 mr-3" />
-                            App Settings
-                          </button>
+                          {hasPermission(user, 'canViewSettings') && (
+                            <button 
+                              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                console.log('App settings clicked, navigating to /settings')
+                                setUserMenuOpen(false)
+                                handleNavigation('/settings')
+                              }}
+                            >
+                              <Settings className="h-4 w-4 mr-3" />
+                              App Settings
+                            </button>
+                          )}
                           <hr className="my-1 border-gray-200" />
                         </>
                       ) : (
@@ -284,7 +289,7 @@ export function Header() {
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-gray-200">
           <div className="px-2 pt-2 pb-3 space-y-1">
-            {navigationItems.map((item) => {
+            {navigationItems.filter(item => canAccessPage(user, item.href)).map((item) => {
               const Icon = item.icon
               const isActive = pathname === item.href
               

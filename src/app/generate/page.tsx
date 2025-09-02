@@ -8,6 +8,9 @@ import { FileUploadZone } from '@/components/upload/FileUploadZone'
 import { RequirementInput } from '@/components/generate/RequirementInput'
 import { TemplateSelector } from '@/components/generate/TemplateSelector'
 import { GenerateMoreButton } from '@/components/generate/GenerateMoreButton'
+import { EnhancedConfigForm, TestCaseContext } from '@/components/generate/EnhancedConfigForm'
+import { DocumentAnalysisCard } from '@/components/generate/DocumentAnalysisCard'
+import { DocumentAnalyzer } from '@/lib/document-analyzer'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { FileUploadProgress } from '@/types'
@@ -29,6 +32,7 @@ import { saveGeneratedTestCases } from '@/lib/test-case-storage'
 import { getCurrentUser } from '@/lib/user-storage'
 import { LoginModal } from '@/components/auth/LoginModal'
 import { APIKeyModal } from '@/components/modals/APIKeyModal'
+import { withAuth } from '@/components/auth/withAuth'
 import { Wand2, FileText, Settings, Eye, Download, AlertCircle, Edit3, FolderOpen, Brain, Cpu, Zap, Table } from 'lucide-react'
 
 const steps = [
@@ -64,7 +68,7 @@ const steps = [
   }
 ]
 
-export default function GenerateTestCases() {
+function GenerateTestCases() {
   const [currentStep, setCurrentStep] = useState(1)
   const [projects, setProjects] = useState<Array<{id: string, name: string, description?: string}>>([])
   const [showLoginModal, setShowLoginModal] = useState(false)
@@ -75,18 +79,35 @@ export default function GenerateTestCases() {
   const [textRequirements, setTextRequirements] = useState<string[]>([])
   const [uploadedMatrices, setUploadedMatrices] = useState<Array<{ file: File; matrix: any }>>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>('custom_qa_template_v1')
+  
+  // Enhanced context for better test case generation
+  const [testCaseContext, setTestCaseContext] = useState<TestCaseContext>({
+    applicationType: 'web',
+    featureCategory: 'other',
+    userRole: 'customer',
+    testPriority: 'medium',
+    businessDomain: 'other',
+    testEnvironment: 'staging'
+  })
+
+  // Document analysis state
+  const [documentAnalysis, setDocumentAnalysis] = useState<any>(null)
+  const [requirementSections, setRequirementSections] = useState<any[]>([])
+  const [showDocumentAnalysis, setShowDocumentAnalysis] = useState(false)
+  
   const [generationConfig, setGenerationConfig] = useState({
-    coverage: 'comprehensive' as 'comprehensive' | 'focused' | 'minimal',
+    coverage: 'focused' as 'comprehensive' | 'focused' | 'minimal',
     includeNegativeTests: true,
     includeEdgeCases: true,
-    maxTestCases: 50,
-    customInstructions: `Generate comprehensive test coverage for each requirement including:
-- Positive scenarios (happy path, valid data, boundary conditions)
-- Negative scenarios (invalid inputs, error conditions, unauthorized access)
-- Edge cases (extreme values, special characters, concurrent operations)
-- Integration scenarios (API interactions, database operations)
-- Security scenarios (input validation, authentication, data sanitization)
-- Performance scenarios (load conditions, resource limits)
+    maxTestCases: 10,
+    enableEnhancedGeneration: true,
+    customInstructions: `Generate focused test coverage prioritizing:
+- Core positive scenarios (happy path, valid inputs)
+- Critical negative scenarios (invalid inputs, error conditions)
+- Key edge cases and boundary conditions
+- Essential security and integration tests
+
+Note: Start with essential tests first - you can generate more specific tests in follow-up rounds.
 
 MATRIX INTEGRATION: When test matrices are provided, use them to:
 - Extract specific test scenarios and their expected behaviors
@@ -279,6 +300,45 @@ Ensure each test case has detailed steps with specific test data and expected re
       setCurrentStep(2)
     }
   }
+
+  // Analyze documents and matrices when they change
+  React.useEffect(() => {
+    if (completedDocuments.length > 0 || uploadedMatrices.length > 0) {
+      // Combine document content
+      const documentContent = completedDocuments.map(doc => doc.content).join('\n\n---\n\n')
+      
+      // Convert matrix data to analyzable text content
+      const matrixContent = uploadedMatrices.map(matrixData => {
+        const { matrix } = matrixData
+        let content = `Matrix: ${matrix.fileName}\n`
+        
+        // Extract scenarios and test parameters
+        if (matrix.scenarios) {
+          matrix.scenarios.forEach((scenario: any, index: number) => {
+            content += `Scenario ${index + 1}: ${JSON.stringify(scenario).replace(/[{},"]/g, ' ')}\n`
+          })
+        }
+        
+        // Extract column headers (often contain feature/context information)
+        if (matrix.headers) {
+          content += `Test Parameters: ${matrix.headers.join(', ')}\n`
+        }
+        
+        return content
+      }).join('\n\n---\n\n')
+      
+      const allContent = [documentContent, matrixContent].filter(c => c.trim()).join('\n\n===MATRIX_SECTION===\n\n')
+      
+      if (allContent.trim()) {
+        const analysis = DocumentAnalyzer.analyzeDocument(allContent)
+        const sections = DocumentAnalyzer.parseRequirementSections(allContent)
+        
+        setDocumentAnalysis(analysis)
+        setRequirementSections(sections)
+        setShowDocumentAnalysis(analysis.confidenceScore > 0.3) // Show if confidence is decent
+      }
+    }
+  }, [completedDocuments, uploadedMatrices])
 
   // Check for project parameter in URL and skip to step 2 if provided
   React.useEffect(() => {
@@ -1171,226 +1231,34 @@ Template: ${selectedTemplate.description}`
               </CardContent>
             </Card>
 
-            {/* Test Case Generation Configuration */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <div className="flex items-center space-x-2 mb-4">
-                  <Settings className="h-5 w-5 text-gray-600" />
-                  <h3 className="text-lg font-semibold text-gray-900">Coverage Level</h3>
-                </div>
-                <div className="space-y-3">
-                  {[
-                    {
-                      value: 'comprehensive',
-                      label: 'Comprehensive',
-                      description: 'Generate detailed test cases for all scenarios'
-                    },
-                    {
-                      value: 'focused',
-                      label: 'Focused',
-                      description: 'Focus on critical paths and main features'
-                    },
-                    {
-                      value: 'minimal',
-                      label: 'Minimal',
-                      description: 'Essential test cases only'
-                    }
-                  ].map((option) => (
-                    <label key={option.value} className="flex items-start space-x-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="coverage"
-                        value={option.value}
-                        checked={generationConfig.coverage === option.value}
-                        onChange={(e) => setGenerationConfig(prev => ({
-                          ...prev,
-                          coverage: e.target.value as any
-                        }))}
-                        className="mt-1"
-                      />
-                      <div>
-                        <p className="font-medium text-gray-900">{option.label}</p>
-                        <p className="text-sm text-gray-500">{option.description}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
+            {/* Smart Document Analysis */}
+            {showDocumentAnalysis && documentAnalysis && (
+              <DocumentAnalysisCard
+                analysis={documentAnalysis}
+                sections={requirementSections}
+                onApplyContext={(context) => {
+                  setTestCaseContext(context)
+                }}
+                onApplySectionContext={(section) => {
+                  setTestCaseContext({
+                    applicationType: section.suggestedContext.applicationType as any,
+                    featureCategory: section.suggestedContext.featureCategory as any,
+                    userRole: section.suggestedContext.userRole as any,
+                    businessDomain: section.suggestedContext.businessDomain as any,
+                    testPriority: section.priority,
+                    testEnvironment: 'staging'
+                  })
+                }}
+              />
+            )}
 
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <div className="flex items-center space-x-2 mb-4">
-                  <Zap className="h-5 w-5 text-gray-600" />
-                  <h3 className="text-lg font-semibold text-gray-900">Additional Options</h3>
-                </div>
-                <div className="space-y-4">
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={generationConfig.includeNegativeTests}
-                      onChange={(e) => setGenerationConfig(prev => ({
-                        ...prev,
-                        includeNegativeTests: e.target.checked
-                      }))}
-                    />
-                    <div>
-                      <p className="font-medium text-gray-900">Include Negative Tests</p>
-                      <p className="text-sm text-gray-500">Generate tests for error conditions</p>
-                    </div>
-                  </label>
-
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={generationConfig.includeEdgeCases}
-                      onChange={(e) => setGenerationConfig(prev => ({
-                        ...prev,
-                        includeEdgeCases: e.target.checked
-                      }))}
-                    />
-                    <div>
-                      <p className="font-medium text-gray-900">Include Edge Cases</p>
-                      <p className="text-sm text-gray-500">Test boundary conditions</p>
-                    </div>
-                  </label>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Maximum Test Cases
-                    </label>
-                    <input
-                      type="number"
-                      value={generationConfig.maxTestCases}
-                      onChange={(e) => setGenerationConfig(prev => ({
-                        ...prev,
-                        maxTestCases: parseInt(e.target.value) || 50
-                      }))}
-                      className="w-full py-2 px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      min="1"
-                      max="200"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Custom Instructions
-                    </label>
-                    <p className="text-xs text-gray-600 mb-2">
-                      Add your specific testing requirements, scenarios, or instructions for the AI to follow when generating test cases.
-                    </p>
-                    <textarea
-                      value={generationConfig.customInstructions}
-                      onChange={(e) => setGenerationConfig(prev => ({
-                        ...prev,
-                        customInstructions: e.target.value
-                      }))}
-                      onPaste={(e) => {
-                        // Handle clipboard paste
-                        const pastedText = e.clipboardData.getData('text')
-                        if (pastedText) {
-                          e.preventDefault()
-                          setGenerationConfig(prev => ({
-                            ...prev,
-                            customInstructions: prev.customInstructions + pastedText
-                          }))
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        // Handle Ctrl+V (Cmd+V on Mac)
-                        if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-                          e.preventDefault()
-                          navigator.clipboard.readText().then(text => {
-                            if (text) {
-                              setGenerationConfig(prev => ({
-                                ...prev,
-                                customInstructions: prev.customInstructions + text
-                              }))
-                            }
-                          }).catch(err => {
-                            console.log('Clipboard read failed, using default paste behavior')
-                          })
-                        }
-                      }}
-                      className="w-full py-2 px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 resize-vertical"
-                      rows={6}
-                      placeholder="Any specific requirements or focus areas for test generation...&#10;&#10;You can paste your custom instructions here using Ctrl+V (or Cmd+V on Mac)"
-                    />
-                    <div className="mt-2 flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-gray-500">Paste using Ctrl+V or right-click → Paste</span>
-                        <Button
-                          onClick={async () => {
-                            try {
-                              const text = await navigator.clipboard.readText()
-                              if (text) {
-                                setGenerationConfig(prev => ({
-                                  ...prev,
-                                  customInstructions: prev.customInstructions + text
-                                }))
-                              }
-                            } catch (err) {
-                              console.log('Clipboard read failed:', err)
-                              // Fallback: try to paste using execCommand
-                              const textarea = document.createElement('textarea')
-                              textarea.value = ''
-                              document.body.appendChild(textarea)
-                              textarea.focus()
-                              document.execCommand('paste')
-                              const pastedText = textarea.value
-                              document.body.removeChild(textarea)
-                              if (pastedText) {
-                                setGenerationConfig(prev => ({
-                                  ...prev,
-                                  customInstructions: prev.customInstructions + pastedText
-                                }))
-                              }
-                            }
-                          }}
-                          size="sm"
-
-                          variant="secondary"
-                          className="text-xs h-6 px-2"
-                        >
-                          Paste
-                        </Button>
-                        <Button
-                          onClick={() => setGenerationConfig(prev => ({
-                            ...prev,
-                            customInstructions: ''
-                          }))}
-                          size="sm"
-                          variant="secondary"
-                          className="text-xs h-6 px-2"
-                        >
-                          Clear
-                        </Button>
-                        <Button
-                          onClick={() => setGenerationConfig(prev => ({
-                            ...prev,
-                            customInstructions: `Generate comprehensive test coverage for each requirement including:
-- Positive scenarios (happy path, valid data, boundary conditions)
-- Negative scenarios (invalid inputs, error conditions, unauthorized access)
-- Edge cases (extreme values, special characters, concurrent operations)
-- Integration scenarios (API interactions, database operations)
-- Security scenarios (input validation, authentication, data sanitization)
-- Performance scenarios (load conditions, resource limits)
-
-CRITICAL ORDERING: Generate test cases in the EXACT SAME ORDER as requirements appear in the document. Maintain logical flow and sequential numbering (TC-0001, TC-0002, TC-0003...).
-
-Ensure each test case has detailed steps with specific test data and expected results.`
-                          }))}
-                          size="sm"
-                          variant="ghost"
-                          className="text-xs h-6 px-2"
-                        >
-                          Reset to Default
-                        </Button>
-                      </div>
-                      <span className="text-xs text-gray-500">{generationConfig.customInstructions.length} characters</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Enhanced Configuration Form */}
+            <EnhancedConfigForm
+              context={testCaseContext}
+              onContextChange={setTestCaseContext}
+              generationConfig={generationConfig}
+              onConfigChange={setGenerationConfig}
+            />
             
             <div className="flex justify-between">
               <Button variant="secondary" onClick={() => setCurrentStep(3)}>
@@ -1624,8 +1492,16 @@ Ensure each test case has detailed steps with specific test data and expected re
                   {generatedTestCases.length} Test Cases Generated
                 </h3>
                 <p className="text-gray-600 mb-4">
-                  Based on your requirements, we've generated comprehensive test cases covering all scenarios, including edge cases and negative testing paths.
+                  Generated {generatedTestCases.length} focused test cases to start with. Use "Generate More" below to create additional test cases for different scenarios or features.
                 </p>
+                {generatedTestCases.length < 20 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-left">
+                    <p className="text-sm text-blue-800 font-medium">💡 Tip: Generate More Test Cases</p>
+                    <p className="text-sm text-blue-700 mt-1">
+                      Start with this focused set, then use "Generate More" to create additional test cases for specific scenarios, edge cases, or different feature areas.
+                    </p>
+                  </div>
+                )}
 
                 {/* Duplicate Detection Warning */}
                 {duplicateInfo && (duplicateInfo.exactDuplicates > 0 || duplicateInfo.potentialDuplicates > 0) && (
@@ -1811,3 +1687,5 @@ Ensure each test case has detailed steps with specific test data and expected re
     </Layout>
   )
 }
+
+export default withAuth(GenerateTestCases)
