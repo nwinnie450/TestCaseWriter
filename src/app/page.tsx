@@ -31,24 +31,64 @@ export default function Dashboard() {
     // Clear all mock data keys to ensure clean production environment
     const clearProductionData = () => {
       try {
-        // Only keep user authentication data
+        // Only keep user authentication data (not settings with mock data)
         const currentUserData = localStorage.getItem('testCaseWriter_currentUser')
         const userData = localStorage.getItem('testCaseWriter_users')
-        const settingsData = localStorage.getItem('testCaseWriterSettings')
         
-        // Clear all test case writer keys
+        // Clear ALL test case writer keys including settings with mock data
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith('testCaseWriter_') || key.startsWith('testCaseManager_')) {
             localStorage.removeItem(key)
           }
         })
         
-        // Restore essential data
+        // Restore only essential authentication data (not settings with mock profile)
         if (currentUserData) localStorage.setItem('testCaseWriter_currentUser', currentUserData)
         if (userData) localStorage.setItem('testCaseWriter_users', userData)
-        if (settingsData) localStorage.setItem('testCaseWriterSettings', settingsData)
         
-        console.log('🧹 Production environment cleaned - all mock data removed')
+        // Initialize clean empty settings for production
+        const cleanSettings = {
+          profile: {
+            name: "",
+            email: "",
+            title: "",
+            department: ""
+          },
+          notifications: {
+            emailNotifications: false,
+            pushNotifications: false,
+            testCaseUpdates: false,
+            exportComplete: false,
+            weeklyDigest: false
+          },
+          preferences: {
+            theme: "light",
+            language: "en",
+            timezone: "UTC",
+            defaultTemplate: "",
+            pageSize: 25
+          },
+          security: {
+            twoFactorEnabled: false,
+            sessionTimeout: 30,
+            passwordLastChanged: new Date().toISOString()
+          },
+          ai: {
+            providerId: "",
+            provider: "",
+            apiKey: "",
+            model: "gpt-4o",
+            maxTokens: 128000,
+            temperature: 0.3,
+            customPrompt: "",
+            requireDocuments: true,
+            documentFocused: true
+          }
+        }
+        localStorage.setItem('testCaseWriterSettings', JSON.stringify(cleanSettings))
+        localStorage.setItem('testCaseWriter_notifications', JSON.stringify([]))
+        
+        console.log('🧹 Production environment cleaned - all mock data removed, clean settings initialized')
       } catch (error) {
         console.log('Failed to clear production data:', error)
       }
