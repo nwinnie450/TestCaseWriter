@@ -984,9 +984,9 @@ export default function TestCaseManagement() {
           Library
         </Button>
         <Button
-          variant={viewMode === 'execution' ? 'primary' : 'ghost'}
+          variant="ghost"
           size="sm"
-          onClick={() => setViewMode('execution')}
+          onClick={() => window.location.href = '/library/execution'}
           className="rounded-l-none"
         >
           <Play className="h-4 w-4 mr-2" />
@@ -996,19 +996,31 @@ export default function TestCaseManagement() {
 
       {/* Execution Actions */}
       {viewMode === 'execution' && (
-        <>
+        <div className="flex items-center space-x-3">
+          {/* Always visible: New Execution Run button */}
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => window.location.href = '/execution'}
+          >
+            <Target className="h-4 w-4 mr-2" />
+            New Execution Run
+          </Button>
+
+          {/* Create Run with selected test cases */}
           {selectedIds.length > 0 && (
-            <Button variant="primary" size="md" onClick={createExecutionRun}>
+            <Button variant="secondary" size="md" onClick={createExecutionRun}>
               <Target className="h-4 w-4 mr-2" />
-              Create Run ({selectedIds.length})
+              Create Run with Selected ({selectedIds.length})
             </Button>
           )}
 
-          {executionRuns.length > 0 && !activeRunId && (
+          {/* Execution Run Selector */}
+          {executionRuns.length > 0 && (
             <select
               value={activeRunId || ''}
               onChange={(e) => setActiveRunId(e.target.value || null)}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm min-w-[200px]"
             >
               <option value="">Select Execution Run</option>
               {executionRuns.map(run => (
@@ -1018,7 +1030,7 @@ export default function TestCaseManagement() {
               ))}
             </select>
           )}
-        </>
+        </div>
       )}
 
       {/* Generate More button when coming from generate page */}
@@ -1170,6 +1182,31 @@ export default function TestCaseManagement() {
         {/* Execution Dashboard */}
         {viewMode === 'execution' && (
           <div className="space-y-6">
+            {/* No Execution Runs Info */}
+            {executionRuns.length === 0 && (
+              <Card className="border-blue-200 bg-blue-50">
+                <CardContent className="p-6 text-center">
+                  <Target className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-blue-900 mb-2">Start Managing Test Executions</h3>
+                  <p className="text-blue-700 mb-4">
+                    Create execution runs to track test case execution progress and results.
+                  </p>
+                  <div className="flex justify-center space-x-3">
+                    <Button
+                      variant="primary"
+                      onClick={() => window.location.href = '/execution'}
+                    >
+                      <Target className="h-4 w-4 mr-2" />
+                      Create New Execution Run
+                    </Button>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-3">
+                    You can create empty runs first, then add test cases later, or select test cases below to create a run with them.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Active Run Status */}
             {activeRunId && getActiveRun() && (
               <Card>

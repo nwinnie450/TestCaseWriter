@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
+import { useRouter } from 'next/navigation'
 import { Layout } from '@/components/layout/Layout'
 import { StepIndicator } from '@/components/generate/StepIndicator'
 import { FileUploadZone } from '@/components/upload/FileUploadZone'
@@ -59,6 +60,7 @@ const steps = [
 ]
 
 function GenerateTestCases() {
+  const router = useRouter()
   const [currentStep, setCurrentStep] = useState(1)
   const [projects, setProjects] = useState<Array<{id: string, name: string, description?: string}>>([])
   const [showLoginModal, setShowLoginModal] = useState(false)
@@ -933,25 +935,97 @@ Template: ${selectedTemplate.description}`
       
     } catch (error) {
       console.error('Generation error:', error)
-      
+
       let errorMessage = 'An unexpected error occurred during generation.'
-      
+      let errorDetails = ''
+      let errorSolution = ''
+
       if (error instanceof AIGenerationError) {
         errorMessage = error.message
+
+        // Provide specific solutions for AI generation errors
+        if (error.message.includes('API key is required')) {
+          errorDetails = 'No API key found in your settings.'
+          errorSolution = 'Configure your AI provider API key in Settings > AI Configuration.'
+        } else if (error.message.includes('invalid or unauthorized')) {
+          errorDetails = 'Your API key was rejected by the AI provider.'
+          errorSolution = 'Check that your API key is correct and has not expired. Generate a new key if needed.'
+        } else if (error.message.includes('rate limit')) {
+          errorDetails = 'Too many requests sent to the AI provider.'
+          errorSolution = 'Wait a few minutes and try again. Consider upgrading your API plan for higher limits.'
+        } else if (error.message.includes('token') && (error.message.includes('limit') || error.message.includes('exceed') || error.message.includes('maximum'))) {
+          errorDetails = 'Your request is too large for the AI model to process.'
+          errorSolution = `Try these solutions:\n• Reduce max test cases from ${generationConfig.maxTestCases} to ${Math.max(3, Math.floor(generationConfig.maxTestCases / 2))}\n• Upload fewer documents at once\n• Split large documents into smaller sections\n• Use shorter text requirements\n• Switch to a model with higher token limits`
+        } else if (error.message.includes('Network error')) {
+          errorDetails = 'Unable to connect to the AI provider service.'
+          errorSolution = 'Check your internet connection and try again. The AI service may be temporarily unavailable.'
+        } else if (error.message.includes('Documents are required')) {
+          errorDetails = 'No valid documents were provided for generation.'
+          errorSolution = 'Upload PDF documents or add text requirements before generating test cases.'
+        }
       } else if (error instanceof OpenAIError) {
         errorMessage = `OpenAI API Error: ${error.message}`
+
+        // Handle OpenAI specific errors with status codes
+        if (error.statusCode === 401) {
+          errorDetails = 'Authentication failed with OpenAI API.'
+          errorSolution = 'Verify your OpenAI API key is correct in Settings > AI Configuration.'
+        } else if (error.statusCode === 403) {
+          errorDetails = 'Access forbidden by OpenAI API.'
+          errorSolution = 'Check that your API key has the necessary permissions and billing is set up.'
+        } else if (error.statusCode === 429) {
+          errorDetails = 'OpenAI API rate limit exceeded.'
+          errorSolution = 'Wait a few minutes before trying again or upgrade your OpenAI plan.'
+        } else if (error.statusCode === 500) {
+          errorDetails = 'OpenAI API server error.'
+          errorSolution = 'Try again in a few minutes. The issue is on OpenAI\'s side.'
+        } else if (error.message.includes('token') && (error.message.includes('limit') || error.message.includes('exceed') || error.message.includes('maximum'))) {
+          errorDetails = 'Your request exceeds OpenAI\'s token limit for the selected model.'
+          errorSolution = `Try these solutions:\n• Reduce max test cases from ${generationConfig.maxTestCases} to ${Math.max(3, Math.floor(generationConfig.maxTestCases / 2))}\n• Upload fewer documents (currently: ${completedDocuments.length})\n• Use shorter text requirements (currently: ${textRequirements.length})\n• Switch to GPT-4 Turbo or GPT-4 (higher token limits)\n• Split your documents into smaller batches`
+        } else if (error.message.includes('No content received')) {
+          errorDetails = 'OpenAI returned an empty response.'
+          errorSolution = 'Try again with different settings or check if your request is too complex.'
+        } else if (error.message.includes('Failed to parse')) {
+          errorDetails = 'OpenAI returned invalid JSON response.'
+          errorSolution = 'Try reducing the complexity of your requirements or using a different AI model.'
+        }
       } else if (error instanceof Error) {
         errorMessage = error.message
+
+        // Handle common JavaScript errors
+        if (error.message.includes('fetch')) {
+          errorDetails = 'Network request failed.'
+          errorSolution = 'Check your internet connection and try again.'
+        } else if (error.message.includes('JSON')) {
+          errorDetails = 'Failed to process the AI response.'
+          errorSolution = 'Try again or contact support if the issue persists.'
+        } else if (error.message.includes('timeout')) {
+          errorDetails = 'Request took too long to complete.'
+          errorSolution = 'Try reducing the number of documents or test cases and try again.'
+        }
       }
-      
-      setGenerationError(errorMessage)
-      setGenerationStep('Generation failed - check error details above')
-      
-      // Don't fallback to mock generation - show the actual error
+
+      // Combine error message with details and solution
+      const fullErrorMessage = `${errorMessage}${errorDetails ? `\n\nDetails: ${errorDetails}` : ''}${errorSolution ? `\n\nSolution: ${errorSolution}` : ''}`
+
+      setGenerationError(fullErrorMessage)
+      setGenerationStep('Generation failed - see error details below')
+
+      // Enhanced logging for debugging
       console.log('Full error details:', {
         error: error,
+        type: error.constructor.name,
         message: errorMessage,
-        stack: error instanceof Error ? error.stack : 'No stack trace'
+        details: errorDetails,
+        solution: errorSolution,
+        statusCode: error instanceof OpenAIError ? error.statusCode : undefined,
+        stack: error instanceof Error ? error.stack : 'No stack trace',
+        aiConfig: {
+          provider: aiConfig.providerId,
+          model: aiConfig.model,
+          hasApiKey: !!aiConfig.apiKey,
+          apiKeyLength: aiConfig.apiKey?.length || 0
+        }
       })
       
     } finally {
@@ -1127,7 +1201,7 @@ Template: ${selectedTemplate.description}`
             </Card>
 
             {/* Configuration Settings - Compact */}
-            <Card>
+            <Card data-section="generation-settings">
               <CardHeader>
                 <CardTitle className="text-lg">2. Generation Settings</CardTitle>
               </CardHeader>
@@ -1276,7 +1350,7 @@ Template: ${selectedTemplate.description}`
             />
             
             <div className="flex justify-between">
-              <Button variant="secondary" onClick={() => setCurrentStep(3)}>
+              <Button variant="secondary" onClick={() => setCurrentStep(2)}>
                 Back
               </Button>
               <Button variant="primary" onClick={() => setCurrentStep(5)}>
@@ -1411,7 +1485,7 @@ Template: ${selectedTemplate.description}`
                 )}
                 
                 <div className="flex justify-center space-x-4">
-                  <Button variant="secondary" onClick={() => setCurrentStep(4)} disabled={isGenerating}>
+                  <Button variant="secondary" onClick={() => setCurrentStep(3)} disabled={isGenerating}>
                     Back to Settings
                   </Button>
                   <Button 
@@ -1447,31 +1521,112 @@ Template: ${selectedTemplate.description}`
                 {generationError && (
                   <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
                     <div className="flex items-start space-x-3">
-                      <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                      <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
                       <div className="flex-1">
                         <h4 className="font-medium text-red-900">AI Generation Failed</h4>
-                        <p className="text-sm text-red-700 mt-1">{generationError}</p>
-                        
-                        <div className="mt-3 bg-red-100 p-3 rounded text-xs text-red-800">
-                          <strong>Debugging Info:</strong>
-                          <ul className="mt-2 list-disc pl-4 space-y-1">
-                            <li>Check browser console (F12) for detailed error logs</li>
-                            <li>Verify your OpenAI API key is configured in Settings</li>
-                            <li>Ensure PDF documents were uploaded and parsed successfully</li>
-                            <li>Check if the AI service is accessible</li>
-                          </ul>
+                        <div className="text-sm text-red-700 mt-1 whitespace-pre-line">{generationError}</div>
+
+                        <div className="mt-4 space-y-3">
+                          {/* Quick fixes section */}
+                          <div className="bg-red-100 p-3 rounded">
+                            <h5 className="font-medium text-red-900 text-sm mb-2">Quick Fixes:</h5>
+                            <ul className="text-xs text-red-800 space-y-1">
+                              <li>• Check your AI provider API key in <strong>Settings → AI Configuration</strong></li>
+                              <li>• Ensure you have uploaded valid documents or added text requirements</li>
+                              <li>• Verify your internet connection is working</li>
+                              <li>• Try reducing the number of test cases to generate</li>
+                            </ul>
+                          </div>
+
+                          {/* Debug info section */}
+                          <div className="bg-red-100 p-3 rounded">
+                            <h5 className="font-medium text-red-900 text-sm mb-2">For Debugging:</h5>
+                            <ul className="text-xs text-red-800 space-y-1">
+                              <li>• Current AI Provider: <strong>{currentProvider?.name || 'Unknown'}</strong></li>
+                              <li>• Model: <strong>{getAIConfig().model}</strong></li>
+                              <li>• Documents uploaded: <strong>{completedDocuments.length}</strong></li>
+                              <li>• Text requirements: <strong>{textRequirements.length}</strong></li>
+                              <li>• API Key configured: <strong>{hasValidAPIKey() ? 'Yes' : 'No'}</strong></li>
+                            </ul>
+                          </div>
+
+                          {/* Common errors explanation */}
+                          <div className="bg-yellow-50 p-3 rounded border border-yellow-200">
+                            <h5 className="font-medium text-yellow-900 text-sm mb-2">Common Errors & Solutions:</h5>
+                            <div className="text-xs text-yellow-800 space-y-2">
+                              <div>
+                                <strong>❌ "API key is required"</strong><br/>
+                                → Go to Settings → AI Configuration and add your API key
+                              </div>
+                              <div>
+                                <strong>❌ "401 Unauthorized"</strong><br/>
+                                → Your API key is wrong or expired. Get a new one from OpenAI/provider
+                              </div>
+                              <div>
+                                <strong>❌ "429 Rate limit exceeded"</strong><br/>
+                                → You've sent too many requests. Wait 5-10 minutes and try again
+                              </div>
+                              <div>
+                                <strong>❌ "Token limit exceeded"</strong><br/>
+                                → Request too large. Reduce test cases to {Math.max(3, Math.floor(generationConfig.maxTestCases / 2))} or upload fewer documents
+                              </div>
+                              <div>
+                                <strong>❌ "Network error"</strong><br/>
+                                → Check your internet connection or the AI service is down
+                              </div>
+                              <div>
+                                <strong>❌ "No content received"</strong><br/>
+                                → AI returned empty response. Try simpler requirements or different model
+                              </div>
+                              <div>
+                                <strong>❌ "Failed to parse JSON"</strong><br/>
+                                → AI response was corrupted. Try again or reduce complexity
+                              </div>
+                              <div>
+                                <strong>❌ "Documents are required"</strong><br/>
+                                → Upload PDF files or add text requirements first
+                              </div>
+                            </div>
+                          </div>
                         </div>
                         
-                        <div className="mt-3 flex space-x-3">
-                          <Button 
-                            variant="secondary" 
+                        <div className="mt-3 flex space-x-3 flex-wrap">
+                          <Button
+                            variant="secondary"
                             size="sm"
                             onClick={() => setGenerationError(null)}
                           >
                             Dismiss
                           </Button>
-                          <Button 
-                            variant="primary" 
+
+                          {/* Show "Try with fewer test cases" button for token limit errors */}
+                          {(generationError.includes('token') && (generationError.includes('limit') || generationError.includes('exceed'))) && (
+                            <Button
+                              variant="warning"
+                              size="sm"
+                              onClick={() => {
+                                const reducedCount = Math.max(3, Math.floor(generationConfig.maxTestCases / 2))
+                                setGenerationConfig(prev => ({
+                                  ...prev,
+                                  maxTestCases: reducedCount
+                                }))
+                                setGenerationError(null)
+                                // Auto-scroll to settings to show the change
+                                setTimeout(() => {
+                                  const settingsSection = document.querySelector('[data-section="generation-settings"]')
+                                  if (settingsSection) {
+                                    settingsSection.scrollIntoView({ behavior: 'smooth' })
+                                  }
+                                }, 100)
+                              }}
+                              disabled={isGenerating}
+                            >
+                              Try with {Math.max(3, Math.floor(generationConfig.maxTestCases / 2))} Test Cases
+                            </Button>
+                          )}
+
+                          <Button
+                            variant="primary"
                             size="sm"
                             onClick={startGeneration}
                             disabled={isGenerating}

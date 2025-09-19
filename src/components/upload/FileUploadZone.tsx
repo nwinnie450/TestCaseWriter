@@ -29,8 +29,9 @@ interface FileUploadZoneProps {
 
 const DEFAULT_ACCEPTED_TYPES = [
   'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/msword',
+  // Word documents temporarily disabled
+  // 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  // 'application/msword',
   'text/markdown',
   'text/plain',
   'image/jpeg',
@@ -89,7 +90,7 @@ export function FileUploadZone({
   const isFileTypeSupported = (file: File): boolean => {
     // Check by file extension (more reliable for Excel files)
     const fileName = file.name.toLowerCase()
-    const supportedExtensions = ['.pdf', '.docx', '.doc', '.md', '.txt', '.jpg', '.jpeg', '.png', '.gif', '.csv', '.xlsx', '.xls']
+    const supportedExtensions = ['.pdf', '.md', '.txt', '.jpg', '.jpeg', '.png', '.gif', '.csv', '.xlsx', '.xls']
     const hasValidExtension = supportedExtensions.some(ext => fileName.endsWith(ext))
     
     // Check by MIME type
@@ -128,7 +129,7 @@ export function FileUploadZone({
     // Show user-friendly error for unsupported files
     if (invalidFiles.length > 0) {
       const unsupportedNames = invalidFiles.map(f => f.name).join(', ')
-      alert(`The following files are not supported: ${unsupportedNames}\n\nSupported formats: PDF, DOCX, MD, TXT, JPG, PNG, CSV, XLSX, XLS`)
+      alert(`The following files are not supported: ${unsupportedNames}\n\nSupported formats: PDF, MD, TXT, JPG, PNG, CSV, XLSX, XLS`)
     }
   }, [onFilesAdded])
 
@@ -143,8 +144,9 @@ export function FileUploadZone({
     // Use more permissive accept settings and rely on our custom validation
     accept: {
       'application/pdf': ['.pdf'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-      'application/msword': ['.doc'],
+      // Word documents temporarily disabled
+      // 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      // 'application/msword': ['.doc'],
       'text/plain': ['.txt', '.md'],
       'text/csv': ['.csv'],
       'application/vnd.ms-excel': ['.xls'],
@@ -220,7 +222,7 @@ export function FileUploadZone({
           
           <div className="mt-4 text-sm text-gray-500 space-y-1">
             <p>
-              Supported formats: PDF, DOCX, MD, TXT, JPG, PNG, CSV, XLSX, XLS
+              Supported formats: PDF, MD, TXT, JPG, PNG, CSV, XLSX, XLS
             </p>
             <p>
               Maximum file size: {formatBytes(maxFileSize)}

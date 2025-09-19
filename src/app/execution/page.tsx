@@ -249,14 +249,14 @@ export default function TestExecutionPage() {
   const [loading, setLoading] = useState(false);
 
   // Helper functions for execution runs
-  const createNewRun = (name: string, project: string, selectedTests: PrioritizedTestCase[]) => {
+  const createNewRun = (name: string, project: string, selectedTests: PrioritizedTestCase[] = []) => {
     const newRun: ExecutionRun = {
       id: `run-${Date.now()}`,
       name,
       project,
       tester: executionData.tester,
       environment: executionData.environment,
-      status: 'active',
+      status: selectedTests.length > 0 ? 'active' : 'draft',
       testCases: selectedTests,
       startTime: new Date().toISOString(),
       completedTests: 0,
@@ -268,6 +268,23 @@ export default function TestExecutionPage() {
     setActiveRunId(newRun.id);
     setSelectedTest(newRun.currentTest);
     setShowCreateRun(false);
+  };
+
+  // Function to add test cases to existing run
+  const addTestCasesToRun = (runId: string, testCases: PrioritizedTestCase[]) => {
+    setExecutionRuns(prev => prev.map(run => {
+      if (run.id === runId) {
+        const updatedTestCases = [...run.testCases, ...testCases];
+        return {
+          ...run,
+          testCases: updatedTestCases,
+          totalTests: updatedTestCases.length,
+          currentTest: run.currentTest || (updatedTestCases.length > 0 ? updatedTestCases[0] : null),
+          status: updatedTestCases.length > 0 && run.status === 'draft' ? 'active' : run.status
+        };
+      }
+      return run;
+    }));
   };
 
   const switchToRun = (runId: string) => {
@@ -2357,12 +2374,16 @@ export default function TestExecutionPage() {
                       <div className={`w-2 h-2 rounded-full ${
                         activeRun.status === 'active' ? 'bg-green-400' :
                         activeRun.status === 'paused' ? 'bg-yellow-400' :
+                        activeRun.status === 'draft' ? 'bg-blue-400' :
                         'bg-gray-400'
                       }`} />
                       <span className="text-sm font-medium text-gray-900">{activeRun.name}</span>
                     </div>
                     <div className="text-xs text-gray-500">
-                      Progress: {activeRun.completedTests}/{activeRun.totalTests}
+                      {activeRun.status === 'draft' && activeRun.totalTests === 0 ?
+                        'No test cases added yet' :
+                        `Progress: ${activeRun.completedTests}/${activeRun.totalTests}`
+                      }
                     </div>
                     <div className="text-xs text-gray-500">
                       Tester: {activeRun.tester}
@@ -2377,6 +2398,19 @@ export default function TestExecutionPage() {
                     </div>
                     {activeRun.status === 'completed' && (
                       <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    )}
+                    {activeRun.status === 'draft' && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          // Navigate to library to select test cases
+                          window.location.href = `/library?mode=execution&runId=${activeRun.id}`;
+                        }}
+                        className="text-xs px-2 py-1"
+                      >
+                        Add Test Cases
+                      </Button>
                     )}
                   </div>
                 )}
@@ -2468,20 +2502,58 @@ export default function TestExecutionPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Test Cases</label>
-                  <div className="text-sm text-gray-600 mb-2">
-                    {filteredTestCases.length} test cases available
-                  </div>
-                  <div className="max-h-32 overflow-y-auto border border-gray-200 rounded p-2">
-                    {filteredTestCases.slice(0, 5).map(test => (
-                      <div key={test.id} className="text-xs text-gray-600 py-1">
-                        • {test.title}
-                      </div>
-                    ))}
-                    {filteredTestCases.length > 5 && (
-                      <div className="text-xs text-gray-400 py-1">
-                        ... and {filteredTestCases.length - 5} more tests
-                      </div>
-                    )}
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="radio"
+                        id="empty-run"
+                        name="runType"
+                        value="empty"
+                        defaultChecked
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                        onChange={(e) => {
+                          const preview = document.getElementById('test-cases-preview');
+                          if (preview) {
+                            preview.className = 'hidden max-h-32 overflow-y-auto border border-gray-200 rounded p-2 ml-7';
+                          }
+                        }}
+                      />
+                      <label htmlFor="empty-run" className="text-sm text-gray-700">
+                        Create empty run (add test cases later)
+                      </label>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="radio"
+                        id="with-tests"
+                        name="runType"
+                        value="with-tests"
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                        onChange={(e) => {
+                          const preview = document.getElementById('test-cases-preview');
+                          if (preview) {
+                            preview.className = e.target.checked ?
+                              'max-h-32 overflow-y-auto border border-gray-200 rounded p-2 ml-7' :
+                              'hidden max-h-32 overflow-y-auto border border-gray-200 rounded p-2 ml-7';
+                          }
+                        }}
+                      />
+                      <label htmlFor="with-tests" className="text-sm text-gray-700">
+                        Include available test cases ({filteredTestCases.length})
+                      </label>
+                    </div>
+                    <div id="test-cases-preview" className="hidden max-h-32 overflow-y-auto border border-gray-200 rounded p-2 ml-7">
+                      {filteredTestCases.slice(0, 5).map(test => (
+                        <div key={test.id} className="text-xs text-gray-600 py-1">
+                          • {test.title}
+                        </div>
+                      ))}
+                      {filteredTestCases.length > 5 && (
+                        <div className="text-xs text-gray-400 py-1">
+                          ... and {filteredTestCases.length - 5} more tests
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -2498,9 +2570,11 @@ export default function TestExecutionPage() {
                     onClick={() => {
                       const runName = (document.getElementById('run-name') as HTMLInputElement)?.value;
                       const runProject = (document.getElementById('run-project') as HTMLSelectElement)?.value;
+                      const runType = (document.querySelector('input[name="runType"]:checked') as HTMLInputElement)?.value;
 
                       if (runName && runProject) {
-                        createNewRun(runName, runProject, filteredTestCases);
+                        const testsToAdd = runType === 'with-tests' ? filteredTestCases : [];
+                        createNewRun(runName, runProject, testsToAdd);
                       }
                     }}
                     className="flex-1"
