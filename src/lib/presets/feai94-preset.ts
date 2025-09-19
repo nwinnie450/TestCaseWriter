@@ -117,8 +117,21 @@ export const FEAI94_PRESET = {
 } as const;
 
 // Helper functions for FEAI-94 specific processing
-export function extractFieldValue(row: any, fieldMappings: readonly string[]): string {
-  for (const fieldName of fieldMappings) {
+export function extractFieldValue(row: any, fieldMappings: readonly string[] | string): string {
+  // Handle edge cases
+  if (!fieldMappings || !row) {
+    return '';
+  }
+
+  // Handle case where fieldMappings is a single string
+  const mappings = Array.isArray(fieldMappings) ? fieldMappings : [fieldMappings];
+
+  for (const fieldName of mappings) {
+    // Skip invalid field names
+    if (!fieldName || typeof fieldName !== 'string') {
+      continue;
+    }
+
     // Try exact match first
     if (row[fieldName] !== undefined && row[fieldName] !== null) {
       return String(row[fieldName]).trim();
@@ -127,6 +140,8 @@ export function extractFieldValue(row: any, fieldMappings: readonly string[]): s
     // Try case-insensitive match
     const keys = Object.keys(row);
     const matchingKey = keys.find(key =>
+      key && typeof key === 'string' &&
+      fieldName && typeof fieldName === 'string' &&
       key.toLowerCase().trim() === fieldName.toLowerCase().trim()
     );
 
