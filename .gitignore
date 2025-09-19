@@ -102,6 +102,19 @@ local-settings.json
 **/*.p12
 **/*.pfx
 
+# Project-specific sensitive files
+ADMIN_CREDENTIALS.md
+*CREDENTIALS*.md
+ACCESS_SEPARATION_GUIDE.md
+*.xlsx
+data/
+clear-*.js
+analyze-*.js
+test-signatures.js
+test-execution-report.html
+test-results.xlsx
+sample-test-cases.csv
+
 # Backup and temporary files
 *.bak
 *.backup
