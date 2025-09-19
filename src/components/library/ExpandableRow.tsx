@@ -17,9 +17,10 @@ export function ExpandableRow({ testCase, forceExpanded = false, onToggle }: Exp
   // Use forceExpanded if provided, otherwise use local state
   const expanded = forceExpanded || isExpanded
   
-  const title = testCase.data?.title || testCase.testCase || 'Test Case'
-  const description = testCase.data?.description || testCase.testCase || 'No description'
-  const steps = testCase.testSteps || []
+
+  const title = testCase.testCase || testCase.data?.title || 'Test Case'
+  const description = testCase.data?.description || testCase.data?.preconditions || 'No description'
+  const steps = testCase.testSteps || testCase.data?.steps || []
   const stepCount = steps.length
   
   const toggleExpanded = () => {

@@ -27,6 +27,7 @@ import {
   UserPlus
 } from 'lucide-react'
 import { withAuth } from '@/components/auth/withAuth'
+import { UserAssignment, AssignedUsersSummary } from '@/components/user-management/UserAssignment'
 
 interface Project {
   id: string
@@ -520,7 +521,20 @@ function ProjectsPage() {
                       {project.description}
                     </p>
                   )}
-                  
+
+                  {/* User Assignment Section */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-600">Assigned QA:</span>
+                      <AssignedUsersSummary type="project" targetId={project.id} />
+                    </div>
+                    <UserAssignment
+                      type="project"
+                      targetId={project.id}
+                      targetName={project.name}
+                    />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div className="flex items-center space-x-2">
                       <FileText className="h-4 w-4 text-gray-400" />

@@ -13,14 +13,14 @@ import { DocumentAnalysisCard } from '@/components/generate/DocumentAnalysisCard
 import { DocumentAnalyzer } from '@/lib/document-analyzer'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import { FileUploadProgress } from '@/types'
+import { FileUploadProgress } from '@/types/index'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useTokenUsage } from '@/contexts/TokenUsageContext'
 import { generateTestCasesWithAI } from '@/lib/ai-providers'
 import { AIGenerationError } from '@/lib/ai-generation'
 import { generateMockTestCases, OpenAIError } from '@/lib/openai'
 import { getAvailableProviders, getProvider } from '@/lib/ai-providers'
-import { TestCase } from '@/types'
+import { TestCase } from '@/types/index'
 // Import the simple PDF parser
 import { extractTextFromDocument as extractFromDoc } from '@/lib/simple-pdf-parser'
 
@@ -37,34 +37,24 @@ import { Wand2, FileText, Settings, Eye, Download, AlertCircle, Edit3, FolderOpe
 
 const steps = [
   {
-    id: 'project',
-    title: 'Select Project',
-    description: 'Choose which project for test cases'
-  },
-  {
-    id: 'upload',
-    title: 'Upload Documents',
-    description: 'Upload requirements and specifications'
-  },
-  {
-    id: 'template',
-    title: 'Select Template',
-    description: 'Choose test case template'
+    id: 'setup',
+    title: 'Setup',
+    description: 'Project & Requirements'
   },
   {
     id: 'configure',
-    title: 'Configure Generation',
-    description: 'Set generation parameters'
+    title: 'Configure',
+    description: 'Template & Settings'
   },
   {
-    id: 'review',
-    title: 'Review & Generate',
-    description: 'Review and generate test cases'
+    id: 'generate',
+    title: 'Generate',
+    description: 'Create Test Cases'
   },
   {
     id: 'export',
     title: 'Export',
-    description: 'Export generated test cases'
+    description: 'Download & Save'
   }
 ]
 
@@ -993,18 +983,20 @@ Template: ${selectedTemplate.description}`
     window.location.href = url
   }
 
+
   const renderStepContent = () => {
     switch (currentStep) {
-      case 1:
+      case 1: // Setup: Project & Requirements
         return (
-          <div className="space-y-6">
+          <div className="space-y-8">
+            {/* Project Selection */}
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Select Project</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">Setup Project & Requirements</h2>
               <p className="text-gray-600">
-                Choose which project these test cases will belong to. Projects help organize and manage your test cases effectively.
+                Choose your project and provide requirements to generate test cases.
               </p>
             </div>
-            
+
             {!currentUser ? (
               <div className="text-center py-12">
                 <div className="h-16 w-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1032,121 +1024,144 @@ Template: ${selectedTemplate.description}`
                 </Button>
               </div>
             ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Choose Project</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {projects.map((project) => (
-                      <div
-                        key={project.id}
-                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                          projectId === project.id
-                            ? 'border-primary-500 bg-primary-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                        onClick={() => setProjectId(project.id)}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="h-8 w-8 bg-primary-100 rounded-lg flex items-center justify-center">
-                            <FolderOpen className="h-4 w-4 text-primary-600" />
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-gray-900">{project.name}</h4>
-                            {project.description && (
-                              <p className="text-sm text-gray-500">{project.description}</p>
-                            )}
+              <>
+                {/* Project Selection - Compact */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">1. Choose Project</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {projects.map((project) => (
+                        <div
+                          key={project.id}
+                          className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                            projectId === project.id
+                              ? 'border-primary-500 bg-primary-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                          onClick={() => setProjectId(project.id)}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <div className="h-6 w-6 bg-primary-100 rounded flex items-center justify-center">
+                              <FolderOpen className="h-3 w-3 text-primary-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-medium text-gray-900 text-sm">{project.name}</h4>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <div className="mt-6 p-3 bg-blue-50 rounded-lg">
-                    <p className="text-sm text-blue-800">
-                      💡 Don't see your project? <a href="/projects" className="underline">Create a new project</a> first.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Requirements Section */}
+                {projectId && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">2. Provide Requirements</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <RequirementInput
+                        completedDocuments={completedDocuments}
+                        textRequirements={textRequirements}
+                        onDocumentsChange={setCompletedDocuments}
+                        onTextRequirementsChange={setTextRequirements}
+                        uploadProgress={uploadProgress}
+                        onFileUpload={handleFilesAdded}
+                        onFileRemoved={handleFileRemoved}
+                        projectId={projectId}
+                        enhancement={enhancement}
+                        ticketId={ticketId}
+                        tags={tags}
+                        onProjectChange={setProjectId}
+                        onEnhancementChange={setEnhancement}
+                        onTicketIdChange={setTicketId}
+                        onTagsChange={handleTagsChange}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
-            
-            {currentUser && projects.length > 0 && (
+
+            {currentUser && projects.length > 0 && projectId && (
               <div className="flex justify-end">
                 <Button
                   variant="primary"
                   onClick={() => setCurrentStep(2)}
-                  disabled={!projectId}
+                  disabled={!canProceedFromRequirements}
+                  className="px-8"
                 >
-                  Next: Upload Requirements
+                  Next: Configure Settings
                 </Button>
               </div>
             )}
           </div>
         )
 
-      case 2:
+      case 2: // Configure: Template & Settings
         return (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Provide Requirements</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">Configure Template & Settings</h2>
               <p className="text-gray-600">
-                Upload your requirements documents (PDF, Word) and test matrices (CSV, Excel) or enter requirements directly as text. Matrix files help generate more accurate test cases by defining test parameters and expected behaviors.
+                Select a test case template and configure generation settings.
               </p>
             </div>
-            
-            <RequirementInput
-              completedDocuments={completedDocuments}
-              textRequirements={textRequirements}
-              onDocumentsChange={setCompletedDocuments}
-              onTextRequirementsChange={setTextRequirements}
-              uploadProgress={uploadProgress}
-              onFileUpload={handleFilesAdded}
-              onFileRemoved={handleFileRemoved}
-              projectId={projectId}
-              enhancement={enhancement}
-              ticketId={ticketId}
-              tags={tags}
-              onProjectChange={setProjectId}
-              onEnhancementChange={setEnhancement}
-              onTicketIdChange={setTicketId}
-              onTagsChange={handleTagsChange}
-            />
-            
-            <div className="flex justify-end">
+
+            {/* Template Selection - Compact */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">1. Select Template</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TemplateSelector
+                  templates={templates}
+                  selectedTemplateId={selectedTemplateId}
+                  onSelectTemplate={setSelectedTemplateId}
+                  onNext={() => setCurrentStep(3)}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Configuration Settings - Compact */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">2. Generation Settings</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <EnhancedConfigForm
+                  generationConfig={generationConfig}
+                  onConfigChange={setGenerationConfig}
+                  context={testCaseContext}
+                  onContextChange={setTestCaseContext}
+                />
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-between">
+              <Button
+                variant="secondary"
+                onClick={() => setCurrentStep(1)}
+                className="px-8"
+              >
+                Back
+              </Button>
               <Button
                 variant="primary"
-                onClick={() => setCurrentStep(4)}
-                disabled={!canProceedFromRequirements}
+                onClick={() => setCurrentStep(3)}
+                disabled={!selectedTemplateId}
+                className="px-8"
               >
-                Next: Select Template
+                Next: Generate Test Cases
               </Button>
             </div>
           </div>
         )
 
-      case 3:
-        return (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Select Test Case Template</h2>
-              <p className="text-gray-600">
-                Choose a template that matches your testing needs. This will determine the structure and fields of your generated test cases.
-              </p>
-            </div>
-            
-            <TemplateSelector
-              templates={templates}
-              selectedTemplateId={selectedTemplateId}
-              onSelectTemplate={setSelectedTemplateId}
-              onNext={() => setCurrentStep(4)}
-              onBack={() => setCurrentStep(2)}
-            />
-          </div>
-        )
-
-      case 4:
+      case 3: // Generate: Create Test Cases
         return (
           <div className="space-y-6">
             <div>
@@ -1684,6 +1699,7 @@ Template: ${selectedTemplate.description}`
           setShowAPIKeyModal(false)
         }}
       />
+
     </Layout>
   )
 }

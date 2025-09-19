@@ -32,30 +32,33 @@ function verifyPassword(password: string, hashedPassword: string): boolean {
 }
 
 // User Management
-export function registerUser(email: string, name: string, password: string, userId?: string): User {
+export function registerUser(email: string, name: string, password: string, username?: string): User {
   const users = getAllUsers()
-  console.log('registerUser called with:', email, name, userId)
+  console.log('registerUser called with:', email, name, username)
   console.log('Current users before registration:', users)
-  
+
   // Check if user already exists by email
   const existingUserByEmail = users.find(u => u.email.toLowerCase() === email.toLowerCase())
   if (existingUserByEmail) {
     throw new Error('User with this email already exists')
   }
-  
-  // Generate user ID if not provided
-  const finalUserId = userId?.trim() || `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-  
-  // Check if user ID already exists
-  const existingUserById = users.find(u => u.id.toLowerCase() === finalUserId.toLowerCase())
-  if (existingUserById) {
-    throw new Error('User with this ID already exists')
+
+  // Check if username already exists (if provided)
+  if (username) {
+    const existingUserByUsername = users.find(u => u.username?.toLowerCase() === username.toLowerCase())
+    if (existingUserByUsername) {
+      throw new Error('User with this username already exists')
+    }
   }
-  
+
+  // Generate user ID
+  const finalUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
   const newUser: User = {
     id: finalUserId,
     email: email.toLowerCase().trim(),
     name: name.trim(),
+    username: username?.trim() || email.split('@')[0], // Default username from email prefix
     password: hashPassword(password),
     role: 'user',
     avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6366f1&color=fff`
@@ -137,6 +140,45 @@ export function getUserByEmail(email: string): User | null {
 export function getUserById(userId: string): User | null {
   const users = getAllUsers()
   return users.find(u => u.id === userId) || null
+}
+
+export function deleteUser(userId: string): boolean {
+  try {
+    const users = getAllUsers()
+    const userIndex = users.findIndex(u => u.id === userId)
+
+    if (userIndex === -1) {
+      console.error('User not found for deletion:', userId)
+      return false
+    }
+
+    // Don't allow deleting the admin user
+    const userToDelete = users[userIndex]
+    if (userToDelete.email === 'admin@merquri.io' || userToDelete.role === 'super-admin') {
+      console.error('Cannot delete admin user')
+      throw new Error('Cannot delete admin user')
+    }
+
+    // Remove user from array
+    users.splice(userIndex, 1)
+
+    // Save updated users list
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users))
+
+    // Also remove user from any project memberships
+    const stored = localStorage.getItem(PROJECT_MEMBERS_KEY)
+    if (stored) {
+      const allMemberships: ProjectMembership[] = JSON.parse(stored)
+      const updatedMemberships = allMemberships.filter(m => m.userId !== userId)
+      localStorage.setItem(PROJECT_MEMBERS_KEY, JSON.stringify(updatedMemberships))
+    }
+
+    console.log('User deleted successfully:', userId)
+    return true
+  } catch (error) {
+    console.error('Failed to delete user:', error)
+    return false
+  }
 }
 
 // Project Membership Management
@@ -275,52 +317,136 @@ export function resetUserStorage(): void {
   localStorage.removeItem(PROJECT_MEMBERS_KEY)
 }
 
-// Remove test users and setup admin
+// Force reset and reinitialize users (for debugging)
+export function forceResetUsers(): void {
+  console.log('Force resetting all user data...')
+  resetUserStorage()
+
+  // Only create admin user, no demo users
+  const adminUser = {
+    id: 'admin',
+    email: 'admin@merquri.io',
+    name: 'Admin User',
+    username: 'admin',
+    password: hashPassword('Orion888!'),
+    role: 'admin' as const,
+    avatar: 'https://ui-avatars.com/api/?name=Admin User&background=1f2937&color=fff'
+  }
+
+  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify([adminUser]))
+  console.log('Only admin user created. Users after force reset:', getAllUsers())
+}
+
+// Remove test users and demo users, keep only admin
 export function removeTestUsers(): void {
   const users = getAllUsers()
-  const cleanUsers = users.filter(u => 
-    !u.email.includes('test') && 
+  const cleanUsers = users.filter(u =>
+    // Remove test users
+    !u.email.includes('test') &&
     !u.name.toLowerCase().includes('test') &&
     !u.id.includes('test') &&
+
+    // Remove demo users
     u.email !== 'admin@test.com' &&
-    u.email !== 'user@test.com'
+    u.email !== 'user@test.com' &&
+    u.email !== 'teamlead@merquri.io' &&
+    u.email !== 'tester@merquri.io' &&
+    u.id !== 'bc_qa_lead' &&
+    u.id !== 'qa_tester_01' &&
+
+    // Keep only admin and explicitly created users
+    (u.email === 'admin@merquri.io' || !u.email.includes('merquri.io'))
   )
-  
+
   localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(cleanUsers))
-  console.log('Test users removed successfully')
+  console.log('Demo and test users removed successfully. Keeping only admin and real users.')
+}
+
+// Clean up corrupted user data
+export function cleanUserData(): void {
+  const users = getAllUsers()
+  const cleanedUsers = users.map(user => {
+    // Fix users who have role names as their actual names
+    if (user.name === 'lead' || user.name === 'teamlead' || user.name === 'admin' || user.name === 'user') {
+      return {
+        ...user,
+        name: user.name === 'lead' ? 'Team Lead' :
+              user.name === 'teamlead' ? 'Team Lead' :
+              user.name === 'admin' ? 'Admin User' :
+              'User'
+      }
+    }
+    return user
+  })
+
+  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(cleanedUsers))
+  console.log('User data cleaned successfully')
+}
+
+// Clean existing users immediately and keep only admin
+export function cleanupExistingUsers(): void {
+  console.log('Cleaning up existing users...')
+
+  // Get current users
+  const users = getAllUsers()
+  console.log('Current users before cleanup:', users.map(u => ({ id: u.id, email: u.email, name: u.name })))
+
+  // Remove demo and test users
+  removeTestUsers()
+
+  // Ensure admin exists
+  const cleanedUsers = getAllUsers()
+  const existingAdmin = cleanedUsers.find(u => u.email === 'admin@merquri.io')
+
+  if (!existingAdmin) {
+    const adminUser = {
+      id: 'admin',
+      email: 'admin@merquri.io',
+      name: 'Admin User',
+      username: 'admin',
+      password: hashPassword('Orion888!'),
+      role: 'admin' as const,
+      avatar: 'https://ui-avatars.com/api/?name=Admin User&background=1f2937&color=fff'
+    }
+
+    cleanedUsers.push(adminUser)
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(cleanedUsers))
+    console.log('Admin user created during cleanup')
+  }
+
+  console.log('Users after cleanup:', getAllUsers().map(u => ({ id: u.id, email: u.email, name: u.name })))
 }
 
 // Initialize with admin user only
 export function initializeDefaultUsers(): void {
   const users = getAllUsers()
-  
+
   // Check if users exist but don't have password field - migrate to new structure
   if (users.length > 0 && users.some(u => !u.password)) {
     console.log('Migrating user storage to password-based authentication')
     resetUserStorage()
   }
-  
-  // Remove any existing test users first
-  removeTestUsers()
-  
+
   // Check if admin already exists
-  const updatedUsers = getAllUsers()
-  const existingAdmin = updatedUsers.find(u => u.email === 'admin@merquri.io')
-  
+  const existingAdmin = users.find(u => u.email === 'admin@merquri.io')
+
   if (!existingAdmin) {
     const adminUser = {
       id: 'admin',
       email: 'admin@merquri.io',
-      name: 'admin',
+      name: 'Admin User',
+      username: 'admin',
       password: hashPassword('Orion888!'),
       role: 'admin' as const,
-      avatar: 'https://ui-avatars.com/api/?name=admin&background=1f2937&color=fff'
+      avatar: 'https://ui-avatars.com/api/?name=Admin User&background=1f2937&color=fff'
     }
-    
-    updatedUsers.push(adminUser)
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(updatedUsers))
+
+    // Only store admin user, no demo users
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify([adminUser]))
     console.log('Admin user initialized successfully')
   } else {
     console.log('Admin user already exists')
   }
+
+  console.log('User initialization complete. Only admin user available.')
 }

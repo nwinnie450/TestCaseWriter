@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { ProfileModal } from '@/components/ui/ProfileModal'
 import { LoginModal } from '@/components/auth/LoginModal'
-import { getCurrentUser, logoutUser } from '@/lib/user-storage'
+import { AuthService } from '@/lib/auth-service'
 import { hasPermission, shouldShowNotifications, canAccessPage } from '@/lib/access-control'
 import { 
   Home, 
@@ -25,7 +25,8 @@ import {
   SettingsIcon,
   Folder,
   Book,
-  GitPullRequest
+  GitPullRequest,
+  Play
 } from 'lucide-react'
 import { useState } from 'react'
 import { NotificationDropdown } from '@/components/notifications/NotificationDropdown'
@@ -34,10 +35,11 @@ import { NotificationDropdown } from '@/components/notifications/NotificationDro
 const navigationItems = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Generate', href: '/generate', icon: Wand2 },
-  { name: 'Library', href: '/library', icon: Database },
+  { name: 'Test Cases', href: '/library', icon: Database },
   { name: 'Export', href: '/export', icon: Download },
   { name: 'Projects', href: '/projects', icon: Folder },
   { name: 'Templates', href: '/templates', icon: FileText },
+  { name: 'Administration', href: '/users', icon: UserIcon },
   { name: 'Management', href: '/management', icon: GitPullRequest },
   { name: 'Docs', href: '/docs', icon: Book },
 ]
@@ -56,7 +58,8 @@ export function Header() {
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       const checkUser = () => {
-        const currentUser = getCurrentUser()
+        const currentUser = AuthService.getCurrentUser()
+        console.log('🔍 HEADER DEBUG - Current user from AuthService:', currentUser)
         setUser(currentUser)
       }
 
@@ -97,29 +100,32 @@ export function Header() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo and Brand */}
           <div className="flex items-center">
-            <button 
-              onClick={() => handleNavigation('/')} 
+            <Link
+              href="/"
               className="flex items-center space-x-3 cursor-pointer group"
             >
               <div className="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center group-hover:bg-primary-700 transition-colors">
                 <Wand2 className="h-5 w-5 text-white" />
               </div>
               <span className="text-lg font-bold text-gray-900 group-hover:text-primary-600 transition-colors">Test Case Manager</span>
-            </button>
+            </Link>
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="flex items-center space-x-1">
+          <nav className="flex items-center space-x-0.5">
             {navigationItems.filter(item => canAccessPage(user, item.href)).map((item) => {
               const Icon = item.icon
               const isActive = pathname === item.href
-              
+
               return (
-                <button
+                <Link
                   key={item.name}
-                  onClick={() => handleNavigation(item.href)}
+                  href={item.href}
+                  onClick={() => {
+                    console.log('🔍 NAVIGATION DEBUG - Clicked:', item.name, 'href:', item.href)
+                  }}
                   className={cn(
-                    'flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200',
+                    'flex items-center space-x-1.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer',
                     isActive
                       ? 'bg-primary-600 text-white shadow-md'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
@@ -127,39 +133,40 @@ export function Header() {
                 >
                   <Icon className="h-4 w-4" />
                   <span>{item.name}</span>
-                </button>
+                </Link>
               )
             })}
           </nav>
 
           {/* Right side actions */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-1">
             {/* Notifications */}
             {shouldShowNotifications(user) && <NotificationDropdown />}
 
             {/* Settings */}
             {hasPermission(user, 'canViewSettings') && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="p-2"
-                onClick={() => handleNavigation('/settings')}
-                title="Settings"
-              >
-                <Settings className="h-5 w-5 text-gray-600 hover:text-gray-900" />
-              </Button>
+              <Link href="/settings" className="inline-flex">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="p-1.5"
+                  title="Settings"
+                >
+                  <Settings className="h-4 w-4 text-gray-600 hover:text-gray-900" />
+                </Button>
+              </Link>
             )}
 
             {/* User Menu */}
             <div className="relative">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="flex items-center space-x-2 px-3 py-2"
+              <Button
+                variant="ghost"
+                size="sm"
+                className="flex items-center space-x-2 px-2 py-2"
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
               >
-                <div className="h-7 w-7 bg-primary-600 rounded-full flex items-center justify-center">
-                  <User className="h-4 w-4 text-white" />
+                <div className="h-6 w-6 bg-primary-600 rounded-full flex items-center justify-center">
+                  <User className="h-3.5 w-3.5 text-white" />
                 </div>
                 <span className="hidden md:block text-sm font-medium text-gray-700">{user?.name || 'Guest'}</span>
               </Button>
@@ -180,6 +187,14 @@ export function Header() {
                         <div>
                           <p className="font-medium text-gray-900">{user?.name || 'Guest User'}</p>
                           <p className="text-sm text-gray-500">{user?.email || 'Not logged in'}</p>
+                          {user?.role && (
+                            <p className="text-xs text-blue-600 font-medium capitalize">
+                              {user.role === 'user' ? 'QA Tester' :
+                               user.role === 'lead' ? 'Team Lead' :
+                               user.role === 'admin' ? 'Admin' :
+                               user.role === 'super-admin' ? 'Super Admin' : user.role}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -200,40 +215,31 @@ export function Header() {
                             Profile Settings
                           </button>
                           {hasPermission(user, 'canViewSettings') && (
-                            <button 
+                            <Link
+                              href="/settings"
                               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                console.log('App settings clicked, navigating to /settings')
-                                setUserMenuOpen(false)
-                                handleNavigation('/settings')
-                              }}
+                              onClick={() => setUserMenuOpen(false)}
                             >
                               <Settings className="h-4 w-4 mr-3" />
                               App Settings
-                            </button>
+                            </Link>
                           )}
                           <hr className="my-1 border-gray-200" />
                         </>
                       ) : (
                         <>
-                          <button
-                            className="flex items-center w-full px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 cursor-pointer"
-                            onClick={() => {
-                              setUserMenuOpen(false)
-                              handleNavigation('/auth/register')
-                            }}
-                          >
-                            <UserIcon className="h-4 w-4 mr-3" />
-                            Create Account
-                          </button>
-                          <hr className="my-1 border-gray-200" />
+                          <div className="px-4 py-3 bg-blue-50 border-b border-blue-200">
+                            <div className="text-center">
+                              <UserIcon className="h-6 w-6 text-blue-600 mx-auto mb-1" />
+                              <p className="text-xs font-medium text-blue-900">Need Access?</p>
+                              <p className="text-xs text-blue-700">Contact your administrator</p>
+                            </div>
+                          </div>
                         </>
                       )}
                       {user ? (
-                        <button 
-                          className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 cursor-pointer"
+                        <button
+                          className="flex items-center w-full px-4 py-2 text-sm text-danger hover:bg-danger-light cursor-pointer"
                           onClick={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
@@ -251,7 +257,7 @@ export function Header() {
                         </button>
                       ) : (
                         <button
-                          className="flex items-center w-full px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 cursor-pointer"
+                          className="flex items-center w-full px-4 py-2 text-sm text-info hover:bg-info-light cursor-pointer"
                           onClick={() => {
                             setUserMenuOpen(false)
                             setShowLoginModal(true)
@@ -292,16 +298,17 @@ export function Header() {
             {navigationItems.filter(item => canAccessPage(user, item.href)).map((item) => {
               const Icon = item.icon
               const isActive = pathname === item.href
-              
+
               return (
-                <button
+                <Link
                   key={item.name}
+                  href={item.href}
                   onClick={() => {
+                    console.log('🔍 MOBILE NAV DEBUG - Clicked:', item.name, 'href:', item.href)
                     setMobileMenuOpen(false)
-                    handleNavigation(item.href)
                   }}
                   className={cn(
-                    'flex items-center space-x-3 px-3 py-2 rounded-md text-base font-medium w-full text-left',
+                    'flex items-center space-x-3 px-3 py-2 rounded-md text-base font-medium w-full cursor-pointer',
                     isActive
                       ? 'bg-primary-100 text-primary-700'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
@@ -309,7 +316,7 @@ export function Header() {
                 >
                   <Icon className="h-5 w-5" />
                   <span>{item.name}</span>
-                </button>
+                </Link>
               )
             })}
           </div>

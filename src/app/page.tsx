@@ -27,9 +27,11 @@ const clearAllMockData = () => {
   try {
     console.log('🚀 Starting aggressive production cleanup...')
     
-    // Get user auth data before clearing
+    // Get essential data before clearing
     const currentUserData = localStorage.getItem('testCaseWriter_currentUser')
     const userData = localStorage.getItem('testCaseWriter_users')
+    const teamsData = localStorage.getItem('testCaseWriter_qaTeams')
+    const teamMembersData = localStorage.getItem('testCaseWriter_teamMembers')
     
     // List all keys before clearing
     const allKeys = Object.keys(localStorage)
@@ -43,14 +45,22 @@ const clearAllMockData = () => {
       }
     })
     
-    // Restore only essential user data
+    // Restore essential data
     if (currentUserData) {
       localStorage.setItem('testCaseWriter_currentUser', currentUserData)
       console.log('✅ Restored current user')
     }
     if (userData) {
-      localStorage.setItem('testCaseWriter_users', userData)  
+      localStorage.setItem('testCaseWriter_users', userData)
       console.log('✅ Restored users')
+    }
+    if (teamsData) {
+      localStorage.setItem('testCaseWriter_qaTeams', teamsData)
+      console.log('✅ Restored teams')
+    }
+    if (teamMembersData) {
+      localStorage.setItem('testCaseWriter_teamMembers', teamMembersData)
+      console.log('✅ Restored team members')
     }
     
     // Set completely clean settings
@@ -76,10 +86,11 @@ const clearAllMockData = () => {
   }
 }
 
-// Run cleaner immediately if in production
-if (typeof window !== 'undefined' && (process.env.NODE_ENV === 'production' || window.location.hostname !== 'localhost')) {
-  clearAllMockData()
-}
+// Disabled automatic cleaner - was interfering with normal operation
+// Only run manually via the button if needed
+// if (typeof window !== 'undefined' && (process.env.NODE_ENV === 'production' || window.location.hostname !== 'localhost')) {
+//   clearAllMockData()
+// }
 
 export default function Dashboard() {
   const { stats } = useTokenUsage()
@@ -145,17 +156,17 @@ export default function Dashboard() {
                 AI-powered test case generation and comprehensive management for modern QA teams. 
                 Generate, import, export, and manage test cases with enterprise-grade tools.
               </p>
-              <div className="flex justify-center space-x-4">
-                <Link href="/auth/register">
-                  <Button variant="primary" size="lg">
-                    Get Started Free
-                  </Button>
-                </Link>
+              <div className="flex justify-center">
                 <Link href="/auth/login">
-                  <Button variant="secondary" size="lg">
-                    Sign In
+                  <Button variant="primary" size="lg" className="px-8">
+                    Sign In to Get Started
                   </Button>
                 </Link>
+              </div>
+              <div className="mt-4 text-center">
+                <p className="text-sm text-gray-500">
+                  Need an account? Contact your administrator to get access.
+                </p>
               </div>
             </div>
           </div>
@@ -186,37 +197,21 @@ export default function Dashboard() {
   return (
     <Layout title="Dashboard">
       <div className="space-y-8">
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-6 gap-4">
+        {/* Statistics Cards - Key Metrics Only */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard
-            title="Total Projects"
+            title="Projects"
             value="0"
             description="No projects yet"
             icon={FolderOpen}
             color="primary"
           />
-          
+
           <StatCard
             title="Test Cases"
             value="0"
             description="Ready to generate"
             icon={FileText}
-            color="success"
-          />
-          
-          <StatCard
-            title="Templates"
-            value="0"
-            description="Create your first template"
-            icon={Wand2}
-            color="warning"
-          />
-          
-          <StatCard
-            title="Export Success"
-            value="--"
-            description="No exports yet"
-            icon={Download}
             color="success"
           />
 
@@ -226,16 +221,16 @@ export default function Dashboard() {
             description={`${formatNumber(stats.thisMonth.tokens)} this month`}
             icon={Zap}
             color="primary"
-            trend={{ value: Math.round((stats.thisMonth.tokens / Math.max(stats.totalTokens - stats.thisMonth.tokens, 1)) * 100), label: 'vs previous months', positive: true }}
+            trend={{ value: Math.round((stats.thisMonth.tokens / Math.max(stats.totalTokens - stats.thisMonth.tokens, 1)) * 100), label: 'vs previous', positive: true }}
           />
-          
+
           <StatCard
             title="Total Cost"
             value={formatCost(stats.totalCost)}
             description={`${formatCost(stats.thisMonth.cost)} this month`}
             icon={DollarSign}
             color="warning"
-            trend={{ value: Math.round((stats.thisMonth.cost / Math.max(stats.totalCost - stats.thisMonth.cost, 0.0001)) * 100), label: 'vs previous months', positive: false }}
+            trend={{ value: Math.round((stats.thisMonth.cost / Math.max(stats.totalCost - stats.thisMonth.cost, 0.0001)) * 100), label: 'vs previous', positive: false }}
           />
         </div>
 
@@ -260,7 +255,7 @@ export default function Dashboard() {
         )}
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Quick Actions */}
           <div>
             <QuickActions />
@@ -274,7 +269,7 @@ export default function Dashboard() {
           {/* Performance Chart Placeholder */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Test Case Generation</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Generation Stats</h3>
               <TrendingUp className="h-5 w-5 text-gray-400" />
             </div>
             <div className="h-48 flex items-center justify-center bg-gray-50 rounded-lg">
@@ -292,7 +287,7 @@ export default function Dashboard() {
         </div>
 
         {/* System Status */}
-        <div className="grid grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">System Status</h3>

@@ -1,25 +1,48 @@
 # Test Case Manager
 
-A comprehensive, enterprise-grade web application for QA teams to generate, manage, and export test cases through AI-powered automation and flexible template systems.
+> **Comprehensive Test Case Management System with Figma integration, Jira support, and execution tracking**
+
+A professional-grade test case management system that transforms how QA teams create, organize, execute, and track test cases. Built with enterprise features including Figma design integration, Jira ticket management, and real-time execution dashboards.
 
 ![Test Case Manager](https://via.placeholder.com/800x400/0066CC/FFFFFF?text=Test+Case+Manager)
 
-## 🌟 Features
+## 🚀 Key Features
 
-### ✨ Core Functionality
-- **Custom Template Editor** - Drag-and-drop field builder with validation rules
-- **Document Upload System** - Multi-format support (PDF/DOCX/MD/images) with parsing
-- **AI Test Case Generation** - Integration with AI to generate test cases from uploaded docs
-- **Test Case Management** - Enterprise data grid with bulk editing, filtering, validation
-- **Export System** - Multiple formats (Excel/CSV/TestRail/Jira/Confluence) with field mapping
-- **Template Management** - Version control, publishing, project assignment
+### 📥 **Import/Export Capabilities**
+- **Multiple Formats**: CSV, Excel, JSON, TestRail, Jira, XML
+- **Smart Mapping**: Customizable field mapping for any source format
+- **Bulk Operations**: Import hundreds of test cases in seconds
+- **Export Flexibility**: Generate reports in multiple formats
 
-### 🎯 Key Benefits
-- **60% reduction in test case creation time**
-- **Standardized test case formats across teams**
-- **Seamless integration with existing testing tools**
-- **AI-powered test coverage analysis**
-- **Enterprise-grade data management**
+### 🗂️ **Test Set Management**
+- **Organize by Sprint/Feature**: Group test cases into logical sets
+- **Team Assignment**: Assign test sets to specific testers
+- **Execution Tracking**: Monitor progress across test sets
+- **Clone & Reuse**: Duplicate test sets for regression testing
+
+### ✅ **Advanced Test Execution**
+- **Status Tracking**: Pass, Fail, Blocked, Skip with detailed notes
+- **Jira Integration**: Link failures to defect tickets automatically
+- **Screenshot Support**: Attach evidence for failures
+- **Bulk Execution**: Update multiple test results simultaneously
+
+### 🎫 **Jira Integration**
+- **Automatic Defect Creation**: Generate Jira tickets for test failures
+- **Blocking Management**: Link test cases to blocking Jira issues
+- **Status Synchronization**: Keep test results and Jira tickets in sync
+- **Traceability**: Full traceability from requirements to defects
+
+### 🎨 **Figma Design Integration**
+- **Embed Code Support**: Import designs using Figma embed codes
+- **Design-to-Test**: Generate test cases directly from Figma prototypes
+- **Visual Context**: Link test cases to specific design components
+- **Category Detection**: Auto-suggest test categories based on design type
+
+### 📊 **Professional Reporting & Dashboard**
+- **Real-time Statistics**: Pass rates, execution progress, team velocity
+- **Executive Summaries**: Stakeholder-ready reports with charts
+- **Trend Analysis**: Track quality metrics over time
+- **Custom Filters**: Filter by priority, category, assignee, status
 
 ## 🔒 Security
 

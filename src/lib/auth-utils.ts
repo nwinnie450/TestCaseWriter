@@ -1,8 +1,8 @@
-import { getCurrentUser } from './user-storage'
+import { AuthService } from './auth-service'
 
 // Authentication utilities
 export function requireAuth(): boolean {
-  const user = getCurrentUser()
+  const user = AuthService.getCurrentUser()
   return !!user
 }
 
@@ -73,12 +73,9 @@ export function isProtectedRoute(pathname: string): boolean {
 // Safe logout that clears everything
 export function performSecureLogout(): void {
   console.log('🚪 Performing secure logout...')
-  
-  // Import logout function
-  const { logoutUser } = require('./user-storage')
-  
-  // Clear user session
-  logoutUser()
+
+  // Clear user session using AuthService
+  AuthService.logout()
   
   // Clear all user data
   clearAllUserData()

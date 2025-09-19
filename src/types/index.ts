@@ -3,6 +3,7 @@
 export interface User {
   id: string
   name: string
+  username?: string
   email: string
   password?: string
   role?: 'admin' | 'user' | 'guest'
@@ -118,6 +119,7 @@ export interface TestCase {
   module?: string // Module/component
   testCase?: string // Test case description
   testSteps?: TestStep[] // Test steps
+  testData?: string // Default/global test data
   testResult?: string // Test result
   qa?: string // QA notes
   remarks?: string // Additional remarks
@@ -133,6 +135,7 @@ export interface TestCaseVersion {
   priority: 'low' | 'medium' | 'high' | 'critical'
   tags: string[]
   testSteps?: TestStep[]
+  testData?: string
   testResult?: string
   changelog: string // What changed in this version
   changeType: 'create' | 'update' | 'revert' | 'status_change' | 'priority_change'

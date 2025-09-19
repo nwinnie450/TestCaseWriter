@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { LucideIcon } from 'lucide-react'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'warning' | 'info'
   size?: 'sm' | 'md' | 'lg'
   icon?: LucideIcon
   iconPosition?: 'left' | 'right'
@@ -32,10 +32,13 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             'btn-primary': variant === 'primary',
             'btn-secondary': variant === 'secondary',
             'btn-ghost': variant === 'ghost',
+            'btn-danger': variant === 'danger',
+            'btn-success': variant === 'success',
+            'btn-warning': variant === 'warning',
+            'btn-info': variant === 'info',
             'btn-sm': size === 'sm',
             'btn-md': size === 'md',
             'btn-lg': size === 'lg',
-            'bg-error-600 text-white hover:bg-error-700': variant === 'danger',
             'opacity-50 cursor-not-allowed': isDisabled,
           },
           className

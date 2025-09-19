@@ -40,6 +40,14 @@ import { cn, formatDate } from '@/lib/utils'
 import { getCurrentUser } from '@/lib/user-storage'
 import { hasPermission, isGuest } from '@/lib/access-control'
 
+interface CustomAction {
+  label: string
+  icon: React.ComponentType<any>
+  onClick: (testCase: TestCase) => void
+  condition?: (testCase: TestCase) => boolean
+  variant?: 'primary' | 'secondary' | 'danger'
+}
+
 interface DataGridProps {
   data: TestCase[]
   onSelectionChange?: (selectedIds: string[]) => void
@@ -51,6 +59,7 @@ interface DataGridProps {
   onVersionHistory?: (testCase: TestCase) => void
   loading?: boolean
   projects?: Record<string, string>
+  customActions?: CustomAction[]
 }
 
 const priorityColors = {
@@ -70,11 +79,12 @@ const statusColors = {
 const columnHelper = createColumnHelper<TestCase>()
 
 // Completely isolated ActionButtons component
-function ActionButtons({ testCase, onEdit, onView, onVersionHistory }: { 
-  testCase: TestCase, 
+function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActions }: {
+  testCase: TestCase,
   onEdit?: (testCase: TestCase) => void,
   onView?: (testCase: TestCase) => void,
-  onVersionHistory?: (testCase: TestCase) => void
+  onVersionHistory?: (testCase: TestCase) => void,
+  customActions?: CustomAction[]
 }) {
   const [showDropdown, setShowDropdown] = React.useState(false)
   const currentUser = getCurrentUser()
@@ -266,7 +276,7 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory }: {
         </button>
       )}
       
-      <button 
+      <button
         className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-100 rounded-md border border-gray-200 hover:border-green-300 bg-white shadow-sm transition-all duration-200"
         onMouseDown={handleView}
         title="View test case"
@@ -274,7 +284,34 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory }: {
       >
         <Eye className="h-4 w-4" />
       </button>
-      
+
+      {/* Custom Actions */}
+      {customActions?.map((action, index) => {
+        const shouldShow = !action.condition || action.condition(testCase)
+        if (!shouldShow) return null
+
+        const Icon = action.icon
+        return (
+          <button
+            key={index}
+            className={`p-2 rounded-md border bg-white shadow-sm transition-all duration-200 ${
+              action.variant === 'primary' ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-100 border-blue-200 hover:border-blue-300' :
+              action.variant === 'danger' ? 'text-red-600 hover:text-red-700 hover:bg-red-100 border-red-200 hover:border-red-300' :
+              'text-gray-600 hover:text-gray-700 hover:bg-gray-100 border-gray-200 hover:border-gray-300'
+            }`}
+            onMouseDown={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+              action.onClick(testCase)
+            }}
+            title={action.label}
+            type="button"
+          >
+            <Icon className="h-4 w-4" />
+          </button>
+        )
+      })}
+
       <div className="relative">
         <button 
           className="p-2 text-gray-600 hover:text-orange-600 hover:bg-orange-100 rounded-md border border-gray-200 hover:border-orange-300 bg-white shadow-sm transition-all duration-200"
@@ -390,17 +427,18 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory }: {
   )
 }
 
-export function DataGrid({ 
-  data, 
-  onSelectionChange, 
-  onEdit, 
-  onView, 
-  onDelete, 
-  onExport, 
-  onBulkEdit, 
+export function DataGrid({
+  data,
+  onSelectionChange,
+  onEdit,
+  onView,
+  onDelete,
+  onExport,
+  onBulkEdit,
   onVersionHistory,
   loading = false,
-  projects = {}
+  projects = {},
+  customActions
 }: DataGridProps) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -482,9 +520,10 @@ export function DataGrid({
       cell: (info) => {
         const testCase = info.row.original
         const isExpanded = expandedRows.has(testCase.id)
-        
+
+
         return (
-          <ExpandableRow 
+          <ExpandableRow
             testCase={testCase}
             forceExpanded={isExpanded}
             onToggle={(id, expanded) => {
@@ -712,11 +751,12 @@ export function DataGrid({
       cell: ({ row }) => {
         return (
           <div className="action-cell" data-testid={`actions-${row.original.id}`}>
-            <ActionButtons 
+            <ActionButtons
               testCase={row.original}
               onEdit={onEdit}
               onView={onView}
               onVersionHistory={onVersionHistory}
+              customActions={customActions}
             />
           </div>
         )
@@ -724,7 +764,7 @@ export function DataGrid({
       enableSorting: false,
       size: 140
     })
-  ], [onEdit, onView])
+  ], [onEdit, onView, customActions])
 
   const table = useReactTable({
     data,
@@ -878,7 +918,6 @@ export function DataGrid({
     }
   }, [data, expandedRows])
 
-  console.log('🔍 DataGrid rendering with data length:', data.length)
   
   return (
     <div className="space-y-4" key={`datagrid-${data.length}-${expandedRows.size}`}>

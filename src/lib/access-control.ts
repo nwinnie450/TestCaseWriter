@@ -1,6 +1,6 @@
 import { User } from '@/types'
 
-export type UserRole = 'admin' | 'user' | 'guest'
+export type UserRole = 'super-admin' | 'admin' | 'lead' | 'qa' | 'user' | 'guest'
 
 export interface AccessPermissions {
   canViewLibrary: boolean
@@ -11,6 +11,8 @@ export interface AccessPermissions {
   canManageTemplates: boolean
   canManageProjects: boolean
   canManageUsers: boolean
+  canManageTeamMembers: boolean
+  canAssignTeams: boolean
   canViewSettings: boolean
   canEditSettings: boolean
   canViewNotifications: boolean
@@ -19,6 +21,23 @@ export interface AccessPermissions {
 }
 
 const ROLE_PERMISSIONS: Record<UserRole, AccessPermissions> = {
+  'super-admin': {
+    canViewLibrary: true,
+    canCreateTestCases: true,
+    canEditTestCases: true,
+    canDeleteTestCases: true,
+    canExport: true,
+    canManageTemplates: true,
+    canManageProjects: true,
+    canManageUsers: true,
+    canManageTeamMembers: true,
+    canAssignTeams: true,
+    canViewSettings: true,
+    canEditSettings: true,
+    canViewNotifications: true,
+    canAccessManagementPages: true,
+    canGenerateTestCases: true,
+  },
   admin: {
     canViewLibrary: true,
     canCreateTestCases: true,
@@ -28,10 +47,46 @@ const ROLE_PERMISSIONS: Record<UserRole, AccessPermissions> = {
     canManageTemplates: true,
     canManageProjects: true,
     canManageUsers: true,
+    canManageTeamMembers: true,
+    canAssignTeams: true,
     canViewSettings: true,
     canEditSettings: true,
     canViewNotifications: true,
     canAccessManagementPages: true,
+    canGenerateTestCases: true,
+  },
+  lead: {
+    canViewLibrary: true,
+    canCreateTestCases: true,
+    canEditTestCases: true,
+    canDeleteTestCases: true,
+    canExport: true,
+    canManageTemplates: true,
+    canManageProjects: true,
+    canManageUsers: true,
+    canManageTeamMembers: true,
+    canAssignTeams: false,
+    canViewSettings: true,
+    canEditSettings: false,
+    canViewNotifications: true,
+    canAccessManagementPages: true,
+    canGenerateTestCases: true,
+  },
+  qa: {
+    canViewLibrary: true,
+    canCreateTestCases: true,
+    canEditTestCases: true,
+    canDeleteTestCases: false,
+    canExport: true,
+    canManageTemplates: false,
+    canManageProjects: false,
+    canManageUsers: false,
+    canManageTeamMembers: false,
+    canAssignTeams: false,
+    canViewSettings: true,
+    canEditSettings: false,
+    canViewNotifications: true,
+    canAccessManagementPages: false,
     canGenerateTestCases: true,
   },
   user: {
@@ -43,10 +98,12 @@ const ROLE_PERMISSIONS: Record<UserRole, AccessPermissions> = {
     canManageTemplates: true,
     canManageProjects: true,
     canManageUsers: false,
+    canManageTeamMembers: false,
+    canAssignTeams: false,
     canViewSettings: true,
     canEditSettings: true,
     canViewNotifications: true,
-    canAccessManagementPages: false,
+    canAccessManagementPages: true,
     canGenerateTestCases: true,
   },
   guest: {
@@ -58,6 +115,8 @@ const ROLE_PERMISSIONS: Record<UserRole, AccessPermissions> = {
     canManageTemplates: false,
     canManageProjects: false,
     canManageUsers: false,
+    canManageTeamMembers: false,
+    canAssignTeams: false,
     canViewSettings: false,
     canEditSettings: false,
     canViewNotifications: false,
@@ -70,9 +129,17 @@ export function getUserPermissions(user: User | null): AccessPermissions {
   if (!user) {
     return ROLE_PERMISSIONS.guest
   }
-  
+
   const role = user.role || 'user'
-  return ROLE_PERMISSIONS[role]
+
+  // Handle case where role might not exist in ROLE_PERMISSIONS
+  if (role in ROLE_PERMISSIONS) {
+    return ROLE_PERMISSIONS[role as UserRole]
+  }
+
+  // Fallback to 'user' role if role is not recognized
+  console.warn(`Unknown user role: ${role}, falling back to 'user' permissions`)
+  return ROLE_PERMISSIONS.user
 }
 
 export function hasPermission(user: User | null, permission: keyof AccessPermissions): boolean {
@@ -90,7 +157,7 @@ export function isAdmin(user: User | null): boolean {
 
 export function canAccessPage(user: User | null, page: string): boolean {
   const permissions = getUserPermissions(user)
-  
+
   switch (page) {
     case '/library':
       return permissions.canViewLibrary
@@ -103,8 +170,15 @@ export function canAccessPage(user: User | null, page: string): boolean {
     case '/templates':
       return permissions.canManageTemplates
     case '/management':
-    case '/users':
       return permissions.canAccessManagementPages
+    case '/users':
+      return permissions.canManageUsers || permissions.canManageTeamMembers // Admins and Leads can manage users
+    case '/export':
+      return permissions.canExport
+    case '/docs':
+      return true // Docs are public
+    case '/':
+      return true // Dashboard is public
     default:
       return true // Allow access to public pages by default
   }

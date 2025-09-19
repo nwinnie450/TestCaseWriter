@@ -1,31 +1,81 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Layout } from '@/components/layout/Layout'
 import { DataGrid } from '@/components/library/DataGrid'
 import { DemoDataLoader } from '@/components/library/DemoDataLoader'
 import { ReconcileDuplicatesButton } from '@/components/library/ReconcileDuplicatesButton'
+import { UserAssignment, AssignedUsersSummary } from '@/components/user-management/UserAssignment'
 import { CoverageDashboard } from '@/components/coverage/CoverageDashboard'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import { TestCase } from '@/types'
+import { Badge } from '@/components/ui/Badge'
+import { Input } from '@/components/ui/Input'
+import { Textarea } from '@/components/ui/Textarea'
+import { TestCase } from '@/types/index'
 import { getAllStoredTestCases, getStorageStats } from '@/lib/test-case-storage'
+import { getTestCaseSignature } from '@/lib/caseSignature'
 import { exportTestCases, quickExportCSV, quickExportJSON } from '@/lib/export-utils'
 import { TestCaseDetailModal } from '@/components/library/TestCaseDetailModal'
 import { TestCaseEditModal } from '@/components/library/TestCaseEditModal'
 import { BulkEditModal } from '@/components/library/BulkEditModal'
 import { VersionHistoryModal } from '@/components/library/VersionHistoryModal'
-import { 
-  Plus, 
-  Download, 
+import { TestCaseImporter } from '@/components/import/TestCaseImporter'
+import { AuthService } from '@/lib/auth-service'
+import {
+  Plus,
+  Download,
   FileText,
   Filter,
   BarChart3,
   Zap,
-  Trash2
+  Trash2,
+  Play,
+  CheckCircle,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  User,
+  Calendar,
+  Target,
+  Timer,
+  MessageSquare,
+  Activity,
+  List,
+  Grid,
+  Upload,
+  X
 } from 'lucide-react'
 
-export default function TestCaseLibrary() {
+// Test execution interfaces
+interface ExecutionRun {
+  id: string
+  name: string
+  description: string
+  testCases: TestCase[]
+  assignedTester: string
+  status: 'Not Started' | 'In Progress' | 'Completed' | 'Blocked'
+  createdAt: Date
+  updatedAt: Date
+  progress: {
+    total: number
+    executed: number
+    passed: number
+    failed: number
+    blocked: number
+    skipped: number
+  }
+}
+
+// Available users for test assignment
+const AVAILABLE_USERS = [
+  { id: '1', name: 'System Administrator', username: 'admin', role: 'super-admin' },
+  { id: '2', name: 'Sarah Johnson', username: 'sarah', role: 'lead' },
+  { id: '3', name: 'Mike Chen', username: 'mike', role: 'qa' },
+  { id: '4', name: 'Lisa Rodriguez', username: 'lisa', role: 'qa' }
+]
+
+export default function TestCaseManagement() {
   const [testCases, setTestCases] = useState<TestCase[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,6 +88,7 @@ export default function TestCaseLibrary() {
   const [showBulkEditModal, setShowBulkEditModal] = useState(false)
   const [showVersionHistoryModal, setShowVersionHistoryModal] = useState(false)
   const [selectedVersionTestCase, setSelectedVersionTestCase] = useState<TestCase | null>(null)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [projects, setProjects] = useState<Array<{id: string, name: string}>>([])
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>('')
   const [filteredTestCases, setFilteredTestCases] = useState<TestCase[]>([])
@@ -45,6 +96,83 @@ export default function TestCaseLibrary() {
   const [showCoverage, setShowCoverage] = useState(false)
   const [activeDocId, setActiveDocId] = useState<string | null>(null)
   const [isFromGenerate, setIsFromGenerate] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showDebugPanel, setShowDebugPanel] = useState(true) // Debug panel - remove later
+  const [debugInfo, setDebugInfo] = useState({
+    signatures: new Map(),
+    duplicates: [],
+    signatureCollisions: []
+  })
+  const [newTestCase, setNewTestCase] = useState({
+    title: '',
+    description: '',
+    category: 'Functional',
+    priority: 'Medium',
+    testSteps: '',
+    expectedResult: '',
+    module: '',
+    testData: '',
+    requirements: '',
+    tags: '',
+    complexity: 'Medium'
+  })
+
+  // Execution Management State
+  const [viewMode, setViewMode] = useState<'library' | 'execution'>('library')
+  const [selectedTestCaseIds, setSelectedTestCaseIds] = useState<string[]>([])
+  const [executionRuns, setExecutionRuns] = useState<ExecutionRun[]>([])
+  const [activeRunId, setActiveRunId] = useState<string | null>(null)
+  const [showExecutionPanel, setShowExecutionPanel] = useState(false)
+  const [executingTestCase, setExecutingTestCase] = useState<TestCase | null>(null)
+  const [executionData, setExecutionData] = useState({
+    status: 'Not Executed' as 'Pass' | 'Fail' | 'Blocked' | 'Skip' | 'Not Executed',
+    tester: '',
+    environment: 'Production',
+    duration: '',
+    notes: '',
+    jiraTicket: ''
+  })
+
+  // Get current user (memoized to prevent infinite re-renders)
+  const [currentUser, setCurrentUser] = useState(() => AuthService.getCurrentUser())
+
+  // Memoize projects object to prevent DataGrid re-renders
+  const projectsLookup = useMemo(() => {
+    return projects.reduce((acc, project) => {
+      acc[project.id] = project.name
+      return acc
+    }, {} as Record<string, string>)
+  }, [projects])
+
+  // Initialize execution data with current user (only once)
+  useEffect(() => {
+    const user = AuthService.getCurrentUser()
+    if (user) {
+      setCurrentUser(user)
+      setExecutionData(prev => ({
+        ...prev,
+        tester: user.name
+      }))
+    }
+  }, [])
+
+  // Load execution runs from localStorage
+  useEffect(() => {
+    try {
+      const storedRuns = localStorage.getItem('testCaseWriter_executionRuns')
+      if (storedRuns) {
+        const parsedRuns = JSON.parse(storedRuns).map((run: any) => ({
+          ...run,
+          createdAt: new Date(run.createdAt),
+          updatedAt: new Date(run.updatedAt)
+        }))
+        setExecutionRuns(parsedRuns)
+      }
+    } catch (error) {
+      console.error('Failed to load execution runs:', error)
+      setExecutionRuns([])
+    }
+  }, [])
 
   // Load test cases from localStorage on component mount
   useEffect(() => {
@@ -63,8 +191,55 @@ export default function TestCaseLibrary() {
         
         setTestCases(storedTestCases)
         setStorageStats(stats)
+
+        // Debug: Analyze signatures and duplicates
+        const signatureMap = new Map()
+        const duplicates = []
+        const signatureCollisions = []
+
+        storedTestCases.forEach((testCase, index) => {
+          try {
+            const signature = getTestCaseSignature(testCase)
+            const shortSig = signature.substring(0, 8)
+
+            if (signatureMap.has(signature)) {
+              const existingCase = signatureMap.get(signature)
+              duplicates.push({
+                signature,
+                shortSig,
+                testCase1: {
+                  id: existingCase.id,
+                  title: existingCase.testCase || existingCase.title || 'No Title'
+                },
+                testCase2: {
+                  id: testCase.id,
+                  title: testCase.testCase || testCase.title || 'No Title'
+                }
+              })
+              signatureCollisions.push(signature)
+            } else {
+              signatureMap.set(signature, testCase)
+            }
+          } catch (error) {
+            console.error('Debug signature error for test case:', testCase.id, error)
+          }
+        })
+
+        setDebugInfo({
+          signatures: signatureMap,
+          duplicates,
+          signatureCollisions
+        })
+
+        console.log('🔍 Debug Analysis:', {
+          totalTestCases: storedTestCases.length,
+          uniqueSignatures: signatureMap.size,
+          duplicateGroups: duplicates.length,
+          collisionSignatures: signatureCollisions.length
+        })
+
         setLoading(false)
-        
+
         console.log('✅ Loaded test cases:', { count: storedTestCases.length, stats })
       } catch (error) {
         console.error('❌ Failed to load test cases:', error)
@@ -174,27 +349,13 @@ export default function TestCaseLibrary() {
 
   // Filter test cases by project
   useEffect(() => {
-    console.log('🔍 Filter Debug - Project filter changed:', { 
-      selectedProjectFilter, 
-      testCasesCount: testCases.length, 
-      loading,
-      projectsLoaded: projects.length 
-    })
-    
     if (selectedProjectFilter === '') {
-      console.log('🔍 Filter Debug - No project filter, showing all test cases')
       setFilteredTestCases(testCases)
     } else {
       const filtered = testCases.filter(tc => tc.projectId === selectedProjectFilter)
-      console.log('🔍 Filter Debug - Filtered by project:', { 
-        projectId: selectedProjectFilter, 
-        filteredCount: filtered.length,
-        totalCount: testCases.length,
-        testCasesSample: testCases.slice(0, 2).map(tc => ({ id: tc.id, projectId: tc.projectId }))
-      })
       setFilteredTestCases(filtered)
     }
-  }, [testCases, selectedProjectFilter, loading, projects])
+  }, [testCases, selectedProjectFilter])
 
   // Debug logging for groupBy changes
   useEffect(() => {
@@ -388,13 +549,13 @@ export default function TestCaseLibrary() {
               
               switch ((updates as any)._tagAction) {
                 case 'add':
-                  updatedTestCase.tags = [...existingTags, ...newTags].filter((tag, index, arr) => arr.indexOf(tag) === index)
+                  updatedTestCase.tags = [...existingTags, ...newTags].filter((tag: string, index: number, arr: string[]) => arr.indexOf(tag) === index)
                   break
                 case 'replace':
                   updatedTestCase.tags = newTags
                   break
                 case 'remove':
-                  updatedTestCase.tags = existingTags.filter(tag => !newTags.includes(tag))
+                  updatedTestCase.tags = existingTags.filter((tag: string) => !newTags.includes(tag))
                   break
               }
               
@@ -498,6 +659,285 @@ export default function TestCaseLibrary() {
     window.location.href = `/generate?${projectParam}continue=true`
   }
 
+  const handleImportTestCases = async (importedTestCases: TestCase[], options: any) => {
+    try {
+      console.log('🔄 Import Handler - Starting import of', importedTestCases.length, 'test cases')
+
+      // If a project is selected, assign it to all imported test cases
+      const testCasesToSave = selectedProjectFilter
+        ? importedTestCases.map(tc => ({ ...tc, projectId: selectedProjectFilter }))
+        : importedTestCases
+
+      console.log('🔄 Import Handler - Prepared test cases with project assignment:', {
+        originalCount: importedTestCases.length,
+        projectFilter: selectedProjectFilter,
+        sampleTestCase: testCasesToSave[0]?.title
+      })
+
+      // Use the proper storage system to save imported test cases
+      const { saveGeneratedTestCases } = await import('@/lib/test-case-storage')
+
+      const saveResult = saveGeneratedTestCases(
+        testCasesToSave,
+        ['imported-data'], // document names
+        'imported', // model
+        selectedProjectFilter || undefined, // project ID
+        selectedProjectFilter ? 'Imported Project' : undefined, // project name
+        undefined, // continueSessionId
+        options.skipDuplicates !== false // skipDuplicates (default to true if not specified)
+      )
+
+      console.log('🔄 Import Handler - Save result:', saveResult)
+
+      setShowImportModal(false)
+
+      // Refresh the page data
+      const { getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
+      const refreshedTestCases = getAllStoredTestCases()
+      const refreshedStats = getStorageStats()
+
+      console.log('🔄 Import Handler - Refreshed data:', {
+        testCasesCount: refreshedTestCases.length,
+        storageStats: refreshedStats
+      })
+
+      setTestCases(refreshedTestCases)
+      setStorageStats(refreshedStats)
+
+      alert(`Successfully imported ${saveResult.saved} test cases! (${saveResult.skipped} skipped as duplicates)`)
+    } catch (error) {
+      console.error('❌ Error importing test cases:', error)
+      alert(`Failed to import test cases: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  // Manual test case creation
+  const handleCreateTestCase = () => {
+    try {
+      const testCaseId = `TC_MANUAL_${Date.now().toString(36).toUpperCase()}`
+
+      const newTC: TestCase = {
+        id: testCaseId,
+        templateId: 'default-template',
+        projectId: selectedProjectFilter || 'default',
+        status: 'draft',
+        testCase: newTestCase.title,
+        module: newTestCase.module || 'General',
+        testSteps: newTestCase.testSteps ? newTestCase.testSteps.split('\n').map((step, index) => ({
+          step: index + 1,
+          description: step.trim(),
+          expectedResult: '',
+          testData: ''
+        })) : [],
+        testData: newTestCase.testData || 'N/A',
+        testResult: 'Not Executed',
+        qa: 'Manual Creator',
+        remarks: '',
+        priority: newTestCase.priority as 'low' | 'medium' | 'high' | 'critical',
+        tags: newTestCase.tags ? newTestCase.tags.split(',').map(tag => tag.trim()) : [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createdBy: currentUser?.id || 'system',
+        version: 1,
+        data: {
+          expectedResult: newTestCase.expectedResult,
+          testData: newTestCase.testData || 'N/A',
+          category: newTestCase.category,
+          complexity: newTestCase.complexity,
+          requirements: newTestCase.requirements ? newTestCase.requirements.split(',').map(req => req.trim()) : [],
+          isManuallyCreated: true,
+          source: 'Manual Creation'
+        }
+      }
+
+      // Save to localStorage
+      const currentSessionId = `manual-session-${Date.now()}`
+      const existingData = JSON.parse(localStorage.getItem('testCases') || '{}')
+
+      if (!existingData[currentSessionId]) {
+        existingData[currentSessionId] = {
+          testCases: [],
+          metadata: {
+            sessionId: currentSessionId,
+            source: 'Manual Creation',
+            createdAt: new Date().toISOString(),
+            totalTestCases: 0
+          }
+        }
+      }
+
+      existingData[currentSessionId].testCases.push(newTC)
+      existingData[currentSessionId].metadata.totalTestCases = existingData[currentSessionId].testCases.length
+      existingData[currentSessionId].metadata.updatedAt = new Date().toISOString()
+
+      localStorage.setItem('testCases', JSON.stringify(existingData))
+
+      // Update UI
+      setTestCases(prev => [...prev, newTC])
+      setShowCreateModal(false)
+
+      // Reset form
+      setNewTestCase({
+        title: '',
+        description: '',
+        category: 'Functional',
+        priority: 'Medium',
+        testSteps: '',
+        expectedResult: '',
+        module: '',
+        testData: '',
+        requirements: '',
+        tags: '',
+        complexity: 'Medium'
+      })
+
+      alert(`✅ Test case "${newTC.testCase}" created successfully!`)
+
+    } catch (error) {
+      console.error('Failed to create test case:', error)
+      alert('❌ Failed to create test case. Please try again.')
+    }
+  }
+
+  const resetCreateForm = () => {
+    setNewTestCase({
+      title: '',
+      description: '',
+      category: 'Functional',
+      priority: 'Medium',
+      testSteps: '',
+      expectedResult: '',
+      module: '',
+      testData: '',
+      requirements: '',
+      tags: '',
+      complexity: 'Medium'
+    })
+    setShowCreateModal(false)
+  }
+
+  // Execution Management Functions
+  const createExecutionRun = () => {
+    if (selectedIds.length === 0) {
+      alert('Please select test cases to create an execution run')
+      return
+    }
+
+    const selectedTestCases = testCases.filter(tc => selectedIds.includes(tc.id))
+    const runName = prompt('Enter execution run name:', `Test Run ${executionRuns.length + 1}`)
+
+    if (!runName) return
+
+    const newRun: ExecutionRun = {
+      id: `run_${Date.now()}`,
+      name: runName,
+      description: `Execution run for ${selectedTestCases.length} test cases`,
+      testCases: selectedTestCases,
+      assignedTester: currentUser?.name || 'Unassigned',
+      status: 'Not Started',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      progress: {
+        total: selectedTestCases.length,
+        executed: 0,
+        passed: 0,
+        failed: 0,
+        blocked: 0,
+        skipped: 0
+      }
+    }
+
+    const updatedRuns = [...executionRuns, newRun]
+    setExecutionRuns(updatedRuns)
+    localStorage.setItem('testCaseWriter_executionRuns', JSON.stringify(updatedRuns))
+    setActiveRunId(newRun.id)
+    setViewMode('execution')
+    setSelectedIds([])
+
+    alert(`✅ Execution run "${runName}" created with ${selectedTestCases.length} test cases!`)
+  }
+
+  const executeTestCase = (testCase: TestCase) => {
+    setExecutingTestCase(testCase)
+    setShowExecutionPanel(true)
+    setExecutionData(prev => ({
+      ...prev,
+      status: testCase.testResult as any || 'Not Executed',
+      notes: testCase.remarks || ''
+    }))
+  }
+
+  const saveExecutionResult = () => {
+    if (!executingTestCase || !activeRunId) return
+
+    const runIndex = executionRuns.findIndex(run => run.id === activeRunId)
+    if (runIndex === -1) return
+
+    const updatedRuns = [...executionRuns]
+    const run = updatedRuns[runIndex]
+
+    // Update test case in the run
+    const testCaseIndex = run.testCases.findIndex(tc => tc.id === executingTestCase.id)
+    if (testCaseIndex !== -1) {
+      run.testCases[testCaseIndex] = {
+        ...run.testCases[testCaseIndex],
+        testResult: executionData.status,
+        remarks: executionData.notes
+      }
+
+      // Update progress
+      const executed = run.testCases.filter(tc => tc.testResult && tc.testResult !== 'Not Executed').length
+      const passed = run.testCases.filter(tc => tc.testResult === 'Pass').length
+      const failed = run.testCases.filter(tc => tc.testResult === 'Fail').length
+      const blocked = run.testCases.filter(tc => tc.testResult === 'Blocked').length
+      const skipped = run.testCases.filter(tc => tc.testResult === 'Skip').length
+
+      run.progress = {
+        total: run.testCases.length,
+        executed,
+        passed,
+        failed,
+        blocked,
+        skipped
+      }
+
+      run.updatedAt = new Date()
+
+      // Update run status
+      if (executed === run.testCases.length) {
+        run.status = 'Completed'
+      } else if (executed > 0) {
+        run.status = 'In Progress'
+      }
+    }
+
+    setExecutionRuns(updatedRuns)
+    localStorage.setItem('testCaseWriter_executionRuns', JSON.stringify(updatedRuns))
+    setShowExecutionPanel(false)
+    setExecutingTestCase(null)
+
+    // Reset execution data
+    setExecutionData({
+      status: 'Not Executed',
+      tester: currentUser?.name || '',
+      environment: 'Production',
+      duration: '',
+      notes: '',
+      jiraTicket: ''
+    })
+
+    alert('✅ Execution result saved successfully!')
+  }
+
+  const getActiveRun = () => {
+    return executionRuns.find(run => run.id === activeRunId)
+  }
+
+  const getActiveRunTestCases = () => {
+    const activeRun = getActiveRun()
+    return activeRun ? activeRun.testCases : []
+  }
+
   // Removed mock data loading function for production
 
   // Group test cases by selected field
@@ -540,8 +980,13 @@ export default function TestCaseLibrary() {
   const groupedTestCases = groupTestCases(filteredTestCases, groupBy)
 
   const breadcrumbs = [
-    { label: 'Library' }
+    { label: viewMode === 'execution' ? 'Test Management' : 'Test Library' }
   ]
+
+  // Get display data based on view mode
+  const displayTestCases = viewMode === 'execution' && activeRunId
+    ? getActiveRunTestCases()
+    : filteredTestCases
 
   const handleExportAll = async () => {
     if (testCases.length === 0) {
@@ -591,23 +1036,23 @@ export default function TestCaseLibrary() {
     if (confirm('Are you sure you want to clear all stored test cases? This action cannot be undone. (Projects will be preserved)')) {
       try {
         const { clearStoredTestCases } = await import('@/lib/test-case-storage')
-        
+
         // Preserve current projects before clearing
         const currentProjects = [...projects]
         const currentProjectFilter = selectedProjectFilter
-        
+
         clearStoredTestCases()
-        
+
         // Refresh UI but preserve projects
         setTestCases([])
         setFilteredTestCases([])
         setSelectedIds([])
         setStorageStats({ sessions: 0, totalTestCases: 0, storageSize: '0 KB' })
-        
+
         // Ensure projects are not lost
         setProjects(currentProjects)
         setSelectedProjectFilter(currentProjectFilter)
-        
+
         console.log('✅ Test cases cleared, projects preserved:', currentProjects.length)
         alert('✅ All stored test cases have been cleared! Projects are preserved.')
       } catch (error) {
@@ -617,19 +1062,69 @@ export default function TestCaseLibrary() {
     }
   }
 
+
   const actions = (
     <div className="flex items-center space-x-3">
+      {/* View Mode Toggle */}
+      <div className="flex items-center border rounded-lg">
+        <Button
+          variant={viewMode === 'library' ? 'primary' : 'ghost'}
+          size="sm"
+          onClick={() => setViewMode('library')}
+          className="rounded-r-none border-r"
+        >
+          <Grid className="h-4 w-4 mr-2" />
+          Library
+        </Button>
+        <Button
+          variant={viewMode === 'execution' ? 'primary' : 'ghost'}
+          size="sm"
+          onClick={() => setViewMode('execution')}
+          className="rounded-l-none"
+        >
+          <Play className="h-4 w-4 mr-2" />
+          Execution
+        </Button>
+      </div>
+
+      {/* Execution Actions */}
+      {viewMode === 'execution' && (
+        <>
+          {selectedIds.length > 0 && (
+            <Button variant="primary" size="md" onClick={createExecutionRun}>
+              <Target className="h-4 w-4 mr-2" />
+              Create Run ({selectedIds.length})
+            </Button>
+          )}
+
+          {executionRuns.length > 0 && !activeRunId && (
+            <select
+              value={activeRunId || ''}
+              onChange={(e) => setActiveRunId(e.target.value || null)}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            >
+              <option value="">Select Execution Run</option>
+              {executionRuns.map(run => (
+                <option key={run.id} value={run.id}>
+                  {run.name} ({run.progress.executed}/{run.progress.total})
+                </option>
+              ))}
+            </select>
+          )}
+        </>
+      )}
+
       {/* Generate More button when coming from generate page */}
       {isFromGenerate && (
-        <Button variant="primary" onClick={handleBackToGenerate} className="mr-4">
+        <Button variant="primary" size="md" onClick={handleBackToGenerate} className="mr-4">
           <Zap className="h-4 w-4 mr-2" />
-          Continue Generating Test Cases
+          Continue Generating
         </Button>
       )}
-      
-      {testCases.length > 0 && (
+
+      {testCases.length > 0 && viewMode === 'library' && (
         <>
-          <ReconcileDuplicatesButton 
+          <ReconcileDuplicatesButton
             projectId={selectedProjectFilter || undefined}
             onComplete={(result) => {
               // Refresh test cases after reconciliation
@@ -641,33 +1136,38 @@ export default function TestCaseLibrary() {
               setSelectedIds([]) // Clear selection after reconciliation
             }}
           />
-          
-          <Button variant="secondary" onClick={handleExportAll}>
+
+          <Button variant="secondary" size="md" onClick={handleExportAll}>
             <Download className="h-4 w-4 mr-2" />
             Export All ({testCases.length})
           </Button>
-          
-          <Button variant="secondary" onClick={handleClearStorage} className="text-red-600 hover:text-red-700">
+
+          <Button variant="danger" size="sm" onClick={handleClearStorage}>
             Clear Test Cases
           </Button>
         </>
       )}
-      
 
-      {/* Removed Load Test Data button for production */}
-      
       {/* Only show generate button if NOT coming from generate page */}
-      {!isFromGenerate && (
-        <Button variant="primary" onClick={handleGenerateAI}>
-          <Zap className="h-4 w-4 mr-2" />
-          Generate Test Cases
+      {!isFromGenerate && viewMode === 'library' && (
+        <div className="flex space-x-3">
+          <Button variant="primary" size="md" onClick={handleGenerateAI}>
+            <Zap className="h-4 w-4 mr-2" />
+            Generate Test Cases
+          </Button>
+          <Button variant="secondary" size="md" onClick={() => setShowImportModal(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Import Test Cases
+          </Button>
+        </div>
+      )}
+
+      {viewMode === 'library' && (
+        <Button variant="secondary" size="md" onClick={() => setShowCreateModal(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          New Test Case
         </Button>
       )}
-      
-      <Button variant="secondary">
-        <Plus className="h-4 w-4 mr-2" />
-        New Test Case
-      </Button>
     </div>
   )
 
@@ -696,9 +1196,9 @@ export default function TestCaseLibrary() {
   }
 
   return (
-    <Layout 
+    <Layout
       breadcrumbs={breadcrumbs}
-      title="Test Case Library" 
+      title={viewMode === 'execution' ? 'Test Case Management' : 'Test Case Library'}
       actions={actions}
     >
       <div className="space-y-6">
@@ -721,43 +1221,258 @@ export default function TestCaseLibrary() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Active</p>
-                  <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+                  <p className="text-2xl font-bold text-success">{stats.active}</p>
                 </div>
-                <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                  <div className="h-3 w-3 bg-green-600 rounded-full"></div>
+                <div className="h-8 w-8 bg-success-light rounded-full flex items-center justify-center">
+                  <div className="h-3 w-3 bg-success rounded-full"></div>
                 </div>
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">In Review</p>
-                  <p className="text-2xl font-bold text-blue-600">{stats.review}</p>
+                  <p className="text-2xl font-bold text-info">{stats.review}</p>
                 </div>
-                <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <div className="h-3 w-3 bg-blue-600 rounded-full"></div>
+                <div className="h-8 w-8 bg-info-light rounded-full flex items-center justify-center">
+                  <div className="h-3 w-3 bg-info rounded-full"></div>
                 </div>
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Draft</p>
-                  <p className="text-2xl font-bold text-gray-600">{stats.draft}</p>
+                  <p className="text-2xl font-bold text-neutral">{stats.draft}</p>
                 </div>
-                <div className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center">
-                  <div className="h-3 w-3 bg-gray-600 rounded-full"></div>
+                <div className="h-8 w-8 bg-neutral-light rounded-full flex items-center justify-center">
+                  <div className="h-3 w-3 bg-neutral rounded-full"></div>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Debug Panel - Remove Later */}
+        {showDebugPanel && (
+          <Card className="border-2 border-yellow-300 bg-yellow-50">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between text-yellow-800">
+                <div className="flex items-center space-x-2">
+                  <AlertTriangle className="h-5 w-5" />
+                  <span>🔍 Debug Panel - Signature Analysis</span>
+                </div>
+                <Button
+                  onClick={() => setShowDebugPanel(false)}
+                  variant="ghost"
+                  size="sm"
+                  className="text-yellow-600 hover:text-yellow-800"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white p-3 rounded border">
+                  <div className="text-sm font-medium text-gray-700">Total Test Cases</div>
+                  <div className="text-xl font-bold text-blue-600">{testCases.length}</div>
+                </div>
+                <div className="bg-white p-3 rounded border">
+                  <div className="text-sm font-medium text-gray-700">Unique Signatures</div>
+                  <div className="text-xl font-bold text-green-600">{debugInfo.signatures.size}</div>
+                </div>
+                <div className="bg-white p-3 rounded border">
+                  <div className="text-sm font-medium text-gray-700">Duplicate Groups</div>
+                  <div className="text-xl font-bold text-red-600">{debugInfo.duplicates.length}</div>
+                </div>
+                <div className="bg-white p-3 rounded border">
+                  <div className="text-sm font-medium text-gray-700">Collision Rate</div>
+                  <div className="text-xl font-bold text-orange-600">
+                    {testCases.length > 0 ? Math.round((debugInfo.duplicates.length / testCases.length) * 100) : 0}%
+                  </div>
+                </div>
+              </div>
+
+              {debugInfo.duplicates.length > 0 && (
+                <div className="bg-white p-4 rounded border">
+                  <h4 className="font-medium text-red-700 mb-2">⚠️ Signature Collisions Detected:</h4>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {debugInfo.duplicates.slice(0, 10).map((duplicate, index) => (
+                      <div key={index} className="text-xs bg-red-50 p-2 rounded border-l-4 border-red-200">
+                        <div className="font-mono text-red-600">Signature: {duplicate.shortSig}...</div>
+                        <div className="text-gray-700">
+                          <span className="font-medium">1:</span> {duplicate.testCase1.title.substring(0, 50)}...
+                        </div>
+                        <div className="text-gray-700">
+                          <span className="font-medium">2:</span> {duplicate.testCase2.title.substring(0, 50)}...
+                        </div>
+                      </div>
+                    ))}
+                    {debugInfo.duplicates.length > 10 && (
+                      <div className="text-xs text-gray-500 italic">
+                        ...and {debugInfo.duplicates.length - 10} more duplicates
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {debugInfo.duplicates.length === 0 && (
+                <div className="bg-green-50 p-4 rounded border border-green-200">
+                  <div className="text-green-700 font-medium">✅ No signature collisions detected!</div>
+                  <div className="text-green-600 text-sm">All test cases have unique signatures.</div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Execution Dashboard */}
+        {viewMode === 'execution' && (
+          <div className="space-y-6">
+            {/* Active Run Status */}
+            {activeRunId && getActiveRun() && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Target className="h-5 w-5 text-primary-600" />
+                      <span>Active Execution Run</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-500">
+                        Assigned to: {getActiveRun()?.assignedTester}
+                      </span>
+                      <Badge variant={
+                        getActiveRun()?.status === 'Completed' ? 'success' :
+                        getActiveRun()?.status === 'In Progress' ? 'warning' :
+                        getActiveRun()?.status === 'Blocked' ? 'error' : 'secondary'
+                      }>
+                        {getActiveRun()?.status}
+                      </Badge>
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {getActiveRun()?.progress.total}
+                      </div>
+                      <div className="text-sm text-gray-500">Total</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-gray-600">
+                        {getActiveRun()?.progress.executed}
+                      </div>
+                      <div className="text-sm text-gray-500">Executed</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">
+                        {getActiveRun()?.progress.passed}
+                      </div>
+                      <div className="text-sm text-gray-500">Passed</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-red-600">
+                        {getActiveRun()?.progress.failed}
+                      </div>
+                      <div className="text-sm text-gray-500">Failed</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-yellow-600">
+                        {getActiveRun()?.progress.blocked}
+                      </div>
+                      <div className="text-sm text-gray-500">Blocked</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-gray-400">
+                        {getActiveRun()?.progress.skipped}
+                      </div>
+                      <div className="text-sm text-gray-500">Skipped</div>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="mt-4">
+                    <div className="flex justify-between text-sm text-gray-600 mb-2">
+                      <span>Progress</span>
+                      <span>
+                        {getActiveRun()?.progress.executed}/{getActiveRun()?.progress.total}
+                        ({Math.round((getActiveRun()?.progress.executed || 0) / (getActiveRun()?.progress.total || 1) * 100)}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div
+                        className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${Math.round((getActiveRun()?.progress.executed || 0) / (getActiveRun()?.progress.total || 1) * 100)}%`
+                        }}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Execution Runs List */}
+            {executionRuns.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Execution Runs</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {executionRuns.map(run => (
+                      <div
+                        key={run.id}
+                        className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                          activeRunId === run.id
+                            ? 'border-primary-300 bg-primary-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        onClick={() => setActiveRunId(run.id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-medium text-gray-900">{run.name}</h4>
+                            <p className="text-sm text-gray-500">{run.description}</p>
+                            <div className="flex items-center space-x-4 text-sm text-gray-500 mt-1">
+                              <span>Assigned to: {run.assignedTester}</span>
+                              <span>Updated: {run.updatedAt.toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-4">
+                            <div className="text-center">
+                              <div className="text-sm font-medium">
+                                {run.progress.executed}/{run.progress.total}
+                              </div>
+                              <div className="text-xs text-gray-500">Progress</div>
+                            </div>
+                            <Badge variant={
+                              run.status === 'Completed' ? 'success' :
+                              run.status === 'In Progress' ? 'warning' :
+                              run.status === 'Blocked' ? 'error' : 'secondary'
+                            }>
+                              {run.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
 
         {/* Demo Data Loader */}
         <DemoDataLoader />
@@ -813,7 +1528,6 @@ export default function TestCaseLibrary() {
                     variant="ghost" 
                     size="sm" 
                     onClick={() => setSelectedProjectFilter('')}
-                    className="text-primary-600"
                   >
                     Clear Filter
                   </Button>
@@ -872,11 +1586,10 @@ export default function TestCaseLibrary() {
                     Bulk Edit
                   </Button>
                   
-                  <Button 
-                    variant="danger" 
+                  <Button
+                    variant="danger"
                     size="sm"
                     onClick={() => handleDelete(selectedIds)}
-                    className="bg-red-600 hover:bg-red-700 text-white"
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
                     Delete Selected ({selectedIds.length})
@@ -944,21 +1657,39 @@ export default function TestCaseLibrary() {
           </CardHeader>
           <CardContent className="p-0">
             {groupBy === 'none' ? (
-              <DataGrid
-                data={filteredTestCases}
-                onSelectionChange={setSelectedIds}
-                onEdit={handleEdit}
-                onView={handleView}
-                onDelete={handleDelete}
-                onExport={handleExport}
-                onBulkEdit={handleBulkEdit}
-                onVersionHistory={handleOpenVersionHistory}
-                loading={loading}
-                projects={projects.reduce((acc, project) => {
-                  acc[project.id] = project.name
-                  return acc
-                }, {} as Record<string, string>)}
-              />
+              <div className="relative">
+                <DataGrid
+                  data={displayTestCases}
+                  onSelectionChange={setSelectedIds}
+                  onEdit={handleEdit}
+                  onView={handleView}
+                  onDelete={viewMode === 'library' ? handleDelete : undefined}
+                  onExport={handleExport}
+                  onBulkEdit={handleBulkEdit}
+                  onVersionHistory={handleOpenVersionHistory}
+                  loading={loading}
+                  projects={projectsLookup}
+                  customActions={viewMode === 'execution' && activeRunId ? [
+                    {
+                      label: 'Execute',
+                      icon: Play,
+                      onClick: (testCase: TestCase) => executeTestCase(testCase),
+                      condition: (testCase: TestCase) => testCase.testResult !== 'Pass'
+                    }
+                  ] : undefined}
+                />
+                {viewMode === 'execution' && !activeRunId && (
+                  <div className="absolute inset-0 bg-gray-50 bg-opacity-75 flex items-center justify-center">
+                    <div className="text-center p-8">
+                      <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Execution Run</h3>
+                      <p className="text-gray-500 mb-4">
+                        Select test cases and create an execution run to start testing.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="space-y-6 p-6">
                 {Object.entries(groupedTestCases).map(([groupName, groupTestCases]) => (
@@ -978,10 +1709,7 @@ export default function TestCaseLibrary() {
                       onBulkEdit={handleBulkEdit}
                       onVersionHistory={handleOpenVersionHistory}
                       loading={false}
-                      projects={projects.reduce((acc, project) => {
-                        acc[project.id] = project.name
-                        return acc
-                      }, {} as Record<string, string>)}
+                      projects={projectsLookup}
                     />
                   </div>
                 ))}
@@ -1041,10 +1769,10 @@ export default function TestCaseLibrary() {
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
                           className={`h-2 rounded-full ${
-                            priority === 'critical' ? 'bg-red-500' :
-                            priority === 'high' ? 'bg-orange-500' :
-                            priority === 'medium' ? 'bg-yellow-500' :
-                            'bg-gray-500'
+                            priority === 'critical' ? 'bg-danger' :
+                            priority === 'high' ? 'bg-warning' :
+                            priority === 'medium' ? 'bg-info' :
+                            'bg-neutral'
                           }`}
                           style={{ width: `${percentage}%` }}
                         />
@@ -1093,6 +1821,401 @@ export default function TestCaseLibrary() {
             setSelectedVersionTestCase(null)
           }}
           testCase={selectedVersionTestCase}
+        />
+      )}
+
+      {/* Manual Test Case Creation Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900">Create New Test Case</h2>
+                <button
+                  onClick={resetCreateForm}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Basic Information */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Basic Information</h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Test Case Title <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newTestCase.title}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="e.g., User Login with Valid Credentials"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Description <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={newTestCase.description}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, description: e.target.value }))}
+                      rows={3}
+                      placeholder="Brief description of what this test case verifies"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                      <select
+                        value={newTestCase.category}
+                        onChange={(e) => setNewTestCase(prev => ({ ...prev, category: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        <option value="Functional">Functional</option>
+                        <option value="UI/UX">UI/UX</option>
+                        <option value="API">API</option>
+                        <option value="Security">Security</option>
+                        <option value="Performance">Performance</option>
+                        <option value="Integration">Integration</option>
+                        <option value="Regression">Regression</option>
+                        <option value="Smoke">Smoke</option>
+                        <option value="Authentication">Authentication</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                      <select
+                        value={newTestCase.priority}
+                        onChange={(e) => setNewTestCase(prev => ({ ...prev, priority: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        <option value="Critical">Critical</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Module/Feature</label>
+                    <input
+                      type="text"
+                      value={newTestCase.module}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, module: e.target.value }))}
+                      placeholder="e.g., User Authentication, Shopping Cart"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Complexity</label>
+                    <select
+                      value={newTestCase.complexity}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, complexity: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    >
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Test Details */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Test Details</h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Test Steps <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={newTestCase.testSteps}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, testSteps: e.target.value }))}
+                      rows={4}
+                      placeholder="1. Navigate to login page&#10;2. Enter valid username&#10;3. Enter valid password&#10;4. Click login button"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Expected Result <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={newTestCase.expectedResult}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, expectedResult: e.target.value }))}
+                      rows={3}
+                      placeholder="User should be successfully logged in and redirected to dashboard"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Test Data</label>
+                    <textarea
+                      value={newTestCase.testData}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, testData: e.target.value }))}
+                      rows={2}
+                      placeholder="Username: testuser@example.com&#10;Password: ValidPass123"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Requirements</label>
+                    <input
+                      type="text"
+                      value={newTestCase.requirements}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, requirements: e.target.value }))}
+                      placeholder="REQ_AUTH_001, REQ_LOGIN_002 (comma-separated)"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+                    <input
+                      type="text"
+                      value={newTestCase.tags}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, tags: e.target.value }))}
+                      placeholder="login, authentication, smoke (comma-separated)"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+              <Button
+                variant="secondary"
+                onClick={resetCreateForm}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleCreateTestCase}
+                disabled={!newTestCase.title || !newTestCase.description || !newTestCase.testSteps || !newTestCase.expectedResult}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Test Case
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Test Execution Panel */}
+      {showExecutionPanel && executingTestCase && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center space-x-2">
+                  <Play className="h-5 w-5 text-primary-600" />
+                  <span>Execute Test Case</span>
+                </h2>
+                <button
+                  onClick={() => setShowExecutionPanel(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Test Case Details */}
+                <div className="lg:col-span-2 space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Test Case Details</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">ID:</label>
+                        <p className="text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded">
+                          {executingTestCase.id}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Title:</label>
+                        <p className="text-sm text-gray-900">{executingTestCase.testCase}</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Steps:</label>
+                        <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded whitespace-pre-wrap">
+                          {executingTestCase.testSteps?.map(step => `${step.step}. ${step.description}`).join('\n') || 'No test steps defined'}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Expected Result:</label>
+                        <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded whitespace-pre-wrap">
+                          {executingTestCase.data?.expectedResult || 'No expected result defined'}
+                        </div>
+                      </div>
+                      {executingTestCase.testData && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Test Data:</label>
+                          <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded whitespace-pre-wrap">
+                            {executingTestCase.testData}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Execution Form */}
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Execution Results</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Test Result <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={executionData.status}
+                          onChange={(e) => setExecutionData(prev => ({
+                            ...prev,
+                            status: e.target.value as any
+                          }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+                        >
+                          <option value="Not Executed">Not Executed</option>
+                          <option value="Pass">Pass</option>
+                          <option value="Fail">Fail</option>
+                          <option value="Blocked">Blocked</option>
+                          <option value="Skip">Skip</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Tester</label>
+                        <select
+                          value={executionData.tester}
+                          onChange={(e) => setExecutionData(prev => ({
+                            ...prev,
+                            tester: e.target.value
+                          }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+                        >
+                          {AVAILABLE_USERS.map(user => (
+                            <option key={user.id} value={user.name}>
+                              {user.name} ({user.role})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Environment</label>
+                        <select
+                          value={executionData.environment}
+                          onChange={(e) => setExecutionData(prev => ({
+                            ...prev,
+                            environment: e.target.value
+                          }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+                        >
+                          <option value="Development">Development</option>
+                          <option value="Staging">Staging</option>
+                          <option value="Production">Production</option>
+                          <option value="UAT">UAT</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Duration (optional)</label>
+                        <Input
+                          type="text"
+                          placeholder="e.g., 5 minutes"
+                          value={executionData.duration}
+                          onChange={(e) => setExecutionData(prev => ({
+                            ...prev,
+                            duration: e.target.value
+                          }))}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Jira Ticket (optional)</label>
+                        <Input
+                          type="text"
+                          placeholder="e.g., PROJ-123"
+                          value={executionData.jiraTicket}
+                          onChange={(e) => setExecutionData(prev => ({
+                            ...prev,
+                            jiraTicket: e.target.value
+                          }))}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                        <Textarea
+                          rows={4}
+                          placeholder="Add execution notes, observations, or issues..."
+                          value={executionData.notes}
+                          onChange={(e) => setExecutionData(prev => ({
+                            ...prev,
+                            notes: e.target.value
+                          }))}
+                        />
+                      </div>
+
+                      <div className="flex space-x-3 pt-4">
+                        <Button
+                          variant="secondary"
+                          onClick={() => setShowExecutionPanel(false)}
+                          className="flex-1"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="primary"
+                          onClick={saveExecutionResult}
+                          className="flex-1"
+                          disabled={!executionData.status || executionData.status === 'Not Executed'}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Save Result
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Test Cases Modal */}
+      {showImportModal && (
+        <TestCaseImporter
+          onImport={handleImportTestCases}
+          onClose={() => setShowImportModal(false)}
+          defaultProject={selectedProjectFilter}
         />
       )}
     </Layout>

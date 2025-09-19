@@ -68,7 +68,7 @@ export default function LoginPage() {
                 type="text"
                 value={emailOrId}
                 onChange={(e) => setEmailOrId(e.target.value)}
-                placeholder="admin@merquri.io or admin"
+                placeholder="admin@merquri.io"
                 required
               />
 
@@ -113,27 +113,14 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div className="mt-6">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-gray-500">Or</span>
-                </div>
+            {/* Enterprise Login Info */}
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="text-center">
+                <h4 className="text-sm font-medium text-blue-900 mb-2">Need Access?</h4>
+                <p className="text-xs text-blue-700">
+                  Accounts are created by administrators only. Contact your system administrator to request access.
+                </p>
               </div>
-
-              <div className="mt-6">
-              </div>
-            </div>
-
-            <div className="mt-6 text-center">
-              <p className="text-sm text-gray-600">
-                Don't have an account?{' '}
-                <Link href="/auth/register" className="font-medium text-primary-600 hover:text-primary-500">
-                  Sign up
-                </Link>
-              </p>
             </div>
           </CardContent>
         </Card>
