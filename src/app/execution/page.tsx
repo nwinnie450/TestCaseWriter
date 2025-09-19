@@ -41,7 +41,8 @@ import {
   Sparkles,
   TrendingDown,
   Activity,
-  Gauge
+  Gauge,
+  Plus
 } from 'lucide-react';
 import { aiTestPrioritizer } from '@/lib/ai-test-prioritizer';
 import { TestCaseSelector } from '@/components/execution/TestCaseSelector';
