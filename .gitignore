@@ -121,3 +121,10 @@ sample-test-cases.csv
 *.tmp
 *.temp
 *~
+# Allow tracked frontend auth modules
+!src/components/auth/
+!src/components/auth/**
+!src/lib/auth/
+!src/lib/auth/**
+!src/app/auth/
+!src/app/auth/**
