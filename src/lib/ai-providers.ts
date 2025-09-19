@@ -171,9 +171,18 @@ class OpenAIProvider implements BaseAIProvider {
     }
 
     try {
-      const documentContent = documents.join('\n\n')
-      
-      const documentFocusPrefix = aiConfig.documentFocused 
+      // Truncate document content to prevent token overflow
+      const MAX_CONTENT_TOKENS = 80000 // Reserve space for prompt and response
+      let documentContent = documents.join('\n\n')
+
+      // Rough token estimation: ~4 chars per token
+      const estimatedTokens = documentContent.length / 4
+      if (estimatedTokens > MAX_CONTENT_TOKENS) {
+        console.warn(`🔧 Document truncated from ${Math.round(estimatedTokens)} to ${MAX_CONTENT_TOKENS} tokens`)
+        documentContent = documentContent.substring(0, MAX_CONTENT_TOKENS * 4) + '...[truncated for token limit]'
+      }
+
+      const documentFocusPrefix = aiConfig.documentFocused
         ? `🚨 STRICT DOCUMENT-ONLY MODE ENABLED 🚨\nABSOLUTELY CRITICAL: You MUST ONLY generate test cases based on the specific content in the uploaded documents.\n\n`
         : ''
 
