@@ -1,6 +1,9 @@
 import { TestCase } from '@/types'
 import { getTestCaseSignature } from './caseSignature'
 import { buildTestCaseSimhash } from './simhash'
+import { generateFingerprint, generateLooseFingerprint, areExactDuplicates } from './dedupe/fingerprint'
+import { calculateCaseSimilarity, findSimilarCases, getRecommendedAction } from './dedupe/similarity'
+import { mergeTestCases, isSafeMerge } from './dedupe/merge'
 
 const STORAGE_KEY = 'testCaseWriter_generatedTestCases'
 
@@ -25,8 +28,226 @@ export interface SaveResult {
   saved: number
   skipped: number
   duplicateSignatures: string[]
+  // Enhanced deduplication results
+  exactDuplicates: number
+  autoMerged: number
+  reviewRequired: number
+  mergeConflicts: Array<{
+    incomingCase: TestCase
+    existingCase: TestCase
+    similarityScore: number
+    conflicts: any[]
+  }>
 }
 
+// Enhanced save function with intelligent duplicate detection and merging
+export function saveGeneratedTestCasesWithIntelligentDedup(
+  testCases: TestCase[],
+  documentNames: string[] = [],
+  model: string = 'gpt-4o',
+  projectId?: string,
+  projectName?: string,
+  continueSessionId?: string,
+  deduplicationMode: 'strict' | 'smart' | 'off' = 'smart'
+): SaveResult {
+  console.log('🧠 Intelligent Dedup - Starting smart import with mode:', deduplicationMode)
+
+  const result: SaveResult = {
+    sessionId: '',
+    saved: 0,
+    skipped: 0,
+    duplicateSignatures: [],
+    exactDuplicates: 0,
+    autoMerged: 0,
+    reviewRequired: 0,
+    mergeConflicts: []
+  }
+
+  try {
+    if (deduplicationMode === 'off') {
+      // Use original function when deduplication is disabled
+      const originalResult = saveGeneratedTestCases(
+        testCases, documentNames, model, projectId, projectName, continueSessionId, false
+      )
+      return {
+        ...originalResult,
+        exactDuplicates: 0,
+        autoMerged: 0,
+        reviewRequired: 0,
+        mergeConflicts: []
+      }
+    }
+
+    // Get all existing test cases
+    const existingTestCases = getAllStoredTestCases()
+    const projectFilter = projectId || 'all'
+
+    // Filter existing test cases by project
+    const relevantExistingCases = existingTestCases.filter(tc =>
+      projectFilter === 'all' || tc.projectId === projectId
+    )
+
+    console.log('🧠 Intelligent Dedup - Found', relevantExistingCases.length, 'existing cases in project')
+
+    let newTestCases: TestCase[] = []
+    const processedCases: Set<string> = new Set()
+
+    // Process each incoming test case
+    for (const incomingCase of testCases) {
+      try {
+        // Generate fingerprints
+        const exactFingerprint = generateFingerprint(incomingCase)
+        const looseFingerprint = generateLooseFingerprint(incomingCase)
+
+        // Skip if already processed in this batch
+        if (processedCases.has(exactFingerprint)) {
+          console.log('🧠 Intelligent Dedup - Skipping duplicate within batch:', incomingCase.testCase?.substring(0, 30))
+          result.skipped++
+          continue
+        }
+
+        // Check for exact duplicates
+        const exactDuplicate = relevantExistingCases.find(existing =>
+          generateFingerprint(existing) === exactFingerprint
+        )
+
+        if (exactDuplicate) {
+          console.log('🧠 Intelligent Dedup - Found exact duplicate:', {
+            incoming: incomingCase.testCase?.substring(0, 30),
+            existing: exactDuplicate.testCase?.substring(0, 30)
+          })
+          result.exactDuplicates++
+          result.duplicateSignatures.push(exactFingerprint)
+          processedCases.add(exactFingerprint)
+          continue
+        }
+
+        // Find similar cases for potential merging
+        const similarCases = findSimilarCases(incomingCase, relevantExistingCases, 0.75)
+
+        if (similarCases.length > 0) {
+          const bestMatch = similarCases[0]
+          const recommendation = getRecommendedAction(bestMatch.similarity.score)
+
+          console.log('🧠 Intelligent Dedup - Found similar case:', {
+            incoming: incomingCase.testCase?.substring(0, 30),
+            existing: bestMatch.testCase.testCase?.substring(0, 30),
+            similarity: Math.round(bestMatch.similarity.score * 100) + '%',
+            action: recommendation.action
+          })
+
+          if (recommendation.action === 'auto_merge' && isSafeMerge(bestMatch.testCase, incomingCase)) {
+            // Perform automatic merge
+            const mergeResult = mergeTestCases(bestMatch.testCase, incomingCase)
+
+            // Update existing case with merged data
+            const sessions = getStoredTestCaseSessions()
+            let updated = false
+
+            for (const session of sessions) {
+              const caseIndex = session.testCases.findIndex(tc => tc.id === bestMatch.testCase.id)
+              if (caseIndex !== -1) {
+                session.testCases[caseIndex] = mergeResult.mergedCase
+                updated = true
+                break
+              }
+            }
+
+            if (updated) {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
+              result.autoMerged++
+              console.log('✅ Auto-merged case:', mergeResult.mergedCase.testCase?.substring(0, 30))
+            }
+
+          } else if (recommendation.action === 'review_merge') {
+            // Add to review queue
+            result.mergeConflicts.push({
+              incomingCase,
+              existingCase: bestMatch.testCase,
+              similarityScore: bestMatch.similarity.score,
+              conflicts: []
+            })
+            result.reviewRequired++
+            console.log('📋 Added to review queue:', incomingCase.testCase?.substring(0, 30))
+
+          } else {
+            // Keep as separate case
+            const enhancedCase = {
+              ...incomingCase,
+              projectId: projectId || incomingCase.projectId || 'default',
+              data: {
+                ...incomingCase.data,
+                fingerprint: exactFingerprint,
+                looseFingerprint: looseFingerprint,
+                simhash: buildTestCaseSimhash(incomingCase)
+              }
+            }
+            newTestCases.push(enhancedCase)
+            result.saved++
+          }
+        } else {
+          // No similar cases found - add as new
+          const enhancedCase = {
+            ...incomingCase,
+            projectId: projectId || incomingCase.projectId || 'default',
+            data: {
+              ...incomingCase.data,
+              fingerprint: exactFingerprint,
+              looseFingerprint: looseFingerprint,
+              simhash: buildTestCaseSimhash(incomingCase)
+            }
+          }
+          newTestCases.push(enhancedCase)
+          result.saved++
+          console.log('✅ Added new unique case:', incomingCase.testCase?.substring(0, 30))
+        }
+
+        processedCases.add(exactFingerprint)
+
+      } catch (error) {
+        console.error('❌ Error processing test case:', incomingCase.id, error)
+        result.skipped++
+      }
+    }
+
+    // Save new test cases if any
+    if (newTestCases.length > 0) {
+      const originalResult = saveGeneratedTestCases(
+        newTestCases, documentNames, model, projectId, projectName, continueSessionId, false
+      )
+      result.sessionId = originalResult.sessionId
+    } else {
+      result.sessionId = continueSessionId || 'no-new-cases'
+    }
+
+    console.log('🧠 Intelligent Dedup - Processing completed:', {
+      total: testCases.length,
+      saved: result.saved,
+      exactDuplicates: result.exactDuplicates,
+      autoMerged: result.autoMerged,
+      reviewRequired: result.reviewRequired,
+      skipped: result.skipped
+    })
+
+    return result
+
+  } catch (error) {
+    console.error('❌ Intelligent deduplication failed:', error)
+    // Fallback to original function
+    const fallbackResult = saveGeneratedTestCases(
+      testCases, documentNames, model, projectId, projectName, continueSessionId, false
+    )
+    return {
+      ...fallbackResult,
+      exactDuplicates: 0,
+      autoMerged: 0,
+      reviewRequired: 0,
+      mergeConflicts: []
+    }
+  }
+}
+
+// Original function (kept for backward compatibility)
 export function saveGeneratedTestCases(
   testCases: TestCase[],
   documentNames: string[] = [],
@@ -236,7 +457,12 @@ export function saveGeneratedTestCases(
       sessionId,
       saved: newTestCases.length,
       skipped,
-      duplicateSignatures
+      duplicateSignatures,
+      // Legacy compatibility
+      exactDuplicates: skipped,
+      autoMerged: 0,
+      reviewRequired: 0,
+      mergeConflicts: []
     }
     
   } catch (error) {

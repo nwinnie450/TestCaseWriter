@@ -17,6 +17,8 @@ import {
 } from 'lucide-react'
 import { importTestCases, ImportResult, ImportOptions, getExcelSheetInfo, ExcelSheetInfo } from '@/lib/test-case-importer'
 import { TestCase } from '@/types'
+import { saveGeneratedTestCasesWithIntelligentDedup } from '@/lib/test-case-storage'
+import { MergeReviewModal } from './MergeReviewModal'
 
 interface TestCaseImporterProps {
   onImport: (testCases: TestCase[], options: ImportOptions) => void
@@ -43,6 +45,10 @@ export function TestCaseImporter({ onImport, onClose, defaultProject }: TestCase
   const [aiAnalysisResult, setAiAnalysisResult] = useState<string>('')
   const [showAiAnalysis, setShowAiAnalysis] = useState(false)
   const [analyzingWithAI, setAnalyzingWithAI] = useState(false)
+  const [deduplicationMode, setDeduplicationMode] = useState<'strict' | 'smart' | 'off'>('smart')
+  const [showMergeReview, setShowMergeReview] = useState(false)
+  const [mergeConflicts, setMergeConflicts] = useState<any[]>([])
+  const [intelligentResult, setIntelligentResult] = useState<any>(null)
 
   // Load projects and existing test cases from localStorage
   useEffect(() => {
@@ -241,17 +247,63 @@ export function TestCaseImporter({ onImport, onClose, defaultProject }: TestCase
 
   const handleConfirmImport = async () => {
     if (importResult?.testCases) {
-      // Check for suspicious duplicate patterns and trigger AI analysis
-      const totalImported = importResult.testCases.length
-      const duplicateRate = importResult.skipped / (totalImported + importResult.skipped)
+      console.log('🧠 Starting intelligent import with mode:', deduplicationMode)
 
-      if (duplicateRate > 0.8 && totalImported + importResult.skipped > 10) {
-        console.log('🚨 Suspicious duplicate pattern detected, triggering AI analysis...')
-        await runAIAnalysis()
+      try {
+        // Use intelligent deduplication
+        const result = saveGeneratedTestCasesWithIntelligentDedup(
+          importResult.testCases,
+          [],
+          'imported',
+          importOptions.defaultProject,
+          importOptions.defaultProject,
+          undefined,
+          deduplicationMode
+        )
+
+        setIntelligentResult(result)
+
+        // Check if there are merge conflicts that need review
+        if (result.mergeConflicts && result.mergeConflicts.length > 0) {
+          setMergeConflicts(result.mergeConflicts)
+          setShowMergeReview(true)
+          return // Don't close modal yet, wait for merge review
+        }
+
+        // Show import summary
+        const message = `✅ Import completed!
+
+📊 Results:
+• ${result.saved} new test cases imported
+• ${result.exactDuplicates} exact duplicates skipped
+• ${result.autoMerged} cases auto-merged
+• ${result.reviewRequired} cases need review
+
+Total processed: ${importResult.testCases.length} test cases`
+
+        alert(message)
+
+        // Check for suspicious patterns and offer AI analysis
+        const totalImported = result.saved
+        const duplicateRate = result.exactDuplicates / importResult.testCases.length
+
+        if (duplicateRate > 0.5 && importResult.testCases.length > 10) {
+          console.log('🚨 High duplicate rate detected, suggesting AI analysis...')
+          const useAI = confirm('High duplicate rate detected. Would you like AI analysis to help optimize the import?')
+          if (useAI) {
+            await runAIAnalysis()
+          }
+        }
+
+        onImport(importResult.testCases, importOptions)
+        onClose?.()
+
+      } catch (error) {
+        console.error('❌ Intelligent import failed:', error)
+        // Fallback to original import
+        onImport(importResult.testCases, importOptions)
+        onClose?.()
       }
-
-      onImport(importResult.testCases, importOptions)
-      onClose?.()
     }
   }
 
@@ -365,16 +417,66 @@ export function TestCaseImporter({ onImport, onClose, defaultProject }: TestCase
                 <Settings className="w-4 h-4 mr-2" />
                 Import Options
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={importOptions.skipDuplicates}
-                    onChange={(e) => setImportOptions(prev => ({ ...prev, skipDuplicates: e.target.checked }))}
-                    className="rounded"
-                  />
-                  <span className="text-sm text-gray-700">Skip duplicate test cases ({importOptions.existingTestCases?.length || 0} existing)</span>
-                </label>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    🧠 Duplicate Detection Mode
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        name="dedupMode"
+                        value="smart"
+                        checked={deduplicationMode === 'smart'}
+                        onChange={(e) => setDeduplicationMode(e.target.value as any)}
+                        className="text-blue-600"
+                      />
+                      <span className="text-sm">
+                        <span className="font-medium">Smart (Recommended)</span> - Auto-merge similar cases, review conflicts
+                      </span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        name="dedupMode"
+                        value="strict"
+                        checked={deduplicationMode === 'strict'}
+                        onChange={(e) => setDeduplicationMode(e.target.value as any)}
+                        className="text-blue-600"
+                      />
+                      <span className="text-sm">
+                        <span className="font-medium">Strict</span> - Only skip exact duplicates ({importOptions.existingTestCases?.length || 0} existing)
+                      </span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        name="dedupMode"
+                        value="off"
+                        checked={deduplicationMode === 'off'}
+                        onChange={(e) => setDeduplicationMode(e.target.value as any)}
+                        className="text-blue-600"
+                      />
+                      <span className="text-sm">
+                        <span className="font-medium">Off</span> - Import all test cases
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="text-xs text-gray-500 bg-blue-50 p-3 rounded">
+                  {deduplicationMode === 'smart' && (
+                    <>🧠 <strong>Smart mode:</strong> Automatically merges very similar cases (97%+), sends moderately similar cases (88-97%) for review, and imports unique cases.</>
+                  )}
+                  {deduplicationMode === 'strict' && (
+                    <>🎯 <strong>Strict mode:</strong> Only skips exact duplicates. Different test data or slight variations will be imported as separate cases.</>
+                  )}
+                  {deduplicationMode === 'off' && (
+                    <>📥 <strong>Import all:</strong> No duplicate checking. All test cases will be imported regardless of similarity.</>
+                  )}
+                </div>
+
                 <label className="flex items-center space-x-2">
                   <input
                     type="checkbox"
@@ -644,6 +746,52 @@ export function TestCaseImporter({ onImport, onClose, defaultProject }: TestCase
               </Button>
             </div>
           </div>
+        )}
+
+        {/* Merge Review Modal */}
+        {showMergeReview && (
+          <MergeReviewModal
+            conflicts={mergeConflicts}
+            onResolve={(resolutions) => {
+              console.log('🔄 Processing merge resolutions:', resolutions)
+
+              // Apply the resolutions and complete import
+              resolutions.forEach(resolution => {
+                if (resolution.action === 'merge' && resolution.mergedCase) {
+                  // The merge was already applied in the intelligent dedup function
+                  console.log('✅ Merge applied:', resolution.mergedCase.testCase?.substring(0, 30))
+                }
+                // Other actions (keep_both, skip) are handled automatically
+              })
+
+              setShowMergeReview(false)
+
+              // Show final results
+              if (intelligentResult) {
+                const message = `✅ Import with merge review completed!
+
+📊 Final Results:
+• ${intelligentResult.saved} new test cases imported
+• ${intelligentResult.exactDuplicates} exact duplicates skipped
+• ${intelligentResult.autoMerged} cases auto-merged
+• ${resolutions.filter(r => r.action === 'merge').length} conflicts resolved by merge
+• ${resolutions.filter(r => r.action === 'keep_both').length} conflicts resolved by keeping both
+
+Total processed: ${mergeConflicts.length + intelligentResult.saved + intelligentResult.exactDuplicates} test cases`
+
+                alert(message)
+              }
+
+              onImport(importResult?.testCases || [], importOptions)
+              onClose?.()
+            }}
+            onClose={() => {
+              setShowMergeReview(false)
+              // Still close the import modal even if user cancels merge review
+              onImport(importResult?.testCases || [], importOptions)
+              onClose?.()
+            }}
+          />
         )}
 
         {/* AI Analysis Modal */}
