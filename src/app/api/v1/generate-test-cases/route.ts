@@ -35,7 +35,7 @@ const AIConfigSchema = z.object({
   providerId: z.enum(['openai', 'claude', 'gemini', 'grok']),
   model: z.string(),
   temperature: z.number().min(0).max(2).default(0.7),
-  maxTokens: z.number().min(100).max(100000).default(4000),
+  maxTokens: z.number().min(100).max(32000).default(4000),
   documentFocused: z.boolean().default(true)
 })
 
@@ -82,8 +82,17 @@ export async function POST(request: NextRequest) {
 
     const { documents, template, config, aiConfig, metadata } = validationResult.data
 
-    // Extract document content
-    const documentContents = documents.map(doc => doc.content)
+    // Extract document content with token limiting to prevent context overflow
+    const MAX_CONTENT_TOKENS = 80000 // Reserve space for prompt and response
+    const documentContents = documents.map(doc => {
+      // Rough token estimation: ~4 chars per token
+      const estimatedTokens = doc.content.length / 4
+      if (estimatedTokens > MAX_CONTENT_TOKENS) {
+        console.warn(`Document truncated from ${estimatedTokens} to ${MAX_CONTENT_TOKENS} tokens`)
+        return doc.content.substring(0, MAX_CONTENT_TOKENS * 4) + '...[truncated]'
+      }
+      return doc.content
+    })
     
     // Create template structure for AI
     const templateStructure = `Test Case Format:
