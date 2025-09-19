@@ -404,7 +404,7 @@ export function cleanupExistingUsers(): void {
       email: 'admin@merquri.io',
       name: 'Admin User',
       username: 'admin',
-      password: hashPassword('Orion888!'),
+      password: hashPassword('Password888!'),
       role: 'admin' as const,
       avatar: 'https://ui-avatars.com/api/?name=Admin User&background=1f2937&color=fff'
     }
@@ -436,7 +436,7 @@ export function initializeDefaultUsers(): void {
       email: 'admin@merquri.io',
       name: 'Admin User',
       username: 'admin',
-      password: hashPassword('Orion888!'),
+      password: hashPassword('Password888!'),
       role: 'admin' as const,
       avatar: 'https://ui-avatars.com/api/?name=Admin User&background=1f2937&color=fff'
     }

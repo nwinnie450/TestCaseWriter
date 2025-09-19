@@ -207,7 +207,7 @@ export default function TestExecutionPage() {
   const adminCredentials = {
     username: defaultAdmin?.name || 'admin',
     email: defaultAdmin?.email || 'admin@yopmail.com',
-    password: defaultAdmin?.password || 'Orion888!',
+    password: defaultAdmin?.password || 'Password888!',
     role: defaultAdmin?.role || 'super-admin'
   };
 

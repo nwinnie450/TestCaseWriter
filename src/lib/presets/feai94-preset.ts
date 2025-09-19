@@ -117,7 +117,7 @@ export const FEAI94_PRESET = {
 } as const;
 
 // Helper functions for FEAI-94 specific processing
-export function extractFieldValue(row: any, fieldMappings: string[]): string {
+export function extractFieldValue(row: any, fieldMappings: readonly string[]): string {
   for (const fieldName of fieldMappings) {
     // Try exact match first
     if (row[fieldName] !== undefined && row[fieldName] !== null) {

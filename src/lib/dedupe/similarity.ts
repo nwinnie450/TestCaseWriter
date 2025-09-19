@@ -52,14 +52,6 @@ export function calculateCaseSimilarity(testCase1: TestCase, testCase2: TestCase
     weights.module * moduleSimilarity
   );
 
-  console.log('🔍 Similarity calculation:', {
-    case1: title1.substring(0, 30) + '...',
-    case2: title2.substring(0, 30) + '...',
-    titleSim: Math.round(titleSimilarity * 100) + '%',
-    stepsSim: Math.round(stepsSimilarity * 100) + '%',
-    moduleSim: Math.round(moduleSimilarity * 100) + '%',
-    finalScore: Math.round(score * 100) + '%'
-  });
 
   return {
     score,

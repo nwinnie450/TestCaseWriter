@@ -50,7 +50,6 @@ export function saveGeneratedTestCasesWithIntelligentDedup(
   continueSessionId?: string,
   deduplicationMode: 'strict' | 'smart' | 'off' = 'smart'
 ): SaveResult {
-  console.log('🧠 Intelligent Dedup - Starting smart import with mode:', deduplicationMode)
 
   const result: SaveResult = {
     sessionId: '',
@@ -87,8 +86,6 @@ export function saveGeneratedTestCasesWithIntelligentDedup(
       projectFilter === 'all' || tc.projectId === projectId
     )
 
-    console.log('🧠 Intelligent Dedup - Found', relevantExistingCases.length, 'existing cases in project')
-
     let newTestCases: TestCase[] = []
     const processedCases: Set<string> = new Set()
 
@@ -101,7 +98,6 @@ export function saveGeneratedTestCasesWithIntelligentDedup(
 
         // Skip if already processed in this batch
         if (processedCases.has(exactFingerprint)) {
-          console.log('🧠 Intelligent Dedup - Skipping duplicate within batch:', incomingCase.testCase?.substring(0, 30))
           result.skipped++
           continue
         }
@@ -112,10 +108,6 @@ export function saveGeneratedTestCasesWithIntelligentDedup(
         )
 
         if (exactDuplicate) {
-          console.log('🧠 Intelligent Dedup - Found exact duplicate:', {
-            incoming: incomingCase.testCase?.substring(0, 30),
-            existing: exactDuplicate.testCase?.substring(0, 30)
-          })
           result.exactDuplicates++
           result.duplicateSignatures.push(exactFingerprint)
           processedCases.add(exactFingerprint)
@@ -128,13 +120,6 @@ export function saveGeneratedTestCasesWithIntelligentDedup(
         if (similarCases.length > 0) {
           const bestMatch = similarCases[0]
           const recommendation = getRecommendedAction(bestMatch.similarity.score)
-
-          console.log('🧠 Intelligent Dedup - Found similar case:', {
-            incoming: incomingCase.testCase?.substring(0, 30),
-            existing: bestMatch.testCase.testCase?.substring(0, 30),
-            similarity: Math.round(bestMatch.similarity.score * 100) + '%',
-            action: recommendation.action
-          })
 
           if (recommendation.action === 'auto_merge' && isSafeMerge(bestMatch.testCase, incomingCase)) {
             // Perform automatic merge
@@ -156,7 +141,7 @@ export function saveGeneratedTestCasesWithIntelligentDedup(
             if (updated) {
               localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
               result.autoMerged++
-              console.log('✅ Auto-merged case:', mergeResult.mergedCase.testCase?.substring(0, 30))
+
             }
 
           } else if (recommendation.action === 'review_merge') {
@@ -199,7 +184,7 @@ export function saveGeneratedTestCasesWithIntelligentDedup(
           }
           newTestCases.push(enhancedCase)
           result.saved++
-          console.log('✅ Added new unique case:', incomingCase.testCase?.substring(0, 30))
+
         }
 
         processedCases.add(exactFingerprint)
@@ -219,15 +204,6 @@ export function saveGeneratedTestCasesWithIntelligentDedup(
     } else {
       result.sessionId = continueSessionId || 'no-new-cases'
     }
-
-    console.log('🧠 Intelligent Dedup - Processing completed:', {
-      total: testCases.length,
-      saved: result.saved,
-      exactDuplicates: result.exactDuplicates,
-      autoMerged: result.autoMerged,
-      reviewRequired: result.reviewRequired,
-      skipped: result.skipped
-    })
 
     return result
 
@@ -258,7 +234,6 @@ export function saveGeneratedTestCases(
   skipDuplicates: boolean = true
 ): SaveResult {
   try {
-    console.log('🔍 Storage Debug - Starting save for', testCases.length, 'test cases, skipDuplicates:', skipDuplicates)
 
     let newTestCases: TestCase[] = []
     let duplicateSignatures: string[] = []
@@ -278,8 +253,6 @@ export function saveGeneratedTestCases(
         }
       })
 
-      console.log('🔍 Storage Debug - Found', existingSignatures.size, 'existing signatures in project')
-
       // Track signature collision patterns
       const incomingSignatures = new Set<string>()
       const duplicatesWithinBatch = new Set<string>()
@@ -289,10 +262,6 @@ export function saveGeneratedTestCases(
         const signature = getTestCaseSignature(testCase)
         if (incomingSignatures.has(signature)) {
           duplicatesWithinBatch.add(signature)
-          console.log('⚠️ Storage Debug - Duplicate within batch:', {
-            signature: signature.substring(0, 16) + '...',
-            title: testCase.title || testCase.testCase
-          })
         } else {
           incomingSignatures.add(signature)
         }
@@ -303,19 +272,9 @@ export function saveGeneratedTestCases(
         const signature = getTestCaseSignature(testCase)
 
         if (existingSignatures.has(signature)) {
-          console.log('🚫 Storage Debug - Skipping duplicate (exists in storage):', {
-            id: testCase.id,
-            title: testCase.title || testCase.testCase,
-            signature: signature.substring(0, 16) + '...'
-          })
           duplicateSignatures.push(signature)
           skipped++
         } else {
-          console.log('✅ Storage Debug - Importing new test case:', {
-            id: testCase.id,
-            title: testCase.title || testCase.testCase,
-            signature: signature.substring(0, 16) + '...'
-          })
           // Compute SimHash for soft deduplication
           const simhash = buildTestCaseSimhash(testCase)
 
@@ -346,7 +305,7 @@ export function saveGeneratedTestCases(
         })
 
         // Auto-bypass duplicate detection if the rate is too high
-        console.log('🔄 Auto-fixing: Importing all test cases without duplicate detection...')
+        
         newTestCases = []
         skipped = 0
         duplicateSignatures = []
@@ -367,11 +326,10 @@ export function saveGeneratedTestCases(
           })
         })
 
-        console.log('✅ Auto-fix completed: Imported all', newTestCases.length, 'test cases')
       }
     } else {
       // Skip duplicate detection - import all test cases
-      console.log('🔥 Storage Debug - Bypassing duplicate detection, importing all test cases')
+      
       newTestCases = testCases.map(testCase => {
         const signature = getTestCaseSignature(testCase)
         const simhash = buildTestCaseSimhash(testCase)
@@ -388,7 +346,7 @@ export function saveGeneratedTestCases(
           }
         }
       })
-      console.log('✅ Storage Debug - Added all', newTestCases.length, 'test cases without duplicate checking')
+      
     }
     
     // Only create/update session if we have new test cases
@@ -412,10 +370,10 @@ export function saveGeneratedTestCases(
           const updatedSessions = [existingSession, ...existingSessions.filter((_, i) => i !== existingSessionIndex)]
           
           localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSessions))
-          console.log('✅ Storage Debug - Appended to existing session:', { sessionId, added: newTestCases.length, totalInSession: existingSession.totalCount })
+          
         } else {
           // Session not found, create new one
-          console.log('⚠️ Requested session not found, creating new session')
+          
           sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
           const session: TestCaseSession = {
             id: sessionId,
@@ -429,7 +387,7 @@ export function saveGeneratedTestCases(
           }
           const updatedSessions = [session, ...existingSessions.slice(0, 9)]
           localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSessions))
-          console.log('✅ Storage Debug - New session created:', { sessionId, saved: newTestCases.length, skipped })
+          
         }
       } else {
         // Create new session
@@ -446,11 +404,11 @@ export function saveGeneratedTestCases(
         }
         const updatedSessions = [session, ...existingSessions.slice(0, 9)]
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSessions))
-        console.log('✅ Storage Debug - New session created:', { sessionId, saved: newTestCases.length, skipped })
+        
       }
     } else {
       sessionId = continueSessionId || 'no-new-cases'
-      console.log('ℹ️ Storage Debug - No new test cases to save, all were duplicates')
+      
     }
     
     return {
@@ -534,7 +492,7 @@ export function deleteTestCasesByIds(testCaseIds: string[]): void {
     })).filter(session => session.testCases.length > 0) // Remove empty sessions
     
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSessions))
-    console.log(`✅ Deleted ${testCaseIds.length} test cases from localStorage`)
+    
   } catch (error) {
     console.error('❌ Failed to delete test cases:', error)
     throw new Error('Failed to delete test cases')
@@ -544,7 +502,7 @@ export function deleteTestCasesByIds(testCaseIds: string[]): void {
 export function clearStoredTestCases(): void {
   try {
     localStorage.removeItem(STORAGE_KEY)
-    console.log('✅ Cleared all stored test cases')
+    
   } catch (error) {
     console.error('❌ Failed to clear stored test cases:', error)
   }
@@ -556,7 +514,7 @@ export function getTestCasesByProjectId(projectId: string): TestCase[] {
   
   sessions.forEach(session => {
     // Filter test cases that belong to this project (either from session or individual test case projectId)
-    const matchingTestCases = session.testCases.filter(tc => 
+    const matchingTestCases = session.testCases.filter(tc =>
       tc.projectId === projectId || session.projectId === projectId
     )
     testCasesForProject.push(...matchingTestCases)
@@ -635,8 +593,7 @@ export function cleanupDuplicateTestCaseIds(): void {
     })
     
     if (hasDuplicates) {
-      console.log('🔍 Found duplicate test case IDs:', Array.from(duplicateIds))
-      
+
       // Regenerate IDs for test cases with duplicates
       const updatedSessions = sessions.map(session => ({
         ...session,
@@ -645,7 +602,7 @@ export function cleanupDuplicateTestCaseIds(): void {
             const timestamp = Date.now()
             const randomSuffix = Math.random().toString(36).substring(2, 5)
             const newId = `TC-${timestamp}-${randomSuffix}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
-            console.log(`🔄 Regenerating ID: ${tc.id} → ${newId}`)
+            
             return { ...tc, id: newId }
           }
           return tc
@@ -654,9 +611,9 @@ export function cleanupDuplicateTestCaseIds(): void {
       
       // Save updated sessions
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSessions))
-      console.log('✅ Cleaned up duplicate test case IDs')
+      
     } else {
-      console.log('✅ No duplicate test case IDs found')
+      
     }
   } catch (error) {
     console.error('❌ Failed to cleanup duplicate test case IDs:', error)

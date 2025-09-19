@@ -109,25 +109,11 @@ export function TestCaseImporter({ onImport, onClose, defaultProject }: TestCase
   }
 
   const handleFile = async (file: File) => {
-    console.log('📁 File Handler - File selected', {
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      lastModified: new Date(file.lastModified)
-    })
 
     const validTypes = ['text/csv', 'application/json', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', '.csv', '.json', '.xlsx', '.xls']
     const isValid = validTypes.some(type =>
       file.type === type || file.name.toLowerCase().endsWith(type.replace('.', ''))
     )
-
-    console.log('📁 File Handler - File validation', {
-      isValid,
-      detectedType: file.type,
-      validTypes: validTypes.filter(type =>
-        file.type === type || file.name.toLowerCase().endsWith(type.replace('.', ''))
-      )
-    })
 
     if (!isValid) {
       console.error('❌ File Handler - Invalid file type')
@@ -147,18 +133,11 @@ export function TestCaseImporter({ onImport, onClose, defaultProject }: TestCase
       console.log('📁 File Handler - Excel file detected, analyzing sheets...')
       try {
         const sheets = await getExcelSheetInfo(file)
-        console.log('📁 File Handler - Sheet analysis completed', {
-          totalSheets: sheets.length,
-          sheetNames: sheets.map(s => s.name)
-        })
+        
         setExcelSheets(sheets)
 
         // Filter to show only likely test case sheets first
         const testCaseSheets = sheets.filter(sheet => sheet.isTestCaseSheet)
-        console.log('📁 File Handler - Test case sheet detection', {
-          testCaseSheets: testCaseSheets.map(s => s.name),
-          nonTestCaseSheets: sheets.filter(s => !s.isTestCaseSheet).map(s => s.name)
-        })
 
         if (testCaseSheets.length === 1 && sheets.length > 1) {
           // Auto-select the only test case sheet if there are other non-test-case sheets
@@ -247,7 +226,6 @@ export function TestCaseImporter({ onImport, onClose, defaultProject }: TestCase
 
   const handleConfirmImport = async () => {
     if (importResult?.testCases) {
-      console.log('🧠 Starting intelligent import with mode:', deduplicationMode)
 
       try {
         // Use intelligent deduplication
@@ -288,7 +266,7 @@ Total processed: ${importResult.testCases.length} test cases`
         const duplicateRate = result.exactDuplicates / importResult.testCases.length
 
         if (duplicateRate > 0.5 && importResult.testCases.length > 10) {
-          console.log('🚨 High duplicate rate detected, suggesting AI analysis...')
+          
           const useAI = confirm('High duplicate rate detected. Would you like AI analysis to help optimize the import?')
           if (useAI) {
             await runAIAnalysis()
@@ -753,13 +731,11 @@ Total processed: ${importResult.testCases.length} test cases`
           <MergeReviewModal
             conflicts={mergeConflicts}
             onResolve={(resolutions) => {
-              console.log('🔄 Processing merge resolutions:', resolutions)
 
               // Apply the resolutions and complete import
               resolutions.forEach(resolution => {
                 if (resolution.action === 'merge' && resolution.mergedCase) {
                   // The merge was already applied in the intelligent dedup function
-                  console.log('✅ Merge applied:', resolution.mergedCase.testCase?.substring(0, 30))
                 }
                 // Other actions (keep_both, skip) are handled automatically
               })

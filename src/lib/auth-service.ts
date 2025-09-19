@@ -20,7 +20,7 @@ const DEMO_USERS: (User & { password: string })[] = [
     id: '1',
     username: 'admin',
     email: 'admin@yopmail.com',
-    password: 'Orion888!',
+    password: 'Password888!',
     role: 'super-admin',
     name: 'System Administrator'
   },

@@ -104,10 +104,6 @@ function chooseBetterStatus(baseStatus?: string, incomingStatus?: string): strin
  * Merge two test cases intelligently
  */
 export function mergeTestCases(baseCase: TestCase, incomingCase: TestCase): MergeResult {
-  console.log('🔄 Merging test cases:', {
-    base: baseCase.testCase?.substring(0, 30),
-    incoming: incomingCase.testCase?.substring(0, 30)
-  });
 
   const changes = {
     fieldsModified: [] as string[],
@@ -235,14 +231,6 @@ export function mergeTestCases(baseCase: TestCase, incomingCase: TestCase): Merg
   const newStepCount = mergedCase.testSteps?.length || 0;
   changes.stepsAdded = Math.max(0, newStepCount - originalStepCount);
 
-  console.log('🔄 Merge completed:', {
-    originalSteps: originalStepCount,
-    newSteps: newStepCount,
-    stepsAdded: changes.stepsAdded,
-    priorityChanged: changes.priorityChanged,
-    statusChanged: changes.statusChanged,
-    conflictsFound: conflicts.length
-  });
 
   return {
     mergedCase,

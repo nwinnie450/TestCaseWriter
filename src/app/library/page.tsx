@@ -97,12 +97,6 @@ export default function TestCaseManagement() {
   const [activeDocId, setActiveDocId] = useState<string | null>(null)
   const [isFromGenerate, setIsFromGenerate] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showDebugPanel, setShowDebugPanel] = useState(true) // Debug panel - remove later
-  const [debugInfo, setDebugInfo] = useState({
-    signatures: new Map(),
-    duplicates: [],
-    signatureCollisions: []
-  })
   const [newTestCase, setNewTestCase] = useState({
     title: '',
     description: '',
@@ -192,55 +186,9 @@ export default function TestCaseManagement() {
         setTestCases(storedTestCases)
         setStorageStats(stats)
 
-        // Debug: Analyze signatures and duplicates
-        const signatureMap = new Map()
-        const duplicates = []
-        const signatureCollisions = []
-
-        storedTestCases.forEach((testCase, index) => {
-          try {
-            const signature = getTestCaseSignature(testCase)
-            const shortSig = signature.substring(0, 8)
-
-            if (signatureMap.has(signature)) {
-              const existingCase = signatureMap.get(signature)
-              duplicates.push({
-                signature,
-                shortSig,
-                testCase1: {
-                  id: existingCase.id,
-                  title: existingCase.testCase || existingCase.title || 'No Title'
-                },
-                testCase2: {
-                  id: testCase.id,
-                  title: testCase.testCase || testCase.title || 'No Title'
-                }
-              })
-              signatureCollisions.push(signature)
-            } else {
-              signatureMap.set(signature, testCase)
-            }
-          } catch (error) {
-            console.error('Debug signature error for test case:', testCase.id, error)
-          }
-        })
-
-        setDebugInfo({
-          signatures: signatureMap,
-          duplicates,
-          signatureCollisions
-        })
-
-        console.log('🔍 Debug Analysis:', {
-          totalTestCases: storedTestCases.length,
-          uniqueSignatures: signatureMap.size,
-          duplicateGroups: duplicates.length,
-          collisionSignatures: signatureCollisions.length
-        })
 
         setLoading(false)
 
-        console.log('✅ Loaded test cases:', { count: storedTestCases.length, stats })
       } catch (error) {
         console.error('❌ Failed to load test cases:', error)
         setLoading(false)
@@ -256,9 +204,7 @@ export default function TestCaseManagement() {
       const urlParams = new URLSearchParams(window.location.search)
       const projectParam = urlParams.get('project')
       const viewParam = urlParams.get('view')
-      
-      console.log('🔍 Library - URL params:', { projectParam, viewParam })
-      
+
       if (projectParam) {
         setSelectedProjectFilter(projectParam)
       }
@@ -273,24 +219,21 @@ export default function TestCaseManagement() {
   // Load projects from localStorage
   useEffect(() => {
     try {
-      console.log('🔍 Projects Debug - Loading projects from localStorage...')
-      const stored = localStorage.getItem('testCaseWriter_projects')
-      console.log('🔍 Projects Debug - Raw stored data:', stored)
       
+      const stored = localStorage.getItem('testCaseWriter_projects')
+
       if (stored) {
         const parsedProjects = JSON.parse(stored)
-        console.log('🔍 Projects Debug - Parsed projects:', parsedProjects)
-        
+
         const activeProjects = parsedProjects.filter((p: any) => p.status === 'active')
-        console.log('🔍 Projects Debug - Active projects:', activeProjects)
-        
+
         setProjects(activeProjects)
       } else {
-        console.log('🔍 Projects Debug - No projects found in localStorage')
+        
         setProjects([])
       }
     } catch (error) {
-      console.error('🔍 Projects Debug - Failed to load projects:', error)
+      console.error('Failed to load projects:', error)
       setProjects([])
     }
   }, [])
@@ -357,25 +300,12 @@ export default function TestCaseManagement() {
     }
   }, [testCases, selectedProjectFilter])
 
-  // Debug logging for groupBy changes
   useEffect(() => {
-    console.log('🔍 Group Debug - Group by changed:', { 
-      groupBy, 
-      filteredTestCasesCount: filteredTestCases.length,
-      testCasesCount: testCases.length,
-      isDataGridVisible: groupBy === 'none'
-    })
+    
   }, [groupBy, filteredTestCases])
 
-  // Debug logging for filter state changes
   useEffect(() => {
-    console.log('🔍 Filter State Debug:', {
-      selectedProjectFilter,
-      groupBy,
-      testCasesCount: testCases.length,
-      filteredTestCasesCount: filteredTestCases.length,
-      projectsCount: projects.length
-    })
+    
   }, [selectedProjectFilter, groupBy, testCases, filteredTestCases, projects])
 
   // Check if there are chunks available for coverage analysis
@@ -456,10 +386,7 @@ export default function TestCaseManagement() {
   }
 
   const handleDelete = async (testCaseIds: string[]) => {
-    console.log('🔍 Delete Debug - Received IDs:', testCaseIds)
-    console.log('🔍 Delete Debug - Current selectedIds state:', selectedIds)
-    console.log('🔍 Delete Debug - Total test cases:', testCases.length)
-    
+
     if (testCaseIds.length === 0) {
       alert('Please select test cases to delete')
       return
@@ -469,7 +396,7 @@ export default function TestCaseManagement() {
     if (testCaseIds.length === testCases.length) {
       const confirmed = confirm(`⚠️ WARNING: You're about to delete ALL ${testCaseIds.length} test cases! This will remove everything. Are you absolutely sure?`)
       if (!confirmed) {
-        console.log('🚫 Bulk delete cancelled by user')
+        
         return
       }
     }
@@ -478,7 +405,7 @@ export default function TestCaseManagement() {
     if (testCaseIds.length > testCases.length * 0.8) {
       const confirmed = confirm(`⚠️ CAUTION: You're about to delete ${testCaseIds.length} out of ${testCases.length} test cases (${Math.round(testCaseIds.length/testCases.length*100)}%). This will remove most of your test cases. Are you sure?`)
       if (!confirmed) {
-        console.log('🚫 Large deletion cancelled by user')
+        
         return
       }
     }
@@ -496,9 +423,7 @@ export default function TestCaseManagement() {
         // Refresh the UI by reloading test cases from storage
         const updatedTestCases = getAllStoredTestCases()
         const updatedStats = getStorageStats()
-        
-        console.log('✅ After deletion - Remaining test cases:', updatedTestCases.length)
-        
+
         setTestCases(updatedTestCases)
         setStorageStats(updatedStats)
         setSelectedIds([]) // Clear selection
@@ -645,7 +570,6 @@ export default function TestCaseManagement() {
     }
   }
 
-
   const handleGenerateAI = () => {
     console.log('Generate with AI')
     // Navigate to generate page and continue with existing session if available
@@ -661,18 +585,11 @@ export default function TestCaseManagement() {
 
   const handleImportTestCases = async (importedTestCases: TestCase[], options: any) => {
     try {
-      console.log('🔄 Import Handler - Starting import of', importedTestCases.length, 'test cases')
 
       // If a project is selected, assign it to all imported test cases
       const testCasesToSave = selectedProjectFilter
         ? importedTestCases.map(tc => ({ ...tc, projectId: selectedProjectFilter }))
         : importedTestCases
-
-      console.log('🔄 Import Handler - Prepared test cases with project assignment:', {
-        originalCount: importedTestCases.length,
-        projectFilter: selectedProjectFilter,
-        sampleTestCase: testCasesToSave[0]?.title
-      })
 
       // Use the proper storage system to save imported test cases
       const { saveGeneratedTestCases } = await import('@/lib/test-case-storage')
@@ -687,19 +604,12 @@ export default function TestCaseManagement() {
         options.skipDuplicates !== false // skipDuplicates (default to true if not specified)
       )
 
-      console.log('🔄 Import Handler - Save result:', saveResult)
-
       setShowImportModal(false)
 
       // Refresh the page data
       const { getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
       const refreshedTestCases = getAllStoredTestCases()
       const refreshedStats = getStorageStats()
-
-      console.log('🔄 Import Handler - Refreshed data:', {
-        testCasesCount: refreshedTestCases.length,
-        storageStats: refreshedStats
-      })
 
       setTestCases(refreshedTestCases)
       setStorageStats(refreshedStats)
@@ -1053,7 +963,6 @@ export default function TestCaseManagement() {
         setProjects(currentProjects)
         setSelectedProjectFilter(currentProjectFilter)
 
-        console.log('✅ Test cases cleared, projects preserved:', currentProjects.length)
         alert('✅ All stored test cases have been cleared! Projects are preserved.')
       } catch (error) {
         console.error('Failed to clear storage:', error)
@@ -1061,7 +970,6 @@ export default function TestCaseManagement() {
       }
     }
   }
-
 
   const actions = (
     <div className="flex items-center space-x-3">
@@ -1259,80 +1167,6 @@ export default function TestCaseManagement() {
           </Card>
         </div>
 
-        {/* Debug Panel - Remove Later */}
-        {showDebugPanel && (
-          <Card className="border-2 border-yellow-300 bg-yellow-50">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between text-yellow-800">
-                <div className="flex items-center space-x-2">
-                  <AlertTriangle className="h-5 w-5" />
-                  <span>🔍 Debug Panel - Signature Analysis</span>
-                </div>
-                <Button
-                  onClick={() => setShowDebugPanel(false)}
-                  variant="ghost"
-                  size="sm"
-                  className="text-yellow-600 hover:text-yellow-800"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-3 rounded border">
-                  <div className="text-sm font-medium text-gray-700">Total Test Cases</div>
-                  <div className="text-xl font-bold text-blue-600">{testCases.length}</div>
-                </div>
-                <div className="bg-white p-3 rounded border">
-                  <div className="text-sm font-medium text-gray-700">Unique Signatures</div>
-                  <div className="text-xl font-bold text-green-600">{debugInfo.signatures.size}</div>
-                </div>
-                <div className="bg-white p-3 rounded border">
-                  <div className="text-sm font-medium text-gray-700">Duplicate Groups</div>
-                  <div className="text-xl font-bold text-red-600">{debugInfo.duplicates.length}</div>
-                </div>
-                <div className="bg-white p-3 rounded border">
-                  <div className="text-sm font-medium text-gray-700">Collision Rate</div>
-                  <div className="text-xl font-bold text-orange-600">
-                    {testCases.length > 0 ? Math.round((debugInfo.duplicates.length / testCases.length) * 100) : 0}%
-                  </div>
-                </div>
-              </div>
-
-              {debugInfo.duplicates.length > 0 && (
-                <div className="bg-white p-4 rounded border">
-                  <h4 className="font-medium text-red-700 mb-2">⚠️ Signature Collisions Detected:</h4>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {debugInfo.duplicates.slice(0, 10).map((duplicate, index) => (
-                      <div key={index} className="text-xs bg-red-50 p-2 rounded border-l-4 border-red-200">
-                        <div className="font-mono text-red-600">Signature: {duplicate.shortSig}...</div>
-                        <div className="text-gray-700">
-                          <span className="font-medium">1:</span> {duplicate.testCase1.title.substring(0, 50)}...
-                        </div>
-                        <div className="text-gray-700">
-                          <span className="font-medium">2:</span> {duplicate.testCase2.title.substring(0, 50)}...
-                        </div>
-                      </div>
-                    ))}
-                    {debugInfo.duplicates.length > 10 && (
-                      <div className="text-xs text-gray-500 italic">
-                        ...and {debugInfo.duplicates.length - 10} more duplicates
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {debugInfo.duplicates.length === 0 && (
-                <div className="bg-green-50 p-4 rounded border border-green-200">
-                  <div className="text-green-700 font-medium">✅ No signature collisions detected!</div>
-                  <div className="text-green-600 text-sm">All test cases have unique signatures.</div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {/* Execution Dashboard */}
         {viewMode === 'execution' && (
@@ -1494,15 +1328,8 @@ export default function TestCaseManagement() {
                 <select
                   value={selectedProjectFilter}
                   onChange={(e) => {
-                    console.log('🟡 Project Filter Clicked/Changed:', { 
-                      oldValue: selectedProjectFilter, 
-                      newValue: e.target.value,
-                      projectsCount: projects.length,
-                      projects: projects.map(p => ({ id: p.id, name: p.name }))
-                    })
                     setSelectedProjectFilter(e.target.value)
                   }}
-                  onClick={() => console.log('🟡 Project Filter Select Clicked')}
                   className="input w-full md:w-64"
                 >
                   <option value="">All Projects</option>
@@ -1618,11 +1445,7 @@ export default function TestCaseManagement() {
                   <select 
                     value={groupBy} 
                     onChange={(e) => {
-                      console.log('🟡 Group By Clicked/Changed:', { 
-                        oldValue: groupBy, 
-                        newValue: e.target.value,
-                        currentFilteredCount: filteredTestCases.length
-                      })
+                      
                       setGroupBy(e.target.value)
                     }}
                     onClick={() => console.log('🟡 Group By Select Clicked')}
@@ -1810,7 +1633,6 @@ export default function TestCaseManagement() {
         selectedTestCases={filteredTestCases.filter(tc => selectedIds.includes(tc.id))}
         onSave={handleBulkSave}
       />
-
 
       {/* Version History Modal */}
       {selectedVersionTestCase && (
