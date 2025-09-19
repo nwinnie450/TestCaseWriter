@@ -128,3 +128,5 @@ sample-test-cases.csv
 !src/lib/auth/**
 !src/app/auth/
 !src/app/auth/**
+
+/generated/prisma

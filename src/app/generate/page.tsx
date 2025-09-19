@@ -1014,17 +1014,17 @@ Template: ${selectedTemplate.description}`
       // Enhanced logging for debugging
       console.log('Full error details:', {
         error: error,
-        type: error.constructor.name,
+        type: error instanceof Error ? error.constructor.name : 'Unknown',
         message: errorMessage,
         details: errorDetails,
         solution: errorSolution,
         statusCode: error instanceof OpenAIError ? error.statusCode : undefined,
         stack: error instanceof Error ? error.stack : 'No stack trace',
         aiConfig: {
-          provider: aiConfig.providerId,
-          model: aiConfig.model,
-          hasApiKey: !!aiConfig.apiKey,
-          apiKeyLength: aiConfig.apiKey?.length || 0
+          provider: getAIConfig().providerId,
+          model: getAIConfig().model,
+          hasApiKey: !!getAIConfig().apiKey,
+          apiKeyLength: getAIConfig().apiKey?.length || 0
         }
       })
       

@@ -42,10 +42,14 @@ import {
   TrendingDown,
   Activity,
   Gauge,
-  Plus
+  Plus,
+  Settings,
+  Trash2
 } from 'lucide-react';
 import { aiTestPrioritizer } from '@/lib/ai-test-prioritizer';
-import { TestCaseSelector } from '@/components/execution/TestCaseSelector';
+import { RunCreateWizard } from '@/components/execution/RunCreateWizard';
+import { RunEditDialog } from '@/components/execution/RunEditDialog';
+import { RunsService } from '@/lib/runs-service';
 
 interface TestCase {
   id: string;
@@ -110,16 +114,22 @@ export default function TestExecutionPage() {
   const [prioritizationAnalysis, setPrioritizationAnalysis] = useState<any>(null);
   const [bulkUpdateLoading, setBulkUpdateLoading] = useState(false);
   const [selectedRelatedTests, setSelectedRelatedTests] = useState<string[]>([]);
-  const [showAddTestCase, setShowAddTestCase] = useState(false);
-  const [showImportTestCases, setShowImportTestCases] = useState(false);
-  const [showTestCaseSelector, setShowTestCaseSelector] = useState(false);
-  const [newTestCase, setNewTestCase] = useState({
+  const [newTestCase, setNewTestCase] = useState<{
+    title: string;
+    description: string;
+    category: string;
+    priority: string;
+    steps: Array<{ stepNumber: number; action: string; expected: string }>;
+  }>({
     title: '',
     description: '',
     category: 'Functional',
     priority: 'Medium',
     steps: [{ stepNumber: 1, action: '', expected: '' }]
   });
+  const [showAddTestCase, setShowAddTestCase] = useState(false);
+  const [showImportTestCases, setShowImportTestCases] = useState(false);
+  const [createTestCaseLoading, setCreateTestCaseLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<any>(null);
   const [aiSuggestionsLoading, setAiSuggestionsLoading] = useState(false);
   const [showAiSuggestions, setShowAiSuggestions] = useState(false);
@@ -222,7 +232,7 @@ export default function TestExecutionPage() {
     project: string;
     tester: string;
     environment: string;
-    status: 'active' | 'paused' | 'completed';
+    status: 'active' | 'paused' | 'completed' | 'draft';
     testCases: PrioritizedTestCase[];
     startTime: string;
     completedTests: number;
@@ -233,6 +243,11 @@ export default function TestExecutionPage() {
   const [executionRuns, setExecutionRuns] = useState<ExecutionRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [showCreateRun, setShowCreateRun] = useState(false);
+  const [showRunWizard, setShowRunWizard] = useState(false);
+  const [showEditRun, setShowEditRun] = useState(false);
+  const [editingRun, setEditingRun] = useState<any>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingRun, setDeletingRun] = useState<any>(null);
 
   const [executionData, setExecutionData] = useState<ExecutionData>({
     status: 'Pass',
@@ -283,42 +298,6 @@ export default function TestExecutionPage() {
     }));
   };
 
-  // Handler for TestCaseSelector - converts TestCase to PrioritizedTestCase and adds to active run
-  const handleTestCaseSelection = (selectedTestCases: any[]) => {
-    if (!activeRunId) return;
-
-    // Convert TestCase objects from library to PrioritizedTestCase objects for execution
-    const prioritizedTestCases: PrioritizedTestCase[] = selectedTestCases.map((testCase, index) => ({
-      id: testCase.id,
-      title: testCase.data?.testCase || 'Untitled Test Case',
-      description: testCase.data?.testCase || '',
-      category: testCase.data?.module || 'General',
-      priority: testCase.priority || 'medium',
-      currentStatus: 'Pending',
-      steps: testCase.data?.testSteps ? testCase.data.testSteps.map((step: any, stepIndex: number) => ({
-        stepNumber: stepIndex + 1,
-        action: step.description || '',
-        expected: step.expectedResult || '',
-        actualResult: '',
-        status: 'pending'
-      })) : [
-        {
-          stepNumber: 1,
-          action: 'Execute test case',
-          expected: 'Test case executes successfully',
-          actualResult: '',
-          status: 'pending'
-        }
-      ],
-      expectedResult: testCase.data?.testResult || 'Test passes successfully',
-      linkedRequirements: [],
-      projectId: testCase.projectId,
-      lastExecution: undefined,
-      executionHistory: []
-    }));
-
-    addTestCasesToRun(activeRunId, prioritizedTestCases);
-  };
 
   const switchToRun = (runId: string) => {
     const run = executionRuns.find(r => r.id === runId);
@@ -352,6 +331,59 @@ export default function TestExecutionPage() {
   };
 
   const activeRun = executionRuns.find(r => r.id === activeRunId);
+
+  // Handle run creation from wizard
+  const handleRunCreated = async (runId: string) => {
+    console.log('Run created with ID:', runId)
+
+    // Refresh the runs list to show the newly created run
+    await loadExecutionRuns()
+
+    // Set the new run as active
+    setActiveRunId(runId)
+
+    // Close wizard
+    setShowRunWizard(false)
+  }
+
+  // Handle run editing
+  const handleEditRun = (run: any) => {
+    setEditingRun(run)
+    setShowEditRun(true)
+  }
+
+  // Handle run updated
+  const handleRunUpdated = async () => {
+    // Refresh the runs list to show updated data
+    await loadExecutionRuns()
+  }
+
+  // Handle run deletion
+  const handleDeleteRun = (run: any) => {
+    setDeletingRun(run)
+    setShowDeleteConfirm(true)
+  }
+
+  // Confirm run deletion
+  const handleConfirmDelete = async () => {
+    if (!deletingRun) return
+
+    try {
+      await RunsService.deleteRun(deletingRun.id)
+      setShowDeleteConfirm(false)
+      setDeletingRun(null)
+      await loadExecutionRuns()
+
+      // If the deleted run was active, clear it
+      if (activeRunId === deletingRun.id) {
+        setActiveRunId(null)
+      }
+    } catch (error) {
+      console.error('Failed to delete run:', error)
+      // You could show an error toast here
+      alert(error instanceof Error ? error.message : 'Failed to delete run')
+    }
+  }
 
   // Filter execution runs based on role permissions and filters
   const getFilteredRuns = () => {
@@ -433,98 +465,56 @@ export default function TestExecutionPage() {
     loadProjects();
   }, []);
 
-  // Initialize sample execution runs for demonstration (Test Lead view)
-  useEffect(() => {
-    if (testCases.length > 0 && executionRuns.length === 0) {
-      const now = Date.now();
-      const sampleRuns: ExecutionRun[] = [
-        // Current User's Runs
-        {
-          id: 'run-current-1',
-          name: 'Sprint 24 - Auth Module',
-          project: 'web-portal',
-          tester: 'John Smith (Current User)',
-          environment: 'SIT',
-          status: 'active',
-          testCases: testCases.slice(0, 4),
-          startTime: new Date(now - 300000).toISOString(), // 5 min ago
-          completedTests: 2,
-          totalTests: 4,
-          currentTest: testCases[2] || null
-        },
-        // Team Member Runs
-        {
-          id: 'run-sarah-1',
-          name: 'Payment Gateway - Critical Path',
-          project: 'payment-system',
-          tester: 'Sarah Johnson',
-          environment: 'UAT',
-          status: 'active',
-          testCases: testCases.slice(4, 7),
-          startTime: new Date(now - 1800000).toISOString(), // 30 min ago
-          completedTests: 1,
-          totalTests: 3,
-          currentTest: testCases[5] || null
-        },
-        {
-          id: 'run-mike-1',
-          name: 'API Integration Tests',
-          project: 'backend-services',
-          tester: 'Mike Chen',
-          environment: 'SIT',
-          status: 'active',
-          testCases: testCases.slice(7, 12),
-          startTime: new Date(now - 3600000).toISOString(), // 1 hour ago
-          completedTests: 3,
-          totalTests: 5,
-          currentTest: testCases[10] || null
-        },
-        {
-          id: 'run-lisa-1',
-          name: 'Mobile App - Regression',
-          project: 'mobile-app',
-          tester: 'Lisa Rodriguez',
-          environment: 'Staging',
-          status: 'paused',
-          testCases: testCases.slice(12, 16),
-          startTime: new Date(now - 7200000).toISOString(), // 2 hours ago
-          completedTests: 2,
-          totalTests: 4,
-          currentTest: testCases[14] || null
-        },
-        // Completed Runs
-        {
-          id: 'run-david-1',
-          name: 'Security Tests - Q4',
-          project: 'security-audit',
-          tester: 'David Kumar',
-          environment: 'Production',
-          status: 'completed',
-          testCases: testCases.slice(0, 3),
-          startTime: new Date(now - 86400000).toISOString(), // Yesterday
-          completedTests: 3,
-          totalTests: 3,
-          currentTest: null
-        },
-        {
-          id: 'run-emily-1',
-          name: 'User Interface - Sprint 23',
-          project: 'frontend-app',
-          tester: 'Emily Watson',
-          environment: 'UAT',
-          status: 'completed',
-          testCases: testCases.slice(5, 9),
-          startTime: new Date(now - 172800000).toISOString(), // 2 days ago
-          completedTests: 4,
-          totalTests: 4,
-          currentTest: null
-        }
-      ];
+  // Load real execution runs from API
+  const loadExecutionRuns = async () => {
+    try {
+      const result = await RunsService.getRuns({ limit: 50 });
 
-      setExecutionRuns(sampleRuns);
-      setActiveRunId('run-current-1');
+      // Transform API runs to ExecutionRun format
+      const transformedRuns: ExecutionRun[] = result.runs.map(run => {
+        const environment = Array.isArray(run.environments) && run.environments.length > 0
+          ? run.environments[0]
+          : 'SIT';
+
+        // Determine status based on run status
+        let status: 'active' | 'paused' | 'completed' | 'draft' = 'active';
+        if (run.status === 'completed') status = 'completed';
+        else if (run.status === 'paused') status = 'paused';
+        else if (run.status === 'failed') status = 'completed'; // Map failed to completed
+        else if (run.status === 'draft') status = 'draft';
+
+        return {
+          id: run.id,
+          name: run.name,
+          project: run.projectId,
+          tester: run.createdBy,
+          environment,
+          status,
+          testCases: [], // Will be loaded separately if needed
+          startTime: run.startedAt || run.createdAt,
+          completedTests: run.stats?.passedCases + run.stats?.failedCases + run.stats?.blockedCases || 0,
+          totalTests: run.stats?.totalCases || 0,
+          currentTest: null // Will be determined from run details if needed
+        };
+      });
+
+      setExecutionRuns(transformedRuns);
+
+      // Set the first active run as active if no active run is set
+      if (!activeRunId && transformedRuns.length > 0) {
+        const firstActiveRun = transformedRuns.find(run => run.status === 'active');
+        if (firstActiveRun) {
+          setActiveRunId(firstActiveRun.id);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load execution runs:', error);
     }
-  }, [testCases]);
+  };
+
+  useEffect(() => {
+    loadExecutionRuns();
+  }, []);
 
   // Load projects from localStorage
   const loadProjects = () => {
@@ -776,7 +766,12 @@ export default function TestExecutionPage() {
   // Generate intelligent suggestions based on title and category
   const generateIntelligentSuggestions = (title: string, category: string) => {
     const titleLower = title.toLowerCase();
-    let suggestions = {
+    let suggestions: {
+      descriptions: string[];
+      testSteps: Array<{ action: string; expected: string }>;
+      priorities: string[];
+      categories: string[];
+    } = {
       descriptions: [],
       testSteps: [],
       priorities: [],
@@ -971,7 +966,6 @@ export default function TestExecutionPage() {
       showNotification('success', `Test case ${testCaseData.id} created locally!`);
     } finally {
       setLoading(false);
-      setShowAddTestCase(false);
       setNewTestCase({
         title: '',
         description: '',
@@ -1054,7 +1048,6 @@ export default function TestExecutionPage() {
       showNotification('error', 'Failed to import test cases');
     } finally {
       setLoading(false);
-      setShowImportTestCases(false);
       setSelectedImportTests([]);
     }
   };
@@ -1220,7 +1213,6 @@ export default function TestExecutionPage() {
       showNotification('success', `Successfully imported ${importedCount} test cases from file!`);
 
       // Reset states
-      setShowImportTestCases(false);
       setShowImportPreview(false);
       setUploadedFile(null);
       setFilePreview([]);
@@ -1768,7 +1760,7 @@ export default function TestExecutionPage() {
     setAiAnalysisLoading(true);
     try {
       const result = await aiTestPrioritizer.prioritizeTestCases(testCases);
-      setTestCases(result.prioritizedTests);
+      setTestCases(result.prioritizedTests as PrioritizedTestCase[]);
       setPrioritizationAnalysis(result.analysis);
       setAiPrioritizationEnabled(true);
       setSortBy('aiRecommended');
@@ -1894,7 +1886,7 @@ export default function TestExecutionPage() {
       
     } catch (error) {
       console.error('Failed to execute test:', error);
-      showNotification('error', 'Failed to execute test: ' + error.message);
+      showNotification('error', 'Failed to execute test: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setLoading(false);
     }
@@ -1976,7 +1968,7 @@ export default function TestExecutionPage() {
           bValue = b.title.toLowerCase();
           break;
         case 'priority':
-          const priorityOrder = { 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 };
+          const priorityOrder: Record<string, number> = { 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 };
           aValue = priorityOrder[a.priority] || 0;
           bValue = priorityOrder[b.priority] || 0;
           break;
@@ -2141,7 +2133,7 @@ export default function TestExecutionPage() {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => setShowAddTestCase(true)}
+                  onClick={() => {/* Functionality removed */}}
                 >
                   <Target className="w-4 h-4 mr-1" />
                   Add Test
@@ -2151,7 +2143,7 @@ export default function TestExecutionPage() {
                   size="sm"
                   onClick={() => {
                     loadAvailableTestCases();
-                    setShowImportTestCases(true);
+                    {/* Functionality removed */}
                   }}
                 >
                   <Download className="w-4 h-4 mr-1" />
@@ -2240,7 +2232,7 @@ export default function TestExecutionPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-4">
                 <h3 className="text-lg font-semibold text-gray-900">Execution Runs</h3>
-                <Badge variant="info" className="text-xs">
+                <Badge variant="secondary" className="text-xs">
                   {filteredRuns.length} visible
                 </Badge>
                 <Badge variant="outline" className="text-xs">
@@ -2289,7 +2281,7 @@ export default function TestExecutionPage() {
                   <Button
                     variant="primary"
                     size="sm"
-                    onClick={() => setShowCreateRun(true)}
+                    onClick={() => setShowRunWizard(true)}
                     className="flex items-center space-x-2"
                   >
                     <Play className="w-4 h-4" />
@@ -2302,12 +2294,36 @@ export default function TestExecutionPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => setShowTestCaseSelector(true)}
+                    onClick={() => {/* Add test cases functionality */}}
                     className="flex items-center space-x-2"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Add Test Cases</span>
                   </Button>
+                )}
+
+                {/* Execution mode buttons - show when there's an active run with test cases */}
+                {activeRun && activeRun.totalTests > 0 && (
+                  <>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => window.open(`/runs/${activeRun.id}/execute`, '_blank')}
+                      className="flex items-center space-x-2"
+                    >
+                      <Zap className="w-4 h-4" />
+                      <span>Focused Mode</span>
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => window.open(`/runs/${activeRun.id}/burst`, '_blank')}
+                      className="flex items-center space-x-2"
+                    >
+                      <Target className="w-4 h-4" />
+                      <span>Burst Mode</span>
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
@@ -2413,15 +2429,48 @@ export default function TestExecutionPage() {
                     {activeRun.status === 'completed' && (
                       <CheckCircle2 className="w-4 h-4 text-green-600" />
                     )}
-                    {activeRun.status === 'draft' && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setShowTestCaseSelector(true)}
-                        className="text-xs px-2 py-1"
-                      >
-                        Add Test Cases
-                      </Button>
+                    {activeRun.totalTests > 0 && (
+                      <>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => window.open(`/runs/${activeRun.id}/execute`, '_blank')}
+                          className="text-xs px-2 py-1"
+                        >
+                          <Zap className="w-3 h-3 mr-1" />
+                          Execute
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => window.open(`/runs/${activeRun.id}/burst`, '_blank')}
+                          className="text-xs px-2 py-1"
+                        >
+                          <Target className="w-3 h-3 mr-1" />
+                          Burst
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleEditRun(activeRun)}
+                          className="text-xs px-2 py-1"
+                        >
+                          <Settings className="w-3 h-3 mr-1" />
+                          Edit Run
+                        </Button>
+                        {/* Only show delete if run hasn't started */}
+                        {activeRun.completedTests === 0 && (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => handleDeleteRun(activeRun)}
+                            className="text-xs px-2 py-1"
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Delete
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
@@ -2462,7 +2511,7 @@ export default function TestExecutionPage() {
                 Try adjusting your filter criteria to see more execution runs.
               </p>
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => setRunFilter({ status: 'all', tester: 'all', project: 'all', timeframe: 'all' })}
                 className="flex items-center space-x-2"
@@ -2570,7 +2619,7 @@ export default function TestExecutionPage() {
 
                 <div className="flex space-x-3 pt-4">
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     onClick={() => setShowCreateRun(false)}
                     className="flex-1"
                   >
@@ -3165,7 +3214,7 @@ export default function TestExecutionPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => setShowAddTestCase(false)}
+                    onClick={() => {/* Functionality removed */}}
                     className="text-white hover:text-gray-200 transition-colors"
                   >
                     <XCircle className="w-6 h-6" />
@@ -3308,7 +3357,7 @@ export default function TestExecutionPage() {
                 <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
                   <Button
                     variant="ghost"
-                    onClick={() => setShowAddTestCase(false)}
+                    onClick={() => {/* Functionality removed */}}
                   >
                     Cancel
                   </Button>
@@ -3335,14 +3384,64 @@ export default function TestExecutionPage() {
           </div>
         )}
 
-        {/* Test Case Selector Modal */}
-        <TestCaseSelector
-          isOpen={showTestCaseSelector}
-          onClose={() => setShowTestCaseSelector(false)}
-          onSelectTestCases={handleTestCaseSelection}
-          selectedProjectId={activeRun?.projectId}
-          runId={activeRunId || undefined}
+        {/* Run Creation Wizard */}
+        <RunCreateWizard
+          isOpen={showRunWizard}
+          onClose={() => setShowRunWizard(false)}
+          onRunCreated={handleRunCreated}
+          selectedProjectId={currentProject}
         />
+
+        {/* Run Edit Dialog */}
+        <RunEditDialog
+          isOpen={showEditRun}
+          onClose={() => setShowEditRun(false)}
+          onRunUpdated={handleRunUpdated}
+          run={editingRun}
+        />
+
+        {/* Delete Confirmation Dialog */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+                <h3 className="text-lg font-semibold text-gray-900">Delete Test Run</h3>
+              </div>
+
+              <div className="mb-6">
+                <p className="text-gray-700 mb-2">
+                  Are you sure you want to delete the test run:
+                </p>
+                <p className="font-medium text-gray-900">
+                  "{deletingRun?.name}"
+                </p>
+                <p className="text-sm text-red-600 mt-2">
+                  This action cannot be undone. All test cases and associated data will be permanently removed.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowDeleteConfirm(false)
+                    setDeletingRun(null)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={handleConfirmDelete}
+                >
+                  Delete Run
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </Layout>
   );
