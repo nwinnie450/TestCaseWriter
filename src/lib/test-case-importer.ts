@@ -7,6 +7,63 @@ export interface ImportResult {
   testCases: TestCase[]
   errors: string[]
   skipped: number
+  auditReport?: ImportAuditReport
+  duplicateDetection?: DuplicateDetectionResult
+}
+
+export interface ImportAuditReport {
+  totalRows: number
+  validRows: number
+  invalidRows: number
+  duplicatesFound: number
+  fieldAnalysis: FieldAnalysis
+  dataQualityIssues: DataQualityIssue[]
+  recommendations: string[]
+  timestamp: string
+}
+
+export interface FieldAnalysis {
+  [fieldName: string]: {
+    coverage: number // percentage of rows with this field populated
+    uniqueValues: number
+    avgLength: number
+    dataTypes: string[]
+    samples: string[]
+  }
+}
+
+export interface DataQualityIssue {
+  type: 'missing_required' | 'invalid_format' | 'duplicate' | 'inconsistent' | 'empty_value'
+  field: string
+  rowIndex: number
+  value: string
+  severity: 'low' | 'medium' | 'high'
+  suggestion: string
+}
+
+export interface DuplicateDetectionResult {
+  exactDuplicates: DuplicateGroup[]
+  similarCases: SimilarGroup[]
+  uniqueCases: TestCase[]
+  deduplicationStats: {
+    originalCount: number
+    duplicatesRemoved: number
+    finalCount: number
+    duplicateRate: number
+  }
+}
+
+export interface DuplicateGroup {
+  signature: string
+  cases: TestCase[]
+  keepCase: TestCase
+  duplicateType: 'exact' | 'title' | 'content'
+}
+
+export interface SimilarGroup {
+  cases: TestCase[]
+  similarityScore: number
+  differences: string[]
 }
 
 export interface ImportOptions {
@@ -15,6 +72,9 @@ export interface ImportOptions {
   defaultProject?: string
   selectedSheet?: string
   existingTestCases?: TestCase[]
+  enableAudit?: boolean
+  deduplicationMode?: 'strict' | 'smart' | 'off'
+  generateAuditCSV?: boolean
 }
 
 export interface ExcelSheetInfo {
@@ -100,7 +160,7 @@ export function mapRowToFEAI94TestCase(rowData: any, options: ImportOptions = {}
     const stepsText = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.steps_description)
     const testData = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.test_data)
     const expectedResult = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.expected_result)
-    const qa = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.qa)
+    const qa = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.qa_owner)
     const remarks = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.remarks)
 
     // Priority and status extraction
@@ -490,6 +550,484 @@ function parseStatusFromVertical(statusString: string): string {
   return 'Not Run'
 }
 
+// Enhanced duplicate detection with multiple strategies
+export function detectDuplicates(testCases: TestCase[], options: ImportOptions = {}): DuplicateDetectionResult {
+  const exactDuplicates: DuplicateGroup[] = []
+  const similarCases: SimilarGroup[] = []
+  const uniqueCases: TestCase[] = []
+  const processedIds = new Set<string>()
+
+  // Create signatures for duplicate detection
+  const caseSignatures = new Map<string, TestCase[]>()
+
+  for (const testCase of testCases) {
+    if (processedIds.has(testCase.id)) continue
+
+    // Generate multiple signatures for different types of duplicates
+    const exactSignature = generateExactSignature(testCase)
+    const titleSignature = generateTitleSignature(testCase)
+    const contentSignature = generateContentSignature(testCase)
+
+    // Check for exact duplicates first
+    if (caseSignatures.has(exactSignature)) {
+      caseSignatures.get(exactSignature)!.push(testCase)
+    } else {
+      caseSignatures.set(exactSignature, [testCase])
+    }
+  }
+
+  // Process signatures to identify duplicates
+  for (const [signature, cases] of caseSignatures) {
+    if (cases.length > 1) {
+      // Found duplicates
+      const duplicateGroup: DuplicateGroup = {
+        signature,
+        cases,
+        keepCase: selectBestCase(cases),
+        duplicateType: 'exact'
+      }
+      exactDuplicates.push(duplicateGroup)
+      cases.forEach(c => processedIds.add(c.id))
+    } else {
+      uniqueCases.push(cases[0])
+      processedIds.add(cases[0].id)
+    }
+  }
+
+  // Smart similarity detection for remaining cases
+  if (options.deduplicationMode === 'smart') {
+    const similarGroups = findSimilarCases(uniqueCases)
+    similarCases.push(...similarGroups)
+  }
+
+  const originalCount = testCases.length
+  const duplicatesRemoved = exactDuplicates.reduce((acc, group) => acc + (group.cases.length - 1), 0)
+  const finalCount = originalCount - duplicatesRemoved
+
+  return {
+    exactDuplicates,
+    similarCases,
+    uniqueCases,
+    deduplicationStats: {
+      originalCount,
+      duplicatesRemoved,
+      finalCount,
+      duplicateRate: duplicatesRemoved / originalCount
+    }
+  }
+}
+
+// Generate exact signature for a test case
+function generateExactSignature(testCase: TestCase): string {
+  const normalizeText = (text: string) => text.toLowerCase().trim().replace(/\s+/g, ' ')
+
+  const title = normalizeText(testCase.title || testCase.testCase || '')
+  const category = normalizeText(testCase.category || testCase.module || '')
+  const steps = (testCase.testSteps || testCase.data?.steps || [])
+    .map(step => normalizeText(typeof step === 'string' ? step : step.description || ''))
+    .join('|')
+
+  return `${title}:${category}:${steps}`
+}
+
+// Generate title-based signature
+function generateTitleSignature(testCase: TestCase): string {
+  const title = (testCase.title || testCase.testCase || '').toLowerCase().trim().replace(/\s+/g, ' ')
+  const category = (testCase.category || testCase.module || '').toLowerCase().trim()
+  return `${title}:${category}`
+}
+
+// Generate content-based signature
+function generateContentSignature(testCase: TestCase): string {
+  const description = (testCase.description || '').toLowerCase().trim().replace(/\s+/g, ' ')
+  const expectedResult = (testCase.testResult || testCase.data?.expectedResult || '').toLowerCase().trim()
+  return `${description}:${expectedResult}`.substring(0, 200) // Limit length
+}
+
+// Select the best case from duplicates (most complete data)
+function selectBestCase(cases: TestCase[]): TestCase {
+  return cases.reduce((best, current) => {
+    const bestScore = calculateCompletenessScore(best)
+    const currentScore = calculateCompletenessScore(current)
+    return currentScore > bestScore ? current : best
+  })
+}
+
+// Calculate completeness score for a test case
+function calculateCompletenessScore(testCase: TestCase): number {
+  let score = 0
+
+  if (testCase.title || testCase.testCase) score += 10
+  if (testCase.description) score += 5
+  if (testCase.category || testCase.module) score += 3
+  if (testCase.priority && testCase.priority !== 'medium') score += 2
+  if (testCase.testSteps?.length || testCase.data?.steps?.length) {
+    score += Math.min((testCase.testSteps?.length || testCase.data?.steps?.length || 0) * 2, 10)
+  }
+  if (testCase.testData || testCase.data?.testData) score += 3
+  if (testCase.testResult || testCase.data?.expectedResult) score += 3
+  if (testCase.tags?.length) score += testCase.tags.length
+
+  return score
+}
+
+// Find similar cases using fuzzy matching
+function findSimilarCases(testCases: TestCase[]): SimilarGroup[] {
+  const similarGroups: SimilarGroup[] = []
+  const processed = new Set<string>()
+
+  for (let i = 0; i < testCases.length; i++) {
+    if (processed.has(testCases[i].id)) continue
+
+    const similarCases = [testCases[i]]
+
+    for (let j = i + 1; j < testCases.length; j++) {
+      if (processed.has(testCases[j].id)) continue
+
+      const similarity = calculateSimilarity(testCases[i], testCases[j])
+
+      if (similarity > 0.85) { // 85% similarity threshold
+        similarCases.push(testCases[j])
+        processed.add(testCases[j].id)
+      }
+    }
+
+    if (similarCases.length > 1) {
+      similarGroups.push({
+        cases: similarCases,
+        similarityScore: calculateGroupSimilarity(similarCases),
+        differences: identifyDifferences(similarCases)
+      })
+    }
+
+    processed.add(testCases[i].id)
+  }
+
+  return similarGroups
+}
+
+// Calculate similarity between two test cases
+function calculateSimilarity(case1: TestCase, case2: TestCase): number {
+  const title1 = (case1.title || case1.testCase || '').toLowerCase()
+  const title2 = (case2.title || case2.testCase || '').toLowerCase()
+
+  const titleSimilarity = levenshteinSimilarity(title1, title2)
+
+  const steps1 = (case1.testSteps || case1.data?.steps || []).map(s =>
+    typeof s === 'string' ? s : s.description || ''
+  ).join(' ').toLowerCase()
+
+  const steps2 = (case2.testSteps || case2.data?.steps || []).map(s =>
+    typeof s === 'string' ? s : s.description || ''
+  ).join(' ').toLowerCase()
+
+  const stepsSimilarity = levenshteinSimilarity(steps1, steps2)
+
+  // Weighted average: title is more important
+  return titleSimilarity * 0.6 + stepsSimilarity * 0.4
+}
+
+// Calculate Levenshtein similarity (0-1)
+function levenshteinSimilarity(str1: string, str2: string): number {
+  const maxLength = Math.max(str1.length, str2.length)
+  if (maxLength === 0) return 1
+
+  const distance = levenshteinDistance(str1, str2)
+  return (maxLength - distance) / maxLength
+}
+
+// Calculate Levenshtein distance
+function levenshteinDistance(str1: string, str2: string): number {
+  const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null))
+
+  for (let i = 0; i <= str1.length; i++) matrix[0][i] = i
+  for (let j = 0; j <= str2.length; j++) matrix[j][0] = j
+
+  for (let j = 1; j <= str2.length; j++) {
+    for (let i = 1; i <= str1.length; i++) {
+      const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1
+      matrix[j][i] = Math.min(
+        matrix[j][i - 1] + 1,     // deletion
+        matrix[j - 1][i] + 1,     // insertion
+        matrix[j - 1][i - 1] + indicator // substitution
+      )
+    }
+  }
+
+  return matrix[str2.length][str1.length]
+}
+
+// Calculate average similarity for a group
+function calculateGroupSimilarity(cases: TestCase[]): number {
+  if (cases.length < 2) return 1
+
+  let totalSimilarity = 0
+  let comparisons = 0
+
+  for (let i = 0; i < cases.length; i++) {
+    for (let j = i + 1; j < cases.length; j++) {
+      totalSimilarity += calculateSimilarity(cases[i], cases[j])
+      comparisons++
+    }
+  }
+
+  return comparisons > 0 ? totalSimilarity / comparisons : 1
+}
+
+// Identify key differences between similar cases
+function identifyDifferences(cases: TestCase[]): string[] {
+  const differences: string[] = []
+
+  if (cases.length < 2) return differences
+
+  const firstCase = cases[0]
+
+  for (let i = 1; i < cases.length; i++) {
+    const currentCase = cases[i]
+
+    // Check title differences
+    const title1 = firstCase.title || firstCase.testCase || ''
+    const title2 = currentCase.title || currentCase.testCase || ''
+    if (title1 !== title2) {
+      differences.push(`Title variation: "${title1}" vs "${title2}"`)
+    }
+
+    // Check priority differences
+    if (firstCase.priority !== currentCase.priority) {
+      differences.push(`Priority: ${firstCase.priority} vs ${currentCase.priority}`)
+    }
+
+    // Check category differences
+    const cat1 = firstCase.category || firstCase.module || ''
+    const cat2 = currentCase.category || currentCase.module || ''
+    if (cat1 !== cat2) {
+      differences.push(`Category: "${cat1}" vs "${cat2}"`)
+    }
+  }
+
+  return Array.from(new Set(differences)) // Remove duplicates
+}
+
+// Generate comprehensive audit report
+export function generateAuditReport(
+  rawData: any[],
+  testCases: TestCase[],
+  errors: string[],
+  duplicateDetection: DuplicateDetectionResult
+): ImportAuditReport {
+  const fieldAnalysis = analyzeFields(rawData)
+  const dataQualityIssues = identifyDataQualityIssues(rawData, testCases)
+  const recommendations = generateRecommendations(fieldAnalysis, dataQualityIssues, duplicateDetection)
+
+  return {
+    totalRows: rawData.length,
+    validRows: testCases.length,
+    invalidRows: rawData.length - testCases.length,
+    duplicatesFound: duplicateDetection.exactDuplicates.length,
+    fieldAnalysis,
+    dataQualityIssues,
+    recommendations,
+    timestamp: new Date().toISOString()
+  }
+}
+
+// Analyze field coverage and quality
+function analyzeFields(rawData: any[]): FieldAnalysis {
+  const analysis: FieldAnalysis = {}
+
+  if (rawData.length === 0) return analysis
+
+  // Get all possible field names
+  const allFields = new Set<string>()
+  rawData.forEach(row => {
+    if (typeof row === 'object' && row !== null) {
+      Object.keys(row).forEach(key => allFields.add(key))
+    }
+  })
+
+  // Analyze each field
+  allFields.forEach(fieldName => {
+    const values: string[] = []
+    const dataTypes = new Set<string>()
+    let totalLength = 0
+    let populatedCount = 0
+
+    rawData.forEach(row => {
+      const value = row[fieldName]
+      if (value !== undefined && value !== null && value !== '') {
+        const strValue = String(value).trim()
+        if (strValue) {
+          values.push(strValue)
+          totalLength += strValue.length
+          populatedCount++
+          dataTypes.add(typeof value)
+        }
+      }
+    })
+
+    const uniqueValues = new Set(values).size
+    const coverage = (populatedCount / rawData.length) * 100
+    const avgLength = populatedCount > 0 ? totalLength / populatedCount : 0
+
+    analysis[fieldName] = {
+      coverage,
+      uniqueValues,
+      avgLength,
+      dataTypes: Array.from(dataTypes),
+      samples: values.slice(0, 3) // First 3 samples
+    }
+  })
+
+  return analysis
+}
+
+// Identify data quality issues
+function identifyDataQualityIssues(rawData: any[], testCases: TestCase[]): DataQualityIssue[] {
+  const issues: DataQualityIssue[] = []
+  const requiredFields = ['title', 'test case', 'testcase', 'name']
+
+  rawData.forEach((row, index) => {
+    // Check for missing required fields
+    const hasTitle = requiredFields.some(field => {
+      const value = row[field] || row[field.toLowerCase()] || row[field.toUpperCase()]
+      return value && String(value).trim()
+    })
+
+    if (!hasTitle) {
+      issues.push({
+        type: 'missing_required',
+        field: 'title',
+        rowIndex: index + 1,
+        value: '',
+        severity: 'high',
+        suggestion: 'Add a test case title or name field'
+      })
+    }
+
+    // Check for empty values in important fields
+    const importantFields = ['description', 'steps', 'expected result']
+    importantFields.forEach(field => {
+      const value = row[field] || row[field.toLowerCase()] || row[field.replace(' ', '_')]
+      if (!value || !String(value).trim()) {
+        issues.push({
+          type: 'empty_value',
+          field,
+          rowIndex: index + 1,
+          value: '',
+          severity: 'medium',
+          suggestion: `Consider adding ${field} for better test case clarity`
+        })
+      }
+    })
+
+    // Check for inconsistent data formats
+    if (row.priority) {
+      const priority = String(row.priority).toLowerCase()
+      const validPriorities = ['critical', 'high', 'medium', 'low', 'p0', 'p1', 'p2', 'p3']
+      if (!validPriorities.includes(priority)) {
+        issues.push({
+          type: 'invalid_format',
+          field: 'priority',
+          rowIndex: index + 1,
+          value: String(row.priority),
+          severity: 'low',
+          suggestion: 'Use standard priority values: Critical, High, Medium, Low'
+        })
+      }
+    }
+  })
+
+  return issues
+}
+
+// Generate recommendations based on analysis
+function generateRecommendations(
+  fieldAnalysis: FieldAnalysis,
+  issues: DataQualityIssue[],
+  duplicateDetection: DuplicateDetectionResult
+): string[] {
+  const recommendations: string[] = []
+
+  // Field coverage recommendations
+  Object.entries(fieldAnalysis).forEach(([field, analysis]) => {
+    if (analysis.coverage < 50) {
+      recommendations.push(`Consider improving data quality: ${field} is only ${analysis.coverage.toFixed(1)}% populated`)
+    }
+  })
+
+  // Duplicate recommendations
+  if (duplicateDetection.deduplicationStats.duplicateRate > 0.3) {
+    recommendations.push('High duplicate rate detected - consider reviewing data source for potential data entry issues')
+  }
+
+  // Data quality recommendations
+  const highSeverityIssues = issues.filter(i => i.severity === 'high').length
+  if (highSeverityIssues > 0) {
+    recommendations.push(`${highSeverityIssues} high-severity data quality issues found - review before final import`)
+  }
+
+  // General recommendations
+  if (Object.keys(fieldAnalysis).length > 20) {
+    recommendations.push('Large number of fields detected - consider using field mapping to focus on essential test case data')
+  }
+
+  return recommendations
+}
+
+// Generate audit CSV export
+export function generateAuditCSV(auditReport: ImportAuditReport, duplicateDetection: DuplicateDetectionResult): string {
+  const csvRows: string[] = []
+
+  // Header
+  csvRows.push('Import Audit Report')
+  csvRows.push(`Generated: ${auditReport.timestamp}`)
+  csvRows.push('')
+
+  // Summary statistics
+  csvRows.push('SUMMARY STATISTICS')
+  csvRows.push('Metric,Value')
+  csvRows.push(`Total Rows Processed,${auditReport.totalRows}`)
+  csvRows.push(`Valid Test Cases,${auditReport.validRows}`)
+  csvRows.push(`Invalid Rows,${auditReport.invalidRows}`)
+  csvRows.push(`Exact Duplicates Found,${auditReport.duplicatesFound}`)
+  csvRows.push(`Duplicate Rate,${(duplicateDetection.deduplicationStats.duplicateRate * 100).toFixed(2)}%`)
+  csvRows.push('')
+
+  // Field analysis
+  csvRows.push('FIELD ANALYSIS')
+  csvRows.push('Field Name,Coverage %,Unique Values,Avg Length,Data Types,Sample Values')
+  Object.entries(auditReport.fieldAnalysis).forEach(([field, analysis]) => {
+    const sampleValues = analysis.samples.map(s => `"${s.replace(/"/g, '""')}"`).join('; ')
+    csvRows.push(`"${field}",${analysis.coverage.toFixed(1)},${analysis.uniqueValues},${analysis.avgLength.toFixed(1)},"${analysis.dataTypes.join(', ')}","${sampleValues}"`)
+  })
+  csvRows.push('')
+
+  // Data quality issues
+  csvRows.push('DATA QUALITY ISSUES')
+  csvRows.push('Row,Field,Issue Type,Severity,Value,Suggestion')
+  auditReport.dataQualityIssues.forEach(issue => {
+    csvRows.push(`${issue.rowIndex},"${issue.field}","${issue.type}","${issue.severity}","${issue.value.replace(/"/g, '""')}","${issue.suggestion.replace(/"/g, '""')}"`)
+  })
+  csvRows.push('')
+
+  // Duplicate groups
+  csvRows.push('DUPLICATE GROUPS')
+  csvRows.push('Group,Duplicate Type,Cases Count,Keep Case ID,Keep Case Title')
+  duplicateDetection.exactDuplicates.forEach((group, index) => {
+    const keepCase = group.keepCase
+    csvRows.push(`${index + 1},"${group.duplicateType}",${group.cases.length},"${keepCase.id}","${(keepCase.title || keepCase.testCase || '').replace(/"/g, '""')}"`)
+  })
+  csvRows.push('')
+
+  // Recommendations
+  csvRows.push('RECOMMENDATIONS')
+  auditReport.recommendations.forEach((rec, index) => {
+    csvRows.push(`${index + 1},"${rec.replace(/"/g, '""')}"`)
+  })
+
+  return csvRows.join('\n')
+}
+
 // Import test cases from CSV content
 export async function importTestCasesFromCSV(
   csvContent: string,
@@ -517,6 +1055,15 @@ export async function importTestCasesFromCSV(
     console.log('📄 CSV Import - Headers detected:', headers)
     console.log('📄 CSV Import - Data rows to process:', dataRows.length)
 
+    // Convert rows to objects for audit analysis
+    const rawData = dataRows.map(row => {
+      const obj: any = {}
+      headers.forEach((header, index) => {
+        obj[header] = row[index] || ''
+      })
+      return obj
+    })
+
     // Process each row
     for (let i = 0; i < dataRows.length; i++) {
       try {
@@ -528,32 +1075,56 @@ export async function importTestCasesFromCSV(
           continue
         }
 
-        // Check for duplicates if option is enabled
-        if (options.skipDuplicates) {
-          // Check against already imported test cases in this batch
-          const duplicateInBatch = result.testCases.find(tc => {
-            const titleMatch = tc.title.toLowerCase().trim() === testCase.title.toLowerCase().trim()
-            const idMatch = tc.id === testCase.id && !testCase.id.startsWith('imported_')
-            return titleMatch || idMatch
-          })
-
-          // Check against existing test cases in the system
-          const duplicateInExisting = options.existingTestCases?.find(tc => {
-            const titleMatch = tc.title.toLowerCase().trim() === testCase.title.toLowerCase().trim()
-            const idMatch = tc.id === testCase.id && !testCase.id.startsWith('imported_')
-            return titleMatch || idMatch
-          })
-
-          if (duplicateInBatch || duplicateInExisting) {
-            result.skipped++
-            continue
-          }
-        }
-
         result.testCases.push(testCase)
       } catch (error) {
         result.errors.push(`Row ${i + 2}: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
+    }
+
+    // Enhanced duplicate detection
+    if (options.deduplicationMode !== 'off' && result.testCases.length > 0) {
+      console.log('📄 CSV Import - Running enhanced duplicate detection...')
+      const duplicateDetection = detectDuplicates(result.testCases, options)
+
+      // Apply deduplication based on mode
+      if (options.deduplicationMode === 'strict' || options.deduplicationMode === 'smart') {
+        // Remove exact duplicates, keep the best case from each group
+        const duplicateIds = new Set<string>()
+        duplicateDetection.exactDuplicates.forEach(group => {
+          group.cases.forEach(testCase => {
+            if (testCase.id !== group.keepCase.id) {
+              duplicateIds.add(testCase.id)
+            }
+          })
+        })
+
+        result.testCases = result.testCases.filter(tc => !duplicateIds.has(tc.id))
+        result.skipped += duplicateIds.size
+      }
+
+      result.duplicateDetection = duplicateDetection
+    }
+
+    // Generate audit report if enabled
+    if (options.enableAudit) {
+      console.log('📄 CSV Import - Generating audit report...')
+      const auditReport = generateAuditReport(
+        rawData,
+        result.testCases,
+        result.errors,
+        result.duplicateDetection || {
+          exactDuplicates: [],
+          similarCases: [],
+          uniqueCases: result.testCases,
+          deduplicationStats: {
+            originalCount: result.testCases.length,
+            duplicatesRemoved: 0,
+            finalCount: result.testCases.length,
+            duplicateRate: 0
+          }
+        }
+      )
+      result.auditReport = auditReport
     }
 
     result.success = result.testCases.length > 0
@@ -655,23 +1226,56 @@ export async function importTestCasesFromExcel(
             continue
           }
 
-          // Check for duplicates if option is enabled
-          if (options.skipDuplicates) {
-            const isDuplicate = result.testCases.some(existing =>
-              existing.id === testCase.id ||
-              (existing.title === testCase.title && existing.module === testCase.module)
-            )
-
-            if (isDuplicate) {
-              result.skipped++
-              continue
-            }
-          }
-
           result.testCases.push(testCase)
         } catch (error) {
           result.errors.push(`Row ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
+      }
+
+      // Enhanced duplicate detection for Excel
+      if (options.deduplicationMode !== 'off' && result.testCases.length > 0) {
+        console.log('📊 Excel Import - Running enhanced duplicate detection...')
+        const duplicateDetection = detectDuplicates(result.testCases, options)
+
+        // Apply deduplication based on mode
+        if (options.deduplicationMode === 'strict' || options.deduplicationMode === 'smart') {
+          // Remove exact duplicates, keep the best case from each group
+          const duplicateIds = new Set<string>()
+          duplicateDetection.exactDuplicates.forEach(group => {
+            group.cases.forEach(testCase => {
+              if (testCase.id !== group.keepCase.id) {
+                duplicateIds.add(testCase.id)
+              }
+            })
+          })
+
+          result.testCases = result.testCases.filter(tc => !duplicateIds.has(tc.id))
+          result.skipped += duplicateIds.size
+        }
+
+        result.duplicateDetection = duplicateDetection
+      }
+
+      // Generate audit report if enabled
+      if (options.enableAudit) {
+        console.log('📊 Excel Import - Generating audit report...')
+        const auditReport = generateAuditReport(
+          jsonData,
+          result.testCases,
+          result.errors,
+          result.duplicateDetection || {
+            exactDuplicates: [],
+            similarCases: [],
+            uniqueCases: result.testCases,
+            deduplicationStats: {
+              originalCount: result.testCases.length,
+              duplicatesRemoved: 0,
+              finalCount: result.testCases.length,
+              duplicateRate: 0
+            }
+          }
+        )
+        result.auditReport = auditReport
       }
 
       result.success = result.testCases.length > 0

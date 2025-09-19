@@ -15,7 +15,7 @@ import {
   Eye,
   X
 } from 'lucide-react'
-import { importTestCases, ImportResult, ImportOptions, getExcelSheetInfo, ExcelSheetInfo } from '@/lib/test-case-importer'
+import { importTestCases, ImportResult, ImportOptions, getExcelSheetInfo, ExcelSheetInfo, generateAuditCSV } from '@/lib/test-case-importer'
 import { TestCase } from '@/types'
 import { saveGeneratedTestCasesWithIntelligentDedup } from '@/lib/test-case-storage'
 import { MergeReviewModal } from './MergeReviewModal'
@@ -40,7 +40,10 @@ export function TestCaseImporter({ onImport, onClose, defaultProject }: TestCase
     skipDuplicates: true,
     validateRequired: false, // Temporarily disabled for debugging
     defaultProject: defaultProject || '',
-    existingTestCases: []
+    existingTestCases: [],
+    enableAudit: true,
+    deduplicationMode: 'smart',
+    generateAuditCSV: false
   })
   const [aiAnalysisResult, setAiAnalysisResult] = useState<string>('')
   const [showAiAnalysis, setShowAiAnalysis] = useState(false)
@@ -188,7 +191,9 @@ export function TestCaseImporter({ onImport, onClose, defaultProject }: TestCase
     try {
       const optionsWithSheet = {
         ...importOptions,
-        selectedSheet: selectedSheet || undefined
+        selectedSheet: selectedSheet || undefined,
+        deduplicationMode: deduplicationMode,
+        enableAudit: importOptions.enableAudit
       }
 
       console.log('▶️ Import Handler - Calling importTestCases with options:', optionsWithSheet)
@@ -358,6 +363,22 @@ Total processed: ${importResult.testCases.length} test cases`
     URL.revokeObjectURL(url)
   }
 
+  const downloadAuditReport = () => {
+    if (!importResult?.auditReport || !importResult?.duplicateDetection) {
+      alert('No audit report available')
+      return
+    }
+
+    const csvContent = generateAuditCSV(importResult.auditReport, importResult.duplicateDetection)
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `import-audit-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const getFileIcon = (fileName: string) => {
     if (fileName.toLowerCase().endsWith('.csv')) {
       return <Table className="w-6 h-6 text-green-500" />
@@ -455,15 +476,26 @@ Total processed: ${importResult.testCases.length} test cases`
                   )}
                 </div>
 
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={importOptions.validateRequired}
-                    onChange={(e) => setImportOptions(prev => ({ ...prev, validateRequired: e.target.checked }))}
-                    className="rounded"
-                  />
-                  <span className="text-sm text-gray-700">Validate required fields</span>
-                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={importOptions.validateRequired}
+                      onChange={(e) => setImportOptions(prev => ({ ...prev, validateRequired: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm text-gray-700">Validate required fields</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={importOptions.enableAudit}
+                      onChange={(e) => setImportOptions(prev => ({ ...prev, enableAudit: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm text-gray-700">Generate audit report (recommended)</span>
+                  </label>
+                </div>
               </div>
               <div className="mt-3">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Assign to Project</label>
@@ -589,19 +621,97 @@ Total processed: ${importResult.testCases.length} test cases`
                 </div>
 
                 {importResult.success && (
-                  <div className="grid grid-cols-3 gap-4 mb-4">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-green-600">{importResult.testCases.length}</div>
-                      <div className="text-sm text-gray-600">Test Cases</div>
+                  <div>
+                    <div className="grid grid-cols-4 gap-4 mb-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">{importResult.testCases.length}</div>
+                        <div className="text-sm text-gray-600">Test Cases</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-yellow-600">{importResult.skipped}</div>
+                        <div className="text-sm text-gray-600">Skipped</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-red-600">{importResult.errors.length}</div>
+                        <div className="text-sm text-gray-600">Errors</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {importResult.duplicateDetection?.exactDuplicates.length || 0}
+                        </div>
+                        <div className="text-sm text-gray-600">Duplicates</div>
+                      </div>
                     </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-yellow-600">{importResult.skipped}</div>
-                      <div className="text-sm text-gray-600">Skipped</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-red-600">{importResult.errors.length}</div>
-                      <div className="text-sm text-gray-600">Errors</div>
-                    </div>
+
+                    {/* Audit Report Summary */}
+                    {importResult.auditReport && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-medium text-blue-800">📊 Import Audit Report</h4>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={downloadAuditReport}
+                            className="flex items-center space-x-1 text-xs"
+                          >
+                            <Download className="w-3 h-3" />
+                            <span>Download CSV</span>
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="text-blue-700">Data Quality Issues:</span>
+                            <span className="font-medium ml-2 text-blue-900">
+                              {importResult.auditReport.dataQualityIssues.length}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-blue-700">Field Coverage:</span>
+                            <span className="font-medium ml-2 text-blue-900">
+                              {Object.keys(importResult.auditReport.fieldAnalysis).length} fields
+                            </span>
+                          </div>
+                        </div>
+                        {importResult.auditReport.recommendations.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-xs text-blue-700 font-medium">Top Recommendations:</p>
+                            <ul className="text-xs text-blue-600 mt-1 space-y-1">
+                              {importResult.auditReport.recommendations.slice(0, 2).map((rec, index) => (
+                                <li key={index}>• {rec}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Duplicate Detection Summary */}
+                    {importResult.duplicateDetection && importResult.duplicateDetection.exactDuplicates.length > 0 && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-md p-4 mb-4">
+                        <h4 className="text-sm font-medium text-orange-800 mb-2">🔍 Duplicate Detection Results</h4>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="text-orange-700">Duplicate Rate:</span>
+                            <span className="font-medium ml-2 text-orange-900">
+                              {(importResult.duplicateDetection.deduplicationStats.duplicateRate * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-orange-700">Removed:</span>
+                            <span className="font-medium ml-2 text-orange-900">
+                              {importResult.duplicateDetection.deduplicationStats.duplicatesRemoved} cases
+                            </span>
+                          </div>
+                        </div>
+                        {importResult.duplicateDetection.similarCases.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-xs text-orange-700">
+                              {importResult.duplicateDetection.similarCases.length} similar groups detected for review
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
