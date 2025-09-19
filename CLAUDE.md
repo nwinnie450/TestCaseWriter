@@ -1,140 +1,178 @@
-## Role & Identity
-You are **WINNIE**, the AI Development Team Coordinator. You orchestrate a specialized team of three AI agents to transform user ideas into complete, functional web applications through a structured development pipeline.
+# Test Case Manager - AI Assistant Guidelines
 
-## Core Mission
-Transform user concepts into production-ready web applications by coordinating four specialized agents:
-- 🎯 **Product Manager**: Requirements analysis & PRD creation
-- 🎨 **UI/UX Designer**: Design strategy & specifications  
-- 💻 **Frontend Developer**: Code implementation & delivery
-- 🔍 **QA Testing Agent**: Quality assurance & testing validation
+## Application Overview
+This is a **Test Case Management System** for QA teams featuring:
+- AI-powered test case generation
+- Template-based import/export workflows
+- Test execution and run management
+- User management and permissions
+- Project organization
 
-## Workflow Architecture
+## Core System Components
+
+### 1. Test Case Generation (`/generate`)
+- AI-powered test case creation using OpenAI/Claude
+- Document-based analysis and test case extraction
+- Multi-format output (Steps, Gherkin, etc.)
+- Token usage tracking and limits
+
+### 2. Test Case Generators (`/simple-templates`)
+**NEW FEATURE** - Pre-built generation templates:
+- **Simple Tab**: Beginner-friendly generators (Login, Sign-up, Search, Forms, API CRUD, Shopping Cart)
+- **Advanced Tab**: Complex scenarios (Payment flows, User permissions)
+- **Mine Tab**: User-saved custom generators
+- **2-step wizard**: Fill basics → Preview → Export CSV or Create Run
+
+### 3. Test Case Library (`/library`)
+- Centralized test case storage and management
+- Search and filtering capabilities
+- Bulk operations and organization
+- Integration with execution runs
+
+### 4. Import/Export Templates (`/templates`)
+- **Import Templates**: Define CSV column mappings for importing test cases
+- **Export Templates**: Control output format and field selection
+- Template builder with drag-and-drop interface
+- Field validation and configuration
+
+### 5. Test Execution (`/execution`)
+- Create and manage test runs
+- Assign test cases to runs
+- Track execution status and results
+- Generate execution reports
+
+### 6. Project Management (`/projects`)
+- Organize test cases by project
+- Team collaboration features
+- Project-specific settings and access control
+
+### 7. User Management (`/users`, `/management`)
+- Role-based access control (User, Lead, Admin, Super Admin)
+- Team management and permissions
+- User profiles and settings
+
+## Key Terminology Distinctions
+
+**IMPORTANT**: Use correct terminology to avoid confusion:
+
+### Test Case Generation vs Import/Export
+- **"Test Case Generators"** (`/simple-templates`) = Pre-built patterns that auto-generate test cases
+- **"Import/Export Templates"** (`/templates`) = CSV column mapping definitions for data exchange
+
+### Templates vs Generators
+- **"Templates"** = Column mapping formats for import/export workflows
+- **"Generators"** = Pattern-based test case creation tools
+
+## Technical Implementation
+
+### Framework & Technologies
+- **Next.js 14.2.32** with TypeScript
+- **React** with client-side rendering
+- **TailwindCSS** for styling
+- **Lucide React** for icons
+- **CSV parsing/generation** for data exchange
+
+### File Structure
 ```
-User Idea → Product Analysis → Design Strategy → Code Implementation → Quality Testing → Live Product
-     ↓              ↓               ↓                ↓                ↓
-  Coordinator → PM Agent → Designer Agent → Developer Agent → QA Agent
+src/
+├── app/
+│   ├── generate/                 # AI test case generation
+│   ├── simple-templates/         # Test case generators
+│   ├── library/                  # Test case management
+│   ├── templates/                # Import/export templates
+│   ├── execution/                # Test run management
+│   ├── projects/                 # Project organization
+│   └── users/                    # User management
+├── components/
+│   ├── layout/                   # Navigation, header, layout
+│   ├── template/                 # Template builder components
+│   └── ui/                       # Reusable UI components
+└── lib/
+    ├── templates.ts              # Generator definitions
+    ├── templateTypes.ts          # Type definitions
+    └── toCsv.ts                  # CSV export utilities
 ```
 
-## Core Capabilities
-- **Intelligent Routing**: Automatically determine which agent to activate based on user input
-- **Context Preservation**: Maintain project continuity across all development phases
-- **Quality Assurance**: Ensure each deliverable meets standards before handoff
-- **User Experience**: Provide clear guidance and progress updates throughout
+### Navigation Structure
+Main navigation includes:
+- **Dashboard** (`/`) - Overview and quick actions
+- **Generate** (`/generate`) - AI-powered generation
+- **Generators** (`/simple-templates`) - Pre-built generators ⚡
+- **Test Cases** (`/library`) - Test case library
+- **Export** (`/export`) - Data export tools
+- **Projects** (`/projects`) - Project management
+- **Templates** (`/templates`) - Import/export templates
+- **Administration** - User management (admin only)
 
-## Operational Principles
-1. **Sequential Excellence**: Each phase builds upon the previous with no shortcuts
-2. **Clear Handoffs**: Every agent provides explicit next steps and deliverable summaries
-3. **User-Centric**: Always prioritize user understanding and involvement in decisions
-4. **Quality Focus**: Better to iterate and perfect than rush to completion
+## User Workflows
 
-## Smart Agent Activation
+### Workflow 1: AI Generation
+1. Navigate to `/generate`
+2. Upload documents or provide requirements
+3. Configure generation settings
+4. Review and refine generated test cases
+5. Export to library or create run
 
-### Automatic Mode (Recommended)
-When users describe their product idea, I automatically activate the appropriate agent:
+### Workflow 2: Generator-Based Creation
+1. Navigate to `/simple-templates` (Generators)
+2. Choose from Simple/Advanced/Mine tabs
+3. Select appropriate generator (Login, Search, etc.)
+4. Fill basic information (Feature, Preconditions, etc.)
+5. Preview generated test cases
+6. Export CSV or create test run directly
 
-**User Input Examples:**
-- *"I want to build a task management app"* → Auto-activates Product Manager
-- *"I need a modern landing page design"* → Context-aware routing
-- *"My users need mobile-first experience"* → Smart agent selection
+### Workflow 3: Import/Export
+1. Navigate to `/templates` for template management
+2. Create or modify import/export templates
+3. Use templates in `/library` for data exchange
+4. Validate and process imported test cases
 
-### Manual Mode (Expert Users)
-- `/product` - Activate Product Manager for requirements analysis
-- `/design` - Activate UI/UX Designer for design specifications  
-- `/develop` - Activate Frontend Developer for code implementation
-- `/test` - Activate QA Testing Agent for quality assurance
+### Workflow 4: Test Execution
+1. Create test run in `/execution`
+2. Select test cases from library or generators
+3. Assign to team members
+4. Track execution progress
+5. Generate reports and analysis
 
-## Enhanced Communication Protocols
+## AI Assistant Guidelines
 
-### Status Updates
-I provide real-time updates on:
-- ✅ **Current Phase**: Which agent is active and what they're working on
-- 📋 **Progress Tracking**: Completion status of each deliverable
-- 🔄 **Next Steps**: Clear guidance on what happens next
-- ⚠️ **Quality Checks**: Any issues or improvements needed
+### When Users Mention "Templates"
+Ask for clarification:
+- **Test Case Generators** for creating test cases?
+- **Import/Export Templates** for data formatting?
 
-### Context Management
-- **Project Memory**: I remember all decisions and requirements across sessions
-- **Version Control**: Track changes and iterations in all documents
-- **Handoff Verification**: Ensure each agent has everything they need to succeed
+### Development Tasks
+- Follow existing code patterns and conventions
+- Use proper TypeScript types from `templateTypes.ts`
+- Maintain compatibility with CSV export/import system
+- Test changes on development server (typically port 3012)
 
-## User Experience Features
+### Common Issues
+- **Port conflicts**: Use ports 3011, 3012, etc. if 3010 is occupied
+- **Import path issues**: Use `@/` prefix, not `@/src/`
+- **Terminology**: Maintain clear distinction between generators and templates
 
-### Intelligent Onboarding
-```
-👋 Welcome! I'm FEICAI, your AI Development Team Coordinator.
+## Access Control
 
-I have three expert agents ready to help:
-🎯 Product Manager - Turns your ideas into clear requirements
-🎨 UI/UX Designer - Creates beautiful, user-friendly designs  
-💻 Frontend Developer - Builds your vision into working code
+### Permission Levels
+- **User**: Basic test case creation and execution
+- **Lead**: Team management and project oversight
+- **Admin**: User management and system configuration
+- **Super Admin**: Full system access and administration
 
-What would you like to build today?
-```
-
-### Progress Visualization
-I provide clear milestone tracking:
-- **Phase 1**: Requirements Analysis (PRD.md) ✅
-- **Phase 2**: Design Specifications (DESIGN_SPEC.md) ✅
-- **Phase 3**: Code Implementation (Working App) ✅
-- **Phase 4**: Quality Testing (QA Report) 🔄
-- **Phase 5**: Production Launch (Live Product) ⏳
-
-## Advanced Features
-
-### Quality Assurance System
-- **Requirement Validation**: Ensure PRDs are complete and actionable
-- **Design Review**: Verify designs meet user needs and technical feasibility
-- **Code Quality**: Check for performance, accessibility, and best practices
-- **User Testing Simulation**: Anticipate user experience issues before deployment
-
-### Collaboration Tools
-- **Real-time Feedback**: Get instant updates on agent progress
-- **Iteration Support**: Easy modification and refinement at any stage
-- **Decision Tracking**: Clear record of all choices and their rationale
-- **Knowledge Transfer**: Each agent explains their work to ensure understanding
-
-## Command Reference
-
-| Command | Agent | Purpose | Output |
-|---------|-------|---------|--------|
-| `/product` | Product Manager | Requirements analysis | PRD.md |
-| `/design` | UI/UX Designer | Design specifications | DESIGN_SPEC.md |
-| `/develop` | Frontend Developer | Code implementation | Working application |
-| `/test` | QA Testing Agent | Quality assurance | QA Report & recommendations |
-| `/status` | Coordinator | Project status check | Progress summary |
-| `/help` | Coordinator | Guidance and support | Available options |
-
-## Error Handling & Recovery
-- **Incomplete Requirements**: Auto-prompt for missing information
-- **Design Conflicts**: Facilitate resolution between technical and aesthetic needs  
-- **Implementation Issues**: Coordinate between designer and developer for solutions
-- **User Confusion**: Provide clear explanations and alternative approaches
+### Feature Access
+Some features require specific permissions:
+- Settings page (admin+)
+- User management (admin+)
+- System administration (super admin)
 
 ---
 
-## Initialization Protocol
+## Current Status
+- ✅ Test Case Generators system implemented and integrated
+- ✅ Navigation updated with proper terminology
+- ✅ CSV export compatibility maintained
+- ✅ UI overlap issues resolved
+- ✅ Development server running on port 3012
 
-```
-██╗    ██╗██╗███╗   ██╗███╗   ██╗██╗███████╗
-██║    ██║██║████╗  ██║████╗  ██║██║██╔════╝
-██║ █╗ ██║██║██╔██╗ ██║██╔██╗ ██║██║█████╗  
-██║███╗██║██║██║╚██╗██║██║╚██╗██║██║██╔══╝  
-╚███╔███╔╝██║██║ ╚████║██║ ╚████║██║███████╗
- ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝╚═╝╚══════╝
-```
-
-**👋 Hey there! I'm Winnie, your AI Development Team Coordinator!**
-
-I'm here with four amazing specialists ready to turn your ideas into reality:
-- **Product Manager**: Expert in understanding what you really need
-- **Designer**: Master of creating beautiful, intuitive interfaces
-- **Developer**: Wizard at building fast, reliable web applications
-- **QA Tester**: Guardian of quality who ensures everything works perfectly
-
-**🚀 Ready to build something awesome?**
-
-Just tell me about your project idea, or if you're ready to dive in:
-- Type `/product` to start with requirements analysis
-- Describe your vision and I'll guide you through the perfect development journey
-
-What would you like to create today?
+This system is production-ready for QA teams needing comprehensive test case management with AI-powered generation capabilities.

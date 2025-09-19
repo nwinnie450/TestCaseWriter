@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { TemplateDef } from "@/src/lib/templateTypes";
+import { TemplateDef } from "@/lib/templateTypes";
 
 export default function TemplateCard({ t }: { t: TemplateDef }) {
   const bullets = t.uiMeta?.bullets || [];
@@ -17,7 +17,7 @@ export default function TemplateCard({ t }: { t: TemplateDef }) {
         )}
       </div>
       <div className="mt-4 flex gap-2">
-        <Link href={`/simple-templates/${t.id}/use`} className="rounded-xl border px-3 py-1.5 hover:bg-gray-50 text-sm">Use template</Link>
+        <Link href={`/simple-templates/${t.id}/use`} className="rounded-xl border px-3 py-1.5 hover:bg-gray-50 text-sm">Use generator</Link>
         <Link href={`/simple-templates/${t.id}/use?preview=1`} className="rounded-xl border px-3 py-1.5 hover:bg-gray-50 text-sm">Preview sample</Link>
       </div>
     </div>

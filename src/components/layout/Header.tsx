@@ -9,12 +9,12 @@ import { ProfileModal } from '@/components/ui/ProfileModal'
 import { LoginModal } from '@/components/auth/LoginModal'
 import { AuthService } from '@/lib/auth-service'
 import { hasPermission, shouldShowNotifications, canAccessPage } from '@/lib/access-control'
-import { 
-  Home, 
-  FileText, 
-  Wand2, 
-  Database, 
-  Download, 
+import {
+  Home,
+  FileText,
+  Wand2,
+  Database,
+  Download,
   Settings,
   User,
   Bell,
@@ -26,7 +26,8 @@ import {
   Folder,
   Book,
   GitPullRequest,
-  Play
+  Play,
+  Zap
 } from 'lucide-react'
 import { useState } from 'react'
 import { NotificationDropdown } from '@/components/notifications/NotificationDropdown'
@@ -35,6 +36,7 @@ import { NotificationDropdown } from '@/components/notifications/NotificationDro
 const navigationItems = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Generate', href: '/generate', icon: Wand2 },
+  { name: 'Generators', href: '/simple-templates', icon: Zap },
   { name: 'Test Cases', href: '/library', icon: Database },
   { name: 'Export', href: '/export', icon: Download },
   { name: 'Projects', href: '/projects', icon: Folder },

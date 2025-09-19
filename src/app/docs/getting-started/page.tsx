@@ -50,14 +50,84 @@ export default function GettingStarted() {
           </CardContent>
         </Card>
 
+        {/* Quick Start Path */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Zap className="h-5 w-5" />
+              <span>🚀 Quick Start: Try Generators First!</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-green-800 mb-3">
+                ⚡ <strong>New to Test Case Manager?</strong> Start with our Test Case Generators - no setup required!
+              </p>
+              <div className="flex space-x-3">
+                <Link href="/simple-templates">
+                  <Button variant="primary">
+                    <Zap className="h-4 w-4 mr-2" />
+                    Try Generators Now
+                  </Button>
+                </Link>
+                <Link href="/docs/generators">
+                  <Button variant="secondary">
+                    Generators Guide
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Step-by-Step Guide */}
         <div className="space-y-6">
+          {/* Step 0 - New! */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <div className="w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-bold">0</div>
+                <span>Start with Test Case Generators (Recommended)</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-gray-600">
+                The fastest way to get started! Use pre-built generators for common scenarios like Login, Search, API testing, and more.
+              </p>
+
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h4 className="font-semibold text-green-900 mb-2">📍 Steps:</h4>
+                <ol className="list-decimal list-inside text-green-800 space-y-1 text-sm">
+                  <li>Go to <strong>Generators</strong> in the main navigation (⚡ icon)</li>
+                  <li>Choose from <strong>Simple</strong> or <strong>Advanced</strong> tabs</li>
+                  <li>Pick a generator (e.g., "Login (Basic)", "API CRUD Operations")</li>
+                  <li>Fill in basic details (Feature name, Preconditions, etc.)</li>
+                  <li>Preview and export CSV or create test run directly</li>
+                </ol>
+              </div>
+
+              <div className="flex space-x-3">
+                <Link href="/simple-templates">
+                  <Button variant="primary">
+                    <Zap className="h-4 w-4 mr-2" />
+                    Try Generators
+                  </Button>
+                </Link>
+                <Link href="/docs/generators">
+                  <Button variant="secondary">
+                    Learn More
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Step 1 */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
-                <span>Configure Your AI Provider</span>
+                <span>Configure Your AI Provider (For Advanced Generation)</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -211,33 +281,67 @@ export default function GettingStarted() {
           </Card>
         </div>
 
-        {/* Quick Example */}
+        {/* Quick Examples */}
         <Card>
           <CardHeader>
-            <CardTitle>🚀 Quick Example</CardTitle>
+            <CardTitle>🚀 Quick Examples</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-gray-600">Here's what you might input and what you'll get:</p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-2">📝 Your Input:</h4>
-                <div className="bg-gray-100 p-3 rounded-lg text-sm">
-                  "Test the user login functionality. Users should be able to log in with email and password, stay logged in, and see appropriate error messages for invalid credentials."
+          <CardContent className="space-y-6">
+            <p className="text-gray-600">Here's what you get with different approaches:</p>
+
+            {/* Generator Example */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">⚡ Test Case Generator Example</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">📝 Your Input:</h4>
+                  <div className="bg-blue-100 p-3 rounded-lg text-sm">
+                    <div><strong>Generator:</strong> Login (Basic)</div>
+                    <div><strong>Feature:</strong> User Login</div>
+                    <div><strong>Preconditions:</strong> User account exists</div>
+                    <div><strong>Output:</strong> Steps format</div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">⚡ Generated Test Cases:</h4>
+                  <div className="bg-green-100 p-3 rounded-lg text-sm">
+                    <ul className="space-y-1">
+                      <li>• <strong>User Login: valid user can sign in</strong></li>
+                      <li>• <strong>User Login: invalid password shows error</strong></li>
+                      <li>• <strong>User Login: locked account is blocked</strong></li>
+                    </ul>
+                    <div className="text-xs text-green-700 mt-2">Complete with detailed steps and expected results!</div>
+                  </div>
                 </div>
               </div>
-              
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-2">🤖 AI Generated:</h4>
-                <div className="bg-green-100 p-3 rounded-lg text-sm">
-                  <ul className="space-y-1">
-                    <li>• Valid login with correct credentials</li>
-                    <li>• Invalid email format handling</li>
-                    <li>• Incorrect password error message</li>
-                    <li>• Remember me functionality</li>
-                    <li>• Session persistence testing</li>
-                    <li>• Account lockout after failed attempts</li>
-                  </ul>
+            </div>
+
+            <hr className="border-gray-200" />
+
+            {/* AI Generation Example */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">🤖 AI Generation Example</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">📝 Your Input:</h4>
+                  <div className="bg-gray-100 p-3 rounded-lg text-sm">
+                    "Test the user login functionality. Users should be able to log in with email and password, stay logged in, and see appropriate error messages for invalid credentials."
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">🤖 AI Generated:</h4>
+                  <div className="bg-purple-100 p-3 rounded-lg text-sm">
+                    <ul className="space-y-1">
+                      <li>• Valid login with correct credentials</li>
+                      <li>• Invalid email format handling</li>
+                      <li>• Incorrect password error message</li>
+                      <li>• Remember me functionality</li>
+                      <li>• Session persistence testing</li>
+                      <li>• Account lockout after failed attempts</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </div>
@@ -254,6 +358,12 @@ export default function GettingStarted() {
               <div className="border border-gray-200 rounded-lg p-4">
                 <h4 className="font-semibold text-gray-900 mb-2">📚 Learn More</h4>
                 <div className="space-y-2">
+                  <Link href="/docs/generators">
+                    <Button variant="ghost" size="sm" className="justify-start w-full">
+                      <ArrowRight className="h-4 w-4 mr-2" />
+                      Test Case Generators Guide
+                    </Button>
+                  </Link>
                   <Link href="/docs/widget-api">
                     <Button variant="ghost" size="sm" className="justify-start w-full">
                       <ArrowRight className="h-4 w-4 mr-2" />
@@ -269,7 +379,7 @@ export default function GettingStarted() {
                   <Link href="/templates">
                     <Button variant="ghost" size="sm" className="justify-start w-full">
                       <ArrowRight className="h-4 w-4 mr-2" />
-                      Explore Templates
+                      Explore Import/Export Templates
                     </Button>
                   </Link>
                 </div>
@@ -307,9 +417,13 @@ export default function GettingStarted() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
+              <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                <input type="checkbox" className="h-4 w-4 text-green-600" />
+                <span className="text-gray-700"><strong>Quick Start:</strong> Used Test Case Generators to create first test cases</span>
+              </div>
               <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                 <input type="checkbox" className="h-4 w-4 text-blue-600" />
-                <span className="text-gray-700">AI Provider configured and tested</span>
+                <span className="text-gray-700">AI Provider configured and tested (for advanced generation)</span>
               </div>
               <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                 <input type="checkbox" className="h-4 w-4 text-blue-600" />
@@ -317,11 +431,15 @@ export default function GettingStarted() {
               </div>
               <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                 <input type="checkbox" className="h-4 w-4 text-blue-600" />
-                <span className="text-gray-700">Test cases generated from requirements</span>
+                <span className="text-gray-700">Test cases generated using generators or AI</span>
               </div>
               <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                 <input type="checkbox" className="h-4 w-4 text-blue-600" />
-                <span className="text-gray-700">Test cases reviewed and exported</span>
+                <span className="text-gray-700">Test cases reviewed and exported to library</span>
+              </div>
+              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                <input type="checkbox" className="h-4 w-4 text-blue-600" />
+                <span className="text-gray-700">Test run created and executed</span>
               </div>
             </div>
             

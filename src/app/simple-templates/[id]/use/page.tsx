@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { getTemplateById } from "@/src/lib/templates";
-import { TemplateBasicFields, GeneratedCase } from "@/src/lib/templateTypes";
-import { downloadCasesAsCSV } from "@/src/lib/toCsv";
+import { getTemplateById } from "@/lib/templates";
+import { TemplateBasicFields, GeneratedCase } from "@/lib/templateTypes";
+import { downloadCasesAsCSV } from "@/lib/toCsv";
 
 export default function UseTemplatePage() {
   const { id } = useParams<{id:string}>();
@@ -24,12 +24,12 @@ export default function UseTemplatePage() {
     setPreview(out.slice(0, 3)); // show first 3 for preview
   }, [step, data, t]);
 
-  if (!t) return <div className="p-6 text-sm text-gray-500">Template not found.</div>;
+  if (!t) return <div className="p-6 text-sm text-gray-500">Generator not found.</div>;
 
   return (
     <main className="p-6 max-w-3xl mx-auto">
       <div className="mb-4">
-        <div className="text-xs text-gray-500">Template</div>
+        <div className="text-xs text-gray-500">Generator</div>
         <h1 className="text-xl font-semibold">{t.name}</h1>
         {t.description && <p className="text-sm text-gray-600 mt-1">{t.description}</p>}
       </div>

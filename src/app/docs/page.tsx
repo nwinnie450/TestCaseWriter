@@ -24,6 +24,22 @@ export default function DocumentationIndex() {
 
   const docs = [
     {
+      title: 'Getting Started Guide',
+      description: 'Step-by-step guide to set up your first test case generation project with AI and generators',
+      href: '/docs/getting-started',
+      icon: Zap,
+      color: 'green',
+      tags: ['Beginner', 'Setup', 'Tutorial', 'Generators']
+    },
+    {
+      title: 'Test Case Generators Guide',
+      description: 'Complete guide to using pre-built generators for Login, API, E-commerce, and custom scenarios',
+      href: '/docs/generators',
+      icon: Bot,
+      color: 'purple',
+      tags: ['Generators', 'Templates', 'Quick Start', 'Automation']
+    },
+    {
       title: 'Test Case Versioning Guide',
       description: 'Complete guide to the versioning system, change requests, and audit trail management',
       href: '/docs/versioning',
@@ -35,7 +51,7 @@ export default function DocumentationIndex() {
       title: 'Widget API Documentation',
       description: 'Complete guide for integrating Test Case Manager as a widget or plugin in other AI platforms',
       href: '/docs/widget-api',
-      icon: Bot,
+      icon: Code,
       color: 'purple',
       tags: ['ChatGPT', 'Claude', 'Notion', 'Plugins']
     },
@@ -46,14 +62,6 @@ export default function DocumentationIndex() {
       icon: Globe,
       color: 'blue',
       tags: ['REST API', 'Mobile Apps', 'Web Services']
-    },
-    {
-      title: 'Getting Started Guide',
-      description: 'Step-by-step guide to set up your first test case generation project',
-      href: '/docs/getting-started',
-      icon: Zap,
-      color: 'green',
-      tags: ['Beginner', 'Setup', 'Tutorial']
     },
     {
       title: 'Authentication Guide',
@@ -104,27 +112,36 @@ export default function DocumentationIndex() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="text-center p-4">
-                <div className="text-2xl mb-2">📚</div>
-                <h3 className="font-semibold mb-1">1. Learn Versioning</h3>
-                <p className="text-sm text-gray-600">Understand the versioning system</p>
-                <Link href="/docs/versioning">
-                  <Button size="sm" className="mt-2">View Guide</Button>
+                <div className="text-2xl mb-2">⚡</div>
+                <h3 className="font-semibold mb-1">1. Try Generators</h3>
+                <p className="text-sm text-gray-600">Start with pre-built test case generators</p>
+                <Link href="/simple-templates">
+                  <Button size="sm" className="mt-2">Try Generators</Button>
                 </Link>
               </div>
               <div className="text-center p-4">
-                <div className="text-2xl mb-2">🔑</div>
-                <h3 className="font-semibold mb-1">2. Get API Key</h3>
-                <p className="text-sm text-gray-600">Generate your API key from Settings</p>
+                <div className="text-2xl mb-2">🤖</div>
+                <h3 className="font-semibold mb-1">2. AI Generation</h3>
+                <p className="text-sm text-gray-600">Upload docs for AI-powered generation</p>
+                <Link href="/generate">
+                  <Button size="sm" className="mt-2">Generate</Button>
+                </Link>
               </div>
               <div className="text-center p-4">
-                <div className="text-2xl mb-2">📝</div>
-                <h3 className="font-semibold mb-1">3. Choose Integration</h3>
-                <p className="text-sm text-gray-600">Widget API or REST API based on your needs</p>
+                <div className="text-2xl mb-2">📊</div>
+                <h3 className="font-semibold mb-1">3. Manage Library</h3>
+                <p className="text-sm text-gray-600">Organize and export test cases</p>
+                <Link href="/library">
+                  <Button size="sm" className="mt-2">View Library</Button>
+                </Link>
               </div>
               <div className="text-center p-4">
-                <div className="text-2xl mb-2">🚀</div>
-                <h3 className="font-semibold mb-1">4. Start Building</h3>
-                <p className="text-sm text-gray-600">Follow our guides and examples</p>
+                <div className="text-2xl mb-2">🔧</div>
+                <h3 className="font-semibold mb-1">4. Advanced Setup</h3>
+                <p className="text-sm text-gray-600">API integration and customization</p>
+                <Link href="/docs/api">
+                  <Button size="sm" className="mt-2">API Docs</Button>
+                </Link>
               </div>
             </div>
           </CardContent>
