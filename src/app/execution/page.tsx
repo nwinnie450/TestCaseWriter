@@ -44,6 +44,7 @@ import {
   Gauge
 } from 'lucide-react';
 import { aiTestPrioritizer } from '@/lib/ai-test-prioritizer';
+import { TestCaseSelector } from '@/components/execution/TestCaseSelector';
 
 interface TestCase {
   id: string;
@@ -110,6 +111,7 @@ export default function TestExecutionPage() {
   const [selectedRelatedTests, setSelectedRelatedTests] = useState<string[]>([]);
   const [showAddTestCase, setShowAddTestCase] = useState(false);
   const [showImportTestCases, setShowImportTestCases] = useState(false);
+  const [showTestCaseSelector, setShowTestCaseSelector] = useState(false);
   const [newTestCase, setNewTestCase] = useState({
     title: '',
     description: '',
@@ -285,6 +287,43 @@ export default function TestExecutionPage() {
       }
       return run;
     }));
+  };
+
+  // Handler for TestCaseSelector - converts TestCase to PrioritizedTestCase and adds to active run
+  const handleTestCaseSelection = (selectedTestCases: any[]) => {
+    if (!activeRunId) return;
+
+    // Convert TestCase objects from library to PrioritizedTestCase objects for execution
+    const prioritizedTestCases: PrioritizedTestCase[] = selectedTestCases.map((testCase, index) => ({
+      id: testCase.id,
+      title: testCase.data?.testCase || 'Untitled Test Case',
+      description: testCase.data?.testCase || '',
+      category: testCase.data?.module || 'General',
+      priority: testCase.priority || 'medium',
+      currentStatus: 'Pending',
+      steps: testCase.data?.testSteps ? testCase.data.testSteps.map((step: any, stepIndex: number) => ({
+        stepNumber: stepIndex + 1,
+        action: step.description || '',
+        expected: step.expectedResult || '',
+        actualResult: '',
+        status: 'pending'
+      })) : [
+        {
+          stepNumber: 1,
+          action: 'Execute test case',
+          expected: 'Test case executes successfully',
+          actualResult: '',
+          status: 'pending'
+        }
+      ],
+      expectedResult: testCase.data?.testResult || 'Test passes successfully',
+      linkedRequirements: [],
+      projectId: testCase.projectId,
+      lastExecution: undefined,
+      executionHistory: []
+    }));
+
+    addTestCasesToRun(activeRunId, prioritizedTestCases);
   };
 
   const switchToRun = (runId: string) => {
@@ -2285,17 +2324,32 @@ export default function TestExecutionPage() {
                   </div>
                 </div>
               </div>
-              {userRole.permissions.includes('create_runs') || userRole.permissions.includes('*') ? (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setShowCreateRun(true)}
-                  className="flex items-center space-x-2"
-                >
-                  <Play className="w-4 h-4" />
-                  <span>New Run</span>
-                </Button>
-              ) : null}
+              <div className="flex items-center space-x-2">
+                {userRole.permissions.includes('create_runs') || userRole.permissions.includes('*') ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setShowCreateRun(true)}
+                    className="flex items-center space-x-2"
+                  >
+                    <Play className="w-4 h-4" />
+                    <span>New Run</span>
+                  </Button>
+                ) : null}
+
+                {/* Add Test Cases button - show when there's an active run in draft status */}
+                {activeRun && activeRun.status === 'draft' && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowTestCaseSelector(true)}
+                    className="flex items-center space-x-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Test Cases</span>
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* Role-based Run Filters */}
@@ -2403,10 +2457,7 @@ export default function TestExecutionPage() {
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => {
-                          // Navigate to library to select test cases
-                          window.location.href = `/library?mode=execution&runId=${activeRun.id}`;
-                        }}
+                        onClick={() => setShowTestCaseSelector(true)}
                         className="text-xs px-2 py-1"
                       >
                         Add Test Cases
@@ -3323,6 +3374,15 @@ export default function TestExecutionPage() {
             </div>
           </div>
         )}
+
+        {/* Test Case Selector Modal */}
+        <TestCaseSelector
+          isOpen={showTestCaseSelector}
+          onClose={() => setShowTestCaseSelector(false)}
+          onSelectTestCases={handleTestCaseSelection}
+          selectedProjectId={activeRun?.projectId}
+          runId={activeRunId || undefined}
+        />
       </div>
     </Layout>
   );

@@ -19,7 +19,7 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { useTokenUsage } from '@/contexts/TokenUsageContext'
 import { generateTestCasesWithAI } from '@/lib/ai-providers'
 import { AIGenerationError } from '@/lib/ai-generation'
-import { generateMockTestCases, OpenAIError } from '@/lib/openai'
+import { OpenAIError } from '@/lib/openai'
 import { getAvailableProviders, getProvider } from '@/lib/ai-providers'
 import { TestCase } from '@/types/index'
 // Import the simple PDF parser
