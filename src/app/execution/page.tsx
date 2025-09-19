@@ -135,8 +135,8 @@ export default function TestExecutionPage() {
   const availableUsers = [
     {
       name: 'admin',
-      email: 'admin@yopmail.com',
-      password: 'Orion888!', // In production, this would be hashed
+      email: 'admin@merquri.io',
+      password: 'secure_password', // In production, this would be hashed
       role: 'super-admin',
       isDefault: true
     },
@@ -205,13 +205,6 @@ export default function TestExecutionPage() {
   const userRole = roles[currentUserRole];
 
   // Get default superadmin credentials
-  const defaultAdmin = availableUsers.find(u => u.isDefault);
-  const adminCredentials = {
-    username: defaultAdmin?.name || 'admin',
-    email: defaultAdmin?.email || 'admin@yopmail.com',
-    password: defaultAdmin?.password || 'Password888!',
-    role: defaultAdmin?.role || 'super-admin'
-  };
 
   // Run filtering state for test leads
   const [runFilter, setRunFilter] = useState({
@@ -2239,40 +2232,6 @@ export default function TestExecutionPage() {
           </div>
         </div>
 
-        {/* Default Admin Credentials Display */}
-        {currentUserId === 'admin' && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Shield className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-blue-900">Default Super Admin Account</h3>
-                <p className="text-xs text-blue-700">Login credentials for system administration</p>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-3 gap-4 text-sm">
-              <div className="bg-white p-3 rounded border">
-                <span className="text-gray-500 text-xs">Username:</span>
-                <div className="font-mono font-semibold text-gray-900">{adminCredentials.username}</div>
-              </div>
-              <div className="bg-white p-3 rounded border">
-                <span className="text-gray-500 text-xs">Email:</span>
-                <div className="font-mono font-semibold text-gray-900">{adminCredentials.email}</div>
-              </div>
-              <div className="bg-white p-3 rounded border">
-                <span className="text-gray-500 text-xs">Password:</span>
-                <div className="font-mono font-semibold text-gray-900">{adminCredentials.password}</div>
-              </div>
-            </div>
-
-            <div className="mt-3 flex items-center space-x-2 text-xs text-blue-600">
-              <AlertTriangle className="w-4 h-4" />
-              <span>⚠️ In production, passwords should be hashed and stored securely</span>
-            </div>
-          </div>
-        )}
 
         {/* Multi-Run Execution Tabs */}
         <div className="bg-white rounded-lg border border-gray-200">
