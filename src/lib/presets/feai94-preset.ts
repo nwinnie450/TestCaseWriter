@@ -138,9 +138,27 @@ export function extractFieldValue(row: any, fieldMappings: readonly string[]): s
   return '';
 }
 
-export function normalizeValue(value: string, normalizer: Record<string, any>): any {
-  const upperValue = value.toUpperCase().trim();
-  return normalizer[upperValue] !== undefined ? normalizer[upperValue] : value;
+export function normalizeValue(value: string, normalizer: Record<string, any>): any;
+export function normalizeValue(value: string, defaultValue: string, validValues: string[]): string;
+export function normalizeValue(value: string, normalizerOrDefault: Record<string, any> | string, validValues?: string[]): any {
+  if (!value || typeof value !== 'string') {
+    return validValues ? (typeof normalizerOrDefault === 'string' ? normalizerOrDefault : value) : value;
+  }
+
+  // Handle array-based validation (normalizeValue(value, default, validValues))
+  if (validValues && Array.isArray(validValues)) {
+    const upperValue = value.toUpperCase().trim();
+    const matchedValue = validValues.find(v => v.toUpperCase() === upperValue);
+    return matchedValue || (typeof normalizerOrDefault === 'string' ? normalizerOrDefault : value);
+  }
+
+  // Handle Record-based normalization (normalizeValue(value, normalizer))
+  if (typeof normalizerOrDefault === 'object' && normalizerOrDefault !== null) {
+    const upperValue = value.toUpperCase().trim();
+    return normalizerOrDefault[upperValue] !== undefined ? normalizerOrDefault[upperValue] : value;
+  }
+
+  return value;
 }
 
 export function parseStepsFromText(text: string, config = FEAI94_PRESET.stepParsing): Array<{
@@ -153,7 +171,16 @@ export function parseStepsFromText(text: string, config = FEAI94_PRESET.stepPars
     return [];
   }
 
-  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  // Handle multiple line separators safely
+  let processedText = text;
+  if (config && config.line_separators && Array.isArray(config.line_separators)) {
+    // Replace all separators with newlines
+    config.line_separators.forEach(sep => {
+      processedText = processedText.split(sep).join('\n');
+    });
+  }
+
+  const lines = processedText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const steps: Array<{ step: number; description: string; expectedResult?: string; testData?: string; }> = [];
 
   for (let i = 0; i < lines.length && steps.length < config.max_steps; i++) {
