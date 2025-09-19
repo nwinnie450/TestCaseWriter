@@ -22,101 +22,9 @@ import {
   DollarSign
 } from 'lucide-react'
 
-// Aggressive localStorage cleaner - runs immediately
-const clearAllMockData = () => {
-  try {
-    console.log('🚀 Starting aggressive production cleanup...')
-    
-    // Get essential data before clearing
-    const currentUserData = localStorage.getItem('testCaseWriter_currentUser')
-    const userData = localStorage.getItem('testCaseWriter_users')
-    const teamsData = localStorage.getItem('testCaseWriter_qaTeams')
-    const teamMembersData = localStorage.getItem('testCaseWriter_teamMembers')
-    
-    // List all keys before clearing
-    const allKeys = Object.keys(localStorage)
-    console.log('📋 All localStorage keys before clearing:', allKeys)
-    
-    // Clear ALL keys that start with our prefixes
-    allKeys.forEach(key => {
-      if (key.startsWith('testCaseWriter_') || key.startsWith('testCaseManager_')) {
-        console.log(`🗑️ Removing: ${key}`)
-        localStorage.removeItem(key)
-      }
-    })
-    
-    // Restore essential data
-    if (currentUserData) {
-      localStorage.setItem('testCaseWriter_currentUser', currentUserData)
-      console.log('✅ Restored current user')
-    }
-    if (userData) {
-      localStorage.setItem('testCaseWriter_users', userData)
-      console.log('✅ Restored users')
-    }
-    if (teamsData) {
-      localStorage.setItem('testCaseWriter_qaTeams', teamsData)
-      console.log('✅ Restored teams')
-    }
-    if (teamMembersData) {
-      localStorage.setItem('testCaseWriter_teamMembers', teamMembersData)
-      console.log('✅ Restored team members')
-    }
-    
-    // Set completely clean settings
-    const cleanSettings = {
-      profile: { name: "", email: "", title: "", department: "" },
-      notifications: { emailNotifications: false, pushNotifications: false, testCaseUpdates: false, exportComplete: false, weeklyDigest: false },
-      preferences: { theme: "light", language: "en", timezone: "UTC", defaultTemplate: "", pageSize: 25 },
-      security: { twoFactorEnabled: false, sessionTimeout: 30, passwordLastChanged: new Date().toISOString() },
-      ai: { providerId: "", provider: "", apiKey: "", model: "gpt-4o", maxTokens: 128000, temperature: 0.3, customPrompt: "", requireDocuments: true, documentFocused: true }
-    }
-    localStorage.setItem('testCaseWriterSettings', JSON.stringify(cleanSettings))
-    localStorage.setItem('testCaseWriter_notifications', JSON.stringify([]))
-    localStorage.setItem('testCaseWriter_generatedTestCases', JSON.stringify([]))
-    localStorage.setItem('testCaseWriter_projects', JSON.stringify([]))
-    
-    console.log('🧹 AGGRESSIVE CLEANUP COMPLETE - All mock data eliminated!')
-    console.log('📋 Final localStorage keys:', Object.keys(localStorage).filter(k => k.startsWith('testCase')))
-    
-    return true
-  } catch (error) {
-    console.error('❌ Failed to clear production data:', error)
-    return false
-  }
-}
-
-// Disabled automatic cleaner - was interfering with normal operation
-// Only run manually via the button if needed
-// if (typeof window !== 'undefined' && (process.env.NODE_ENV === 'production' || window.location.hostname !== 'localhost')) {
-//   clearAllMockData()
-// }
-
 export default function Dashboard() {
   const { stats } = useTokenUsage()
   const [currentUser, setCurrentUser] = useState<any>(null)
-  const [showClearButton, setShowClearButton] = useState(false)
-  
-  // Check if we're in production and show clear button if needed
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'production' || window.location.hostname !== 'localhost') {
-      setShowClearButton(true)
-    }
-  }, [])
-  
-  // Manual clear function for production
-  const handleManualClear = () => {
-    if (confirm('🧹 This will clear ALL test data and reset the application to a clean state. Continue?')) {
-      const success = clearAllMockData()
-      if (success) {
-        alert('✅ Production data cleared successfully! Please refresh the page.')
-        window.location.reload()
-      } else {
-        alert('❌ Failed to clear production data. Please check console for details.')
-      }
-    }
-  }
-
   // Check for current user and listen for changes
   useEffect(() => {
     const checkUser = () => {
@@ -233,26 +141,6 @@ export default function Dashboard() {
             trend={{ value: Math.round((stats.thisMonth.cost / Math.max(stats.totalCost - stats.thisMonth.cost, 0.0001)) * 100), label: 'vs previous', positive: false }}
           />
         </div>
-
-        {/* Production Clear Button */}
-        {showClearButton && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-red-800">Production Environment</h3>
-                <p className="text-xs text-red-600 mt-1">Clear all test data to ensure clean production environment</p>
-              </div>
-              <Button 
-                variant="danger" 
-                size="sm" 
-                onClick={handleManualClear}
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                🧹 Clear All Data
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

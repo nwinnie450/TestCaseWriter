@@ -14,33 +14,17 @@ export interface LoginCredentials {
   password: string;
 }
 
-// Demo user database (in production, this would be in a real database)
-const DEMO_USERS: (User & { password: string })[] = [
-  {
-    id: '1',
-    username: 'admin',
-    email: 'admin@yopmail.com',
-    password: 'Password888!',
-    role: 'super-admin',
-    name: 'System Administrator'
-  },
-  {
-    id: '2',
-    username: 'sarah',
-    email: 'sarah@yopmail.com',
-    password: 'lead123',
-    role: 'lead',
-    name: 'Sarah Johnson'
-  },
-  {
-    id: '3',
-    username: 'mike',
-    email: 'mike@yopmail.com',
-    password: 'qa123',
-    role: 'qa',
-    name: 'Mike Chen'
-  }
-];
+// Default admin user seeded for production environments
+const DEFAULT_ADMIN_USER: User & { password: string } = {
+  id: 'admin',
+  username: 'admin',
+  email: 'admin@merquri.io',
+  password: 'Password888!',
+  role: 'super-admin',
+  name: 'System Administrator'
+};
+
+const DEMO_USERS: (User & { password: string })[] = [DEFAULT_ADMIN_USER];
 
 const USERS_STORAGE_KEY = 'testCaseWriter_users';
 
@@ -70,26 +54,53 @@ export class AuthService {
     this.initializeUsers();
     try {
       const stored = localStorage.getItem(USERS_STORAGE_KEY);
-      const users = stored ? JSON.parse(stored) : DEMO_USERS;
-
-      // Ensure we have all demo users - merge with existing if needed
-      const mergedUsers = [...DEMO_USERS];
-      if (stored) {
-        const existingUsers = JSON.parse(stored);
-        // Add any additional users that aren't in demo users
-        existingUsers.forEach((existingUser: any) => {
-          if (!mergedUsers.find(u => u.username === existingUser.username)) {
-            mergedUsers.push(existingUser);
-          }
-        });
-        // Save the merged result back
-        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(mergedUsers));
-      }
-
-      return mergedUsers;
+      const parsed = stored ? JSON.parse(stored) : [];
+      const sanitized = this.sanitizeUsers(Array.isArray(parsed) ? parsed : []);
+      this.saveUsers(sanitized);
+      return sanitized;
     } catch {
+      this.saveUsers(DEMO_USERS);
       return DEMO_USERS;
     }
+  }
+
+  private static sanitizeUsers(users: Array<User & { password: string }>): Array<User & { password: string }> {
+    const disallowedUsernames = new Set(['sarah', 'mike', 'demo', 'guest']);
+    const disallowedEmails = new Set(['admin@yopmail.com', 'sarah@yopmail.com', 'mike@yopmail.com']);
+    const uniqueByUsername = new Map<string, User & { password: string }>();
+
+    users.forEach(candidate => {
+      if (!candidate || typeof candidate !== 'object') {
+        return;
+      }
+
+      const username = (candidate.username ?? '').toLowerCase();
+      const email = (candidate.email ?? '').toLowerCase();
+
+      if (!username || disallowedUsernames.has(username) || disallowedEmails.has(email)) {
+        return;
+      }
+
+      uniqueByUsername.set(username, candidate);
+    });
+
+    const sanitized = Array.from(uniqueByUsername.values());
+    const adminUsername = DEFAULT_ADMIN_USER.username.toLowerCase();
+    const adminEmail = DEFAULT_ADMIN_USER.email.toLowerCase();
+
+    const adminIndex = sanitized.findIndex(user => {
+      const username = user.username?.toLowerCase() ?? '';
+      const email = user.email?.toLowerCase() ?? '';
+      return username == adminUsername || email == adminEmail;
+    });
+
+    if (adminIndex >= 0) {
+      sanitized[adminIndex] = { ...sanitized[adminIndex], ...DEFAULT_ADMIN_USER };
+    } else {
+      sanitized.unshift({ ...DEFAULT_ADMIN_USER });
+    }
+
+    return sanitized;
   }
 
   /**

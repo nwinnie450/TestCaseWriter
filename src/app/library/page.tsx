@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Layout } from '@/components/layout/Layout'
 import { DataGrid } from '@/components/library/DataGrid'
-import { DemoDataLoader } from '@/components/library/DemoDataLoader'
 import { ReconcileDuplicatesButton } from '@/components/library/ReconcileDuplicatesButton'
 import { UserAssignment, AssignedUsersSummary } from '@/components/user-management/UserAssignment'
 import { CoverageDashboard } from '@/components/coverage/CoverageDashboard'
@@ -1309,7 +1308,6 @@ export default function TestCaseManagement() {
         )}
 
         {/* Demo Data Loader */}
-        <DemoDataLoader />
 
         {/* Filtering Controls */}
         <Card>
