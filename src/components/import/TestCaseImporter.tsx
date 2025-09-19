@@ -343,7 +343,12 @@ export function TestCaseImporter({ onImport, onClose, defaultProject }: TestCase
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-semibold text-gray-900">Import Test Cases</h2>
-            <p className="text-sm text-gray-600">Import test cases from CSV or JSON files</p>
+            <p className="text-sm text-gray-600">
+              Import test cases from CSV, JSON, or Excel files
+              <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                🎯 FEAI-94 Optimized
+              </span>
+            </p>
           </div>
           {onClose && (
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -548,7 +553,10 @@ export function TestCaseImporter({ onImport, onClose, defaultProject }: TestCase
           /* Preview Mode */
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium">Preview Imported Test Cases</h3>
+              <h3 className="text-lg font-medium">
+                Preview Imported Test Cases
+                <span className="ml-2 text-sm font-normal text-blue-600">(FEAI-94 Format)</span>
+              </h3>
               <Button
                 variant="secondary"
                 size="sm"

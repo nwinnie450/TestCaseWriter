@@ -1,5 +1,6 @@
 import { TestCase } from '@/types'
 import * as XLSX from 'xlsx'
+import { FEAI94_PRESET, extractFieldValue, normalizeValue, parseStepsFromText } from './presets/feai94-preset'
 
 export interface ImportResult {
   success: boolean
@@ -93,7 +94,118 @@ export function parseCSV(content: string): string[][] {
   return result
 }
 
-// Map CSV headers to TestCase fields
+// FEAI-94 specific mapping function for better Excel compatibility
+export function mapFEAI94RowToTestCase(rowData: any, options: ImportOptions = {}): TestCase | null {
+  try {
+    console.log('🎯 FEAI-94 Mapper - Processing row:', Object.keys(rowData))
+
+    // Extract values using FEAI-94 preset mappings
+    const id = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.id) ||
+               `TC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+    const title = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.title) || 'Imported Test Case'
+    const module = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.module)
+    const stepsText = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.steps_description)
+    const testData = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.test_data)
+    const expectedResult = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.expected_result)
+    const qaOwner = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.qa_owner)
+    const remarks = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.remarks)
+
+    // Normalize values
+    const priority = normalizeValue(
+      extractFieldValue(rowData, FEAI94_PRESET.columnMappings.priority),
+      FEAI94_PRESET.normalizers.priority
+    ) || 'Medium'
+
+    const status = normalizeValue(
+      extractFieldValue(rowData, FEAI94_PRESET.columnMappings.test_result),
+      FEAI94_PRESET.normalizers.status
+    ) || 'Not Run'
+
+    const isRegression = normalizeValue(
+      extractFieldValue(rowData, FEAI94_PRESET.columnMappings.regression),
+      FEAI94_PRESET.normalizers.boolean
+    ) || false
+
+    const isAutomation = normalizeValue(
+      extractFieldValue(rowData, FEAI94_PRESET.columnMappings.automation_enabled),
+      FEAI94_PRESET.normalizers.boolean
+    ) || false
+
+    // Parse test steps from description
+    const parsedSteps = parseStepsFromText(stepsText)
+    const testSteps = parsedSteps.map(step => ({
+      step: step.step,
+      description: step.description,
+      expectedResult: step.expectedResult || expectedResult,
+      testData: step.testData || testData
+    }))
+
+    // Create test case object
+    const testCase: TestCase = {
+      id,
+      templateId: 'feai94-template',
+      projectId: options.defaultProject || 'default',
+      title,
+      description: stepsText || title,
+      category: module || 'General',
+      priority,
+      status,
+      tags: [module, priority].filter(Boolean),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      createdBy: 'FEAI-94-importer',
+      version: 1,
+
+      // FEAI-94 specific data structure
+      data: {
+        title,
+        description: stepsText || title,
+        preconditions: '',
+        steps: testSteps,
+        expectedResult: expectedResult,
+        testData: testData,
+        module: module,
+        qaOwner: qaOwner,
+        remarks: remarks,
+        isRegression: isRegression,
+        isAutomation: isAutomation,
+        automationId: extractFieldValue(rowData, FEAI94_PRESET.columnMappings.automation_id),
+        automationPreset: extractFieldValue(rowData, FEAI94_PRESET.columnMappings.automation_preset),
+        automationLoop: extractFieldValue(rowData, FEAI94_PRESET.columnMappings.automation_loop),
+        automationNote: extractFieldValue(rowData, FEAI94_PRESET.columnMappings.automation_note)
+      },
+
+      // Legacy fields for backward compatibility
+      module: module || '',
+      testCase: title,
+      testSteps: testSteps,
+      testData: testData,
+      testResult: expectedResult,
+      qa: qaOwner || '',
+      remarks: remarks || ''
+    }
+
+    console.log('🎯 FEAI-94 Mapper - Successfully mapped test case:', {
+      id: testCase.id,
+      title: testCase.title,
+      module: testCase.module,
+      stepsCount: testCase.testSteps?.length || 0,
+      hasTestData: !!testData,
+      hasExpectedResult: !!expectedResult,
+      priority: priority,
+      status: status
+    })
+
+    return testCase
+
+  } catch (error) {
+    console.error('❌ FEAI-94 Mapper - Error mapping row to test case:', error)
+    return null
+  }
+}
+
+// Original CSV mapping function (kept for backward compatibility)
 export function mapCSVToTestCase(headers: string[], row: string[], options: ImportOptions = {}): TestCase | null {
   if (row.length === 0 || row.every(cell => !cell.trim())) {
     return null // Skip empty rows
@@ -683,17 +795,75 @@ export async function importTestCasesFromExcel(
       }
       return result
     } else {
-      // Convert to CSV format and use existing horizontal parser
-      console.log('📊 Excel Import - Using horizontal CSV parser...')
-      const csvContent = XLSX.utils.sheet_to_csv(worksheet)
-      const csvResult = await importTestCasesFromCSV(csvContent, options)
-      console.log('📊 Excel Import - CSV import completed', {
-        success: csvResult.success,
-        testCasesCount: csvResult.testCases.length,
-        errorsCount: csvResult.errors.length,
-        skipped: csvResult.skipped
+      // Use FEAI-94 specific horizontal parser for better Excel compatibility
+      console.log('📊 Excel Import - Using FEAI-94 optimized horizontal parser...')
+
+      // Convert worksheet to JSON for easier processing
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+        defval: '',  // Default value for empty cells
+        raw: false   // Keep everything as strings for consistent processing
       })
-      return csvResult
+
+      console.log('📊 Excel Import - JSON conversion completed:', {
+        rowsFound: jsonData.length,
+        sampleKeys: jsonData.length > 0 ? Object.keys(jsonData[0]).slice(0, 5) : []
+      })
+
+      if (jsonData.length === 0) {
+        result.errors.push('No data rows found in Excel sheet')
+        return result
+      }
+
+      // Process each row using FEAI-94 specific mapping
+      for (let i = 0; i < jsonData.length; i++) {
+        try {
+          const rowData = jsonData[i]
+          console.log(`📊 Excel Import - Processing row ${i + 1}:`, Object.keys(rowData))
+
+          const testCase = mapFEAI94RowToTestCase(rowData, options)
+
+          if (testCase) {
+            console.log(`📊 Excel Import - ✅ Successfully mapped FEAI-94 test case:`, {
+              id: testCase.id,
+              title: testCase.title?.substring(0, 50),
+              module: testCase.module,
+              stepsCount: testCase.testSteps?.length || 0
+            })
+
+            // Check for duplicates if option is enabled
+            if (options.skipDuplicates) {
+              const isDuplicate = result.testCases.some(existing =>
+                existing.id === testCase.id ||
+                (existing.title === testCase.title && existing.module === testCase.module)
+              )
+
+              if (isDuplicate) {
+                console.log(`📊 Excel Import - 🚫 Skipping duplicate test case: ${testCase.title}`)
+                result.skipped++
+                continue
+              }
+            }
+
+            result.testCases.push(testCase)
+          } else {
+            console.log(`📊 Excel Import - ⚠️ Failed to map row ${i + 1}`)
+            result.skipped++
+          }
+        } catch (error) {
+          console.error(`📊 Excel Import - ❌ Error processing row ${i + 1}:`, error)
+          result.errors.push(`Row ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+      }
+
+      console.log('📊 Excel Import - FEAI-94 import completed', {
+        success: result.testCases.length > 0,
+        testCasesCount: result.testCases.length,
+        errorsCount: result.errors.length,
+        skipped: result.skipped
+      })
+
+      result.success = result.testCases.length > 0
+      return result
     }
 
   } catch (error) {
