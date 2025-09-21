@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 // import { getAllStoredTestCases } from '@/lib/test-case-storage'
 import { RunsService, CreateRunRequest } from '@/lib/runs-service'
+import { getAllUsers } from '@/lib/user-storage'
 import { TestCase } from '@/types/index'
 import {
   X,
@@ -97,10 +98,16 @@ export function RunCreateWizard({
   const [dueDate, setDueDate] = useState('')
   const [notes, setNotes] = useState('')
 
-  // Common assignees and environments
-  const commonAssignees = [
-    'John Smith', 'Sarah Johnson', 'Mike Chen', 'Lisa Rodriguez', 'David Wilson'
-  ]
+  // Users for assignee selection
+  const [availableUsers, setAvailableUsers] = useState<Array<{
+    id: string
+    name: string
+    email: string
+    username: string
+    avatar?: string
+    role: string
+  }>>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
 
   const commonEnvironments = [
     'SIT',
@@ -108,10 +115,11 @@ export function RunCreateWizard({
     'Production'
   ]
 
-  // Load test cases when wizard opens
+  // Load test cases and users when wizard opens
   useEffect(() => {
     if (isOpen) {
       loadTestCases()
+      loadUsers()
       // Reset wizard state
       setCurrentStep(1)
       setSelectedTestCases(new Set())
@@ -135,7 +143,6 @@ export function RunCreateWizard({
 
   const loadTestCases = async () => {
     try {
-      console.log('🔄 Loading test cases from API...')
       const response = await fetch('/api/test-cases')
       if (!response.ok) {
         throw new Error('Failed to fetch test cases')
@@ -160,9 +167,12 @@ export function RunCreateWizard({
       // Transform the API data structure to match the expected TestCase format
       const transformedTestCases = filtered.map((tc: any) => ({
         id: tc.id,
+        title: tc.title,
         testCase: tc.title,
-        status: 'active', // Default status for library test cases
-        priority: tc.priority?.toLowerCase() || 'medium',
+        status: tc.currentStatus || 'active', // Use actual status from JSON
+        currentStatus: tc.currentStatus || 'active',
+        priority: tc.priority || 'medium',
+        category: tc.category,
         tags: tc.tags || [],
         projectId: tc.projectId || 'default',
         data: {
@@ -184,6 +194,36 @@ export function RunCreateWizard({
     }
   }
 
+  const loadUsers = async () => {
+    try {
+      setLoadingUsers(true)
+      console.log('🔄 Loading users from localStorage...')
+
+      // Use localStorage directly instead of API call
+      const users = getAllUsers()
+      console.log('👥 Loaded users:', users.length)
+      console.log('👥 User details:', users.map(u => ({ id: u.id, name: u.name, email: u.email })))
+
+      // Transform users to match the expected format
+      const userList = users.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        username: user.username,
+        avatar: user.avatar,
+        role: user.role
+      }))
+
+      setAvailableUsers(userList)
+    } catch (error) {
+      console.error('❌ Failed to load users:', error)
+      // Fallback to empty array if users can't be loaded
+      setAvailableUsers([])
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
   const filterTestCases = () => {
     let filtered = testCases
     console.log('🔍 Filtering test cases. Input:', testCases.length, 'cases')
@@ -194,8 +234,10 @@ export function RunCreateWizard({
       console.log('🔍 Applying search filter:', searchTerm)
       filtered = filtered.filter(tc =>
         tc.id.toLowerCase().includes(searchLower) ||
+        (tc.title && tc.title.toLowerCase().includes(searchLower)) ||
         (tc.testCase && tc.testCase.toLowerCase().includes(searchLower)) ||
         (tc.data?.testCase && tc.data.testCase.toLowerCase().includes(searchLower)) ||
+        (tc.category && tc.category.toLowerCase().includes(searchLower)) ||
         (tc.data?.module && tc.data.module.toLowerCase().includes(searchLower)) ||
         tc.tags?.some((tag: string) => tag.toLowerCase().includes(searchLower))
       )
@@ -206,7 +248,7 @@ export function RunCreateWizard({
     if (filterStatus !== 'all') {
       console.log('🔍 Applying status filter:', filterStatus)
       const beforeLength = filtered.length
-      filtered = filtered.filter(tc => tc.status === filterStatus)
+      filtered = filtered.filter(tc => (tc.currentStatus || tc.status) === filterStatus)
       console.log('🔍 After status filter:', filtered.length, 'cases (was', beforeLength, ')')
     }
 
@@ -222,7 +264,7 @@ export function RunCreateWizard({
     if (filterProject !== 'all') {
       console.log('🔍 Applying project filter:', filterProject)
       const beforeLength = filtered.length
-      filtered = filtered.filter(tc => (tc.data?.module || 'Uncategorized') === filterProject)
+      filtered = filtered.filter(tc => (tc.category || tc.data?.module || 'Uncategorized') === filterProject)
       console.log('🔍 After project filter:', filtered.length, 'cases (was', beforeLength, ')')
     }
 
@@ -412,18 +454,18 @@ export function RunCreateWizard({
                               {testCase.id}
                             </span>
                             <Badge variant="secondary" className="text-xs">
-                              {testCase.status}
+                              {testCase.currentStatus || testCase.status}
                             </Badge>
                             <Badge variant="outline" className="text-xs">
                               {testCase.priority}
                             </Badge>
                           </div>
                           <p className="text-sm font-medium text-gray-900 truncate">
-                            {testCase.testCase || testCase.data?.testCase || 'Untitled Test Case'}
+                            {testCase.title || testCase.testCase || testCase.data?.testCase || 'Untitled Test Case'}
                           </p>
-                          {testCase.data?.module && (
+                          {(testCase.category || testCase.data?.module) && (
                             <p className="text-xs text-gray-600">
-                              Category: {testCase.data.module}
+                              Category: {testCase.category || testCase.data?.module}
                             </p>
                           )}
                         </div>
@@ -443,72 +485,73 @@ export function RunCreateWizard({
             <div>
               <h4 className="text-sm font-medium text-gray-900 mb-3">Assignees (Optional)</h4>
 
-              {/* Common Assignees */}
-              <div className="mb-3">
-                <p className="text-xs text-gray-600 mb-2">Quick Select:</p>
-                <div className="flex flex-wrap gap-2">
-                  {commonAssignees.map((assignee) => (
-                    <Button
-                      key={assignee}
-                      variant={assignees.includes(assignee) ? "primary" : "secondary"}
-                      size="sm"
-                      onClick={() => {
-                        if (assignees.includes(assignee)) {
-                          removeAssignee(assignee)
-                        } else {
-                          addAssignee(assignee)
+              {loadingUsers ? (
+                <div className="text-sm text-gray-500">Loading users...</div>
+              ) : (
+                <>
+                  {/* User Selection Dropdown */}
+                  <div className="mb-3">
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value=""
+                      onChange={(e) => {
+                        const selectedUserId = e.target.value
+                        if (selectedUserId && !assignees.includes(selectedUserId)) {
+                          addAssignee(selectedUserId)
                         }
                       }}
-                      className="text-xs"
                     >
-                      {assignee}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Custom Assignee */}
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  placeholder="Add custom assignee"
-                  value={newAssignee}
-                  onChange={(e) => setNewAssignee(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      addAssignee(newAssignee)
-                    }
-                  }}
-                />
-                <Button
-                  variant="secondary"
-                  onClick={() => addAssignee(newAssignee)}
-                  disabled={!newAssignee.trim()}
-                >
-                  Add
-                </Button>
-              </div>
-
-              {/* Selected Assignees */}
-              {assignees.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-xs text-gray-600 mb-2">Selected:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {assignees.map((assignee) => (
-                      <Badge
-                        key={assignee}
-                        variant="primary"
-                        className="flex items-center gap-1"
-                      >
-                        {assignee}
-                        <X
-                          className="w-3 h-3 cursor-pointer"
-                          onClick={() => removeAssignee(assignee)}
-                        />
-                      </Badge>
-                    ))}
+                      <option value="">Select a user to assign...</option>
+                      {availableUsers
+                        .filter(user => !assignees.includes(user.id))
+                        .map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.name} ({user.email})
+                          </option>
+                        ))}
+                    </select>
+                    {/* Debug info */}
+                    <div className="text-xs text-gray-500 mt-1">
+                      Debug: {availableUsers.length} users loaded, Loading: {loadingUsers ? 'Yes' : 'No'}
+                      {availableUsers.length > 0 && (
+                        <div>Users: {availableUsers.map(u => u.name).join(', ')}</div>
+                      )}
+                    </div>
                   </div>
-                </div>
+
+                  {/* Selected Assignees */}
+                  {assignees.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs text-gray-600 mb-2">Selected Assignees:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {assignees.map((assigneeId) => {
+                          const user = availableUsers.find(u => u.id === assigneeId)
+                          const displayName = user ? `${user.name} (${user.email})` : assigneeId
+                          return (
+                            <Badge
+                              key={assigneeId}
+                              variant="primary"
+                              className="flex items-center gap-1"
+                            >
+                              {user?.avatar && (
+                                <img
+                                  src={user.avatar}
+                                  alt={user.name}
+                                  className="w-4 h-4 rounded-full"
+                                />
+                              )}
+                              {displayName}
+                              <X
+                                className="w-3 h-3 cursor-pointer"
+                                onClick={() => removeAssignee(assigneeId)}
+                              />
+                            </Badge>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 

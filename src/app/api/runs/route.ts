@@ -75,7 +75,8 @@ export async function POST(request: NextRequest) {
       assignee: assignees && assignees.length > 0 ? assignees[0] : null,
       priority: testCase.priority || 'medium',
       component: testCase.data?.module || null,
-      tags: testCase.tags ? JSON.stringify(testCase.tags) : null
+      tags: testCase.tags ? JSON.stringify(testCase.tags) : null,
+      status: 'Not Run' // Explicitly set the default status to match database schema
     }))
 
     const runCases = await prisma.runCase.createMany({
