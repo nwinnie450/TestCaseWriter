@@ -2,12 +2,29 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/user-storage'
 
+function parseJSONField(value: any, fallback: any) {
+  if (value === null || value === undefined) {
+          return fallback;
+  }
+  if (typeof value === 'string') {
+    try {
+            return JSON.parse(value);
+    } catch (error) {
+      console.warn('Failed to parse JSON field', error);
+            return fallback;
+    }
+  }
+  return value;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { runId: string } }
 ) {
   try {
     const { runId } = params
+
+    console.log('🔍 [GET /api/runs/[runId]] Fetching run:', runId);
 
     const run = await prisma.run.findUnique({
       where: { id: runId },
@@ -25,6 +42,9 @@ export async function GET(
       }
     })
 
+    console.log('🔍 [GET /api/runs/[runId]] Run found:', !!run);
+    console.log('🔍 [GET /api/runs/[runId]] Run runCases count:', run?.runCases?.length || 0);
+
     if (!run) {
       return NextResponse.json(
         { error: 'Run not found' },
@@ -35,12 +55,12 @@ export async function GET(
     // Parse JSON fields
     const runWithParsedData = {
       ...run,
-      environments: run.environments ? JSON.parse(run.environments as string) : [],
-      filters: run.filters ? JSON.parse(run.filters as string) : null,
+      environments: parseJSONField(run.environments, []),
+      filters: parseJSONField(run.filters, null),
       runCases: run.runCases.map(runCase => ({
         ...runCase,
-        stepsSnapshot: JSON.parse(runCase.stepsSnapshot as string),
-        tags: runCase.tags ? JSON.parse(runCase.tags as string) : []
+        stepsSnapshot: parseJSONField(runCase.stepsSnapshot, []),
+        tags: parseJSONField(runCase.tags, [])
       }))
     }
 
@@ -71,7 +91,7 @@ export async function GET(
   } catch (error) {
     console.error('Failed to fetch run:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch run' },
+      { error: 'Failed to fetch run', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     )
   }
@@ -184,3 +204,5 @@ export async function DELETE(
     )
   }
 }
+
+

@@ -117,7 +117,9 @@ export function RunCreateWizard({
 
   // Load test cases and users when wizard opens
   useEffect(() => {
+    console.log('🔄 RunCreateWizard useEffect triggered. isOpen:', isOpen);
     if (isOpen) {
+      console.log('🔄 Wizard is open, loading test cases and users...');
       loadTestCases()
       loadUsers()
       // Reset wizard state
@@ -142,8 +144,10 @@ export function RunCreateWizard({
   }, [testCases, searchTerm, filterStatus, filterPriority, filterProject])
 
   const loadTestCases = async () => {
+    console.log('🔄 loadTestCases called - making API request to /api/test-cases');
     try {
       const response = await fetch('/api/test-cases')
+      console.log('🔄 API response status:', response.status, response.ok);
       if (!response.ok) {
         throw new Error('Failed to fetch test cases')
       }

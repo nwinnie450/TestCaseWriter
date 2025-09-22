@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/user-storage'
+import { getCurrentUserFromSession } from '@/lib/auth-session'
 
 export async function POST(
   request: NextRequest,
@@ -19,8 +20,11 @@ export async function POST(
       )
     }
 
-    // Get current user
-    const currentUser = getCurrentUser()
+    // Get current user with environment-based authentication
+    const currentUser = process.env.NODE_ENV === 'development'
+      ? getCurrentUser() || { id: 'dev-user', username: 'dev' }
+      : await getCurrentUserFromSession()
+
     if (!currentUser) {
       return NextResponse.json(
         { error: 'Authentication required' },

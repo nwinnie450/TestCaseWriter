@@ -27,7 +27,8 @@ import {
   Book,
   GitPullRequest,
   Play,
-  Zap
+  Zap,
+  BarChart3
 } from 'lucide-react'
 import { useState } from 'react'
 import { NotificationDropdown } from '@/components/notifications/NotificationDropdown'
@@ -38,6 +39,8 @@ const navigationItems = [
   { name: 'Generate', href: '/generate', icon: Wand2 },
   { name: 'Generators', href: '/simple-templates', icon: Zap },
   { name: 'Test Cases', href: '/library', icon: Database },
+  { name: 'Execution', href: '/execution', icon: Play },
+  { name: 'Reports', href: '/reports/runs', icon: BarChart3 },
   { name: 'Export', href: '/export', icon: Download },
   { name: 'Projects', href: '/projects', icon: Folder },
   { name: 'Templates', href: '/templates', icon: FileText },
@@ -52,7 +55,7 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [user, setUser] = useState<{id: string, name: string, email: string, avatar?: string} | null>(null)
+  const [user, setUser] = useState<any>(null)
   const [showProfileModal, setShowProfileModal] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
 

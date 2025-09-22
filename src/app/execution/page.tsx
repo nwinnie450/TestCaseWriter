@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -111,7 +111,7 @@ interface ExecutionData {
 }
 
 export default function TestExecutionPage() {
-  console.log('🔄 TestExecutionPage component loaded with debugging');
+  console.log('?? TestExecutionPage component loaded with debugging');
 
   const [testCases, setTestCases] = useState<PrioritizedTestCase[]>([]);
   const [aiPrioritizationEnabled, setAiPrioritizationEnabled] = useState(false);
@@ -248,6 +248,7 @@ export default function TestExecutionPage() {
 
   const [executionRuns, setExecutionRuns] = useState<ExecutionRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
   const [activeRunTestCases, setActiveRunTestCases] = useState<TestCase[]>([]);
   const [loadingActiveRunTestCases, setLoadingActiveRunTestCases] = useState(false);
   const [showCreateRun, setShowCreateRun] = useState(false);
@@ -321,19 +322,19 @@ export default function TestExecutionPage() {
 
 
   const switchToRun = (runId: string) => {
-    console.log('🔄 switchToRun called with runId:', runId);
+    console.log('?? switchToRun called with runId:', runId);
     const run = executionRuns.find(r => r.id === runId);
-    console.log('🔄 Found run:', run);
+    console.log('?? Found run:', run);
     if (run) {
-      console.log('🔄 Setting activeRunId to:', runId);
+      console.log('?? Setting activeRunId to:', runId);
       setActiveRunId(runId);
-      setSelectedTest(run.currentTest);
-      setExecutionData(prev => ({
-        ...prev,
-        tester: run.tester,
-        environment: run.environment
-      }));
-      console.log('🔄 switchToRun completed, should trigger useEffect now');
+      // setSelectedTest(run.currentTest); // Commented out - function not defined
+      // setExecutionData(prev => ({ // Commented out - function not defined
+      //   ...prev,
+      //   tester: run.tester,
+      //   environment: run.environment
+      // }));
+      console.log('?? switchToRun completed, should trigger useEffect now');
     }
   };
 
@@ -358,79 +359,131 @@ export default function TestExecutionPage() {
   const activeRun = executionRuns.find(r => r.id === activeRunId);
 
   // Load test cases for active run
-  useEffect(() => {
-    console.log('🔄 useEffect for activeRunTestCases triggered. activeRunId:', activeRunId);
+  const normalizeRunCase = useCallback((runCase: any) => {
+    let normalizedStatus = runCase.status || 'Not_Executed';
+    if (normalizedStatus === 'Not Run') {
+      normalizedStatus = 'Not_Executed';
+    }
 
-    const loadActiveRunTestCases = async () => {
-      if (!activeRunId) {
-        console.log('🔍 DEBUG: No activeRunId, clearing active run test cases');
-        setActiveRunTestCases([]);
-        setLoadingActiveRunTestCases(false);
+    let stepsSnapshot: any[] = [];
+    if (Array.isArray(runCase.stepsSnapshot)) {
+      stepsSnapshot = runCase.stepsSnapshot;
+    } else if (typeof runCase.stepsSnapshot === 'string' && runCase.stepsSnapshot.trim().length > 0) {
+      try {
+        stepsSnapshot = JSON.parse(runCase.stepsSnapshot);
+      } catch (error) {
+        console.warn('Failed to parse stepsSnapshot for runCase', runCase.id, error);
+      }
+    }
+
+    return {
+      id: runCase.caseId,
+      title: runCase.titleSnapshot,
+      description: runCase.description || '',
+      category: runCase.component || 'General',
+      priority: runCase.priority || 'Medium',
+      status: normalizedStatus,
+      currentStatus: normalizedStatus,
+      steps: stepsSnapshot,
+      expectedResult: runCase.expectedResult || '',
+      assignee: runCase.assignee,
+    };
+  }, []);
+
+  const loadActiveRunTestCases = useCallback(async (runId: string) => {
+    console.log('?? DEBUG: loadActiveRunTestCases invoked for runId:', runId);
+    if (!runId) {
+      return;
+    }
+
+    setLoadingActiveRunTestCases(true);
+
+    try {
+      let runPayload: any = null;
+      let runStats: any = null;
+
+      try {
+        const response = await fetch(`/api/run-details/${runId}`, { cache: 'no-store' });
+        if (response.ok) {
+          const directData = await response.json();
+          runPayload = directData?.run ?? null;
+          runStats = directData?.stats ?? null;
+        } else {
+          console.warn('Direct fetch for run details returned non-OK status:', response.status);
+        }
+      } catch (directError) {
+        console.warn('Direct fetch for run details failed:', directError);
+      }
+
+      if (!runPayload) {
+        const serviceDetails = await RunsService.getRun(runId);
+        runPayload = serviceDetails?.run ?? null;
+        runStats = serviceDetails?.stats ?? null;
+      }
+
+      if (activeRunIdRef.current !== runId) {
+        console.log('?? DEBUG: Stale run test case response ignored for runId:', runId);
         return;
       }
 
-      console.log('🔍 DEBUG: Loading test cases for activeRunId:', activeRunId);
-      setLoadingActiveRunTestCases(true);
+      if (runPayload?.runCases) {
+        const runTestCases = runPayload.runCases.map(normalizeRunCase);
+        console.log('?? DEBUG: Active run test cases set from payload:', runTestCases.length);
 
-      try {
-        console.log('🔍 DEBUG: Calling RunsService.getRun with ID:', activeRunId);
-        const runDetails = await RunsService.getRun(activeRunId);
-        console.log('🔍 DEBUG: runDetails response:', runDetails);
-        console.log('🔍 DEBUG: runDetails.run:', runDetails?.run);
-        console.log('🔍 DEBUG: runDetails.run.runCases length:', runDetails?.run?.runCases?.length);
+        setActiveRunTestCases(runTestCases);
 
-        if (runDetails && runDetails.run && runDetails.run.runCases) {
-          console.log('🔍 DEBUG: Found runCases:', runDetails.run.runCases.length, 'cases');
+        setExecutionRuns(prev => prev.map(run => {
+          if (run.id !== runId) {
+            return run;
+          }
 
-          // Transform runCases to test case format
-          const runTestCases = runDetails.run.runCases.map((runCase: any) => {
-            // Normalize status from database format to frontend format
-            let normalizedStatus = runCase.status || 'Not_Executed';
-            if (normalizedStatus === 'Not Run') {
-              normalizedStatus = 'Not_Executed';
-            }
+          const completedFromStats =
+            (runStats?.passedCases || 0) +
+            (runStats?.failedCases || 0) +
+            (runStats?.blockedCases || 0);
 
-            // Map runCase back to test case format
-            return {
-              id: runCase.caseId,
-              title: runCase.titleSnapshot,
-              description: runCase.description || '',
-              category: runCase.component || 'General',
-              priority: runCase.priority || 'Medium',
-              status: normalizedStatus,
-              currentStatus: normalizedStatus,
-              steps: runCase.stepsSnapshot || [],
-              expectedResult: runCase.expectedResult || '',
-              assignee: runCase.assignee,
-              // Add other required fields as needed
-            };
-          });
+          const completedFromCases = runTestCases.filter((tc: TestCase) =>
+            !['Not_Executed', 'Not Run', 'Skip'].includes(tc.currentStatus)
+          ).length;
 
-          console.log('🔍 DEBUG: Setting activeRunTestCases:', runTestCases.length, 'cases');
-          console.log('🔍 DEBUG: Test case statuses:', runTestCases.map((tc: any) => ({ id: tc.id, title: tc.title, status: tc.status })));
-          setActiveRunTestCases(runTestCases);
-
-          // Also update the execution runs for display purposes
-          setExecutionRuns(prev => prev.map(run =>
-            run.id === activeRunId
-              ? { ...run, testCases: runTestCases }
-              : run
-          ));
-          console.log('🔍 DEBUG: Updated activeRunTestCases and execution runs');
-        } else {
-          console.log('🔍 DEBUG: No runCases found in response, setting empty array');
-          setActiveRunTestCases([]);
-        }
-      } catch (error) {
+          return {
+            ...run,
+            status: runPayload.status === 'completed' ? 'completed' : run.status,
+            testCases: runTestCases,
+            totalTests: runTestCases.length,
+            completedTests: completedFromStats || completedFromCases,
+          };
+        }));
+      } else {
+        console.log('?? DEBUG: No runCases returned for runId:', runId);
+        setActiveRunTestCases([]);
+      }
+    } catch (error) {
+      if (activeRunIdRef.current === runId) {
         console.error('Failed to load run test cases:', error);
         setActiveRunTestCases([]);
-      } finally {
+      }
+    } finally {
+      if (activeRunIdRef.current === runId) {
         setLoadingActiveRunTestCases(false);
       }
-    };
+    }
+  }, [normalizeRunCase, setExecutionRuns]);
 
-    loadActiveRunTestCases();
-  }, [activeRunId]);
+  useEffect(() => {
+    console.log('?? useEffect triggered for activeRunId change:', activeRunId);
+    if (!activeRunId) {
+      console.log('?? DEBUG: Clearing active run context because activeRunId is null');
+      activeRunIdRef.current = null;
+      setActiveRunTestCases([]);
+      setLoadingActiveRunTestCases(false);
+      return;
+    }
+
+    activeRunIdRef.current = activeRunId;
+    setActiveRunTestCases([]);
+    void loadActiveRunTestCases(activeRunId);
+  }, [activeRunId, loadActiveRunTestCases]);
 
   // Handle run creation from wizard
   const handleRunCreated = async (runId: string) => {
@@ -465,7 +518,7 @@ export default function TestExecutionPage() {
 
       // Use localStorage directly instead of API call
       const users = getAllUsers()
-      console.log('👥 Loading users for assignment:', users.length, 'users found')
+      console.log('?? Loading users for assignment:', users.length, 'users found')
 
       // Transform users to match the expected format
       const userList = users.map(user => ({
@@ -658,11 +711,11 @@ export default function TestExecutionPage() {
   const loadExecutionRuns = async () => {
     try {
       const result = await RunsService.getRuns({ limit: 50 });
-      console.log('🔍 DEBUG: API result from getRuns:', result);
+      console.log('?? DEBUG: API result from getRuns:', result);
 
       // Transform API runs to ExecutionRun format
       const transformedRuns: ExecutionRun[] = result.runs.map(run => {
-        console.log('🔍 DEBUG: Processing run:', run.id, 'stats:', run.stats);
+        console.log('?? DEBUG: Processing run:', run.id, 'stats:', run.stats);
         const environment = Array.isArray(run.environments) && run.environments.length > 0
           ? run.environments[0]
           : 'SIT';
@@ -677,7 +730,7 @@ export default function TestExecutionPage() {
         const completedTests = (run.stats?.passedCases || 0) + (run.stats?.failedCases || 0) + (run.stats?.blockedCases || 0);
         const totalTests = run.stats?.totalCases || 0;
 
-        console.log(`🔍 DEBUG: Run ${run.id} - completedTests: ${completedTests}, totalTests: ${totalTests}`);
+        console.log(`?? DEBUG: Run ${run.id} - completedTests: ${completedTests}, totalTests: ${totalTests}`);
 
         return {
           id: run.id,
@@ -740,7 +793,7 @@ export default function TestExecutionPage() {
   // Load users when a test is selected for execution
   useEffect(() => {
     if (selectedTest) {
-      console.log('🔄 Test selected, loading users for assignment...');
+      console.log('?? Test selected, loading users for assignment...');
       loadUsersForAssignment();
     }
   }, [selectedTest]);
@@ -803,9 +856,9 @@ export default function TestExecutionPage() {
         testCasesToBlock: relatedTests.slice(0, 3).map(tc => tc.id)
       },
       suggestedActions: [
-        '🔍 Review related test cases for similar issues',
-        '📝 Update test documentation',
-        '🔄 Re-run after fix verification'
+        '?? Review related test cases for similar issues',
+        '?? Update test documentation',
+        '?? Re-run after fix verification'
       ],
       rootCauseAnalysis: `Potential issue in ${testCase.category} component. Consider checking related functionality.`
     };
@@ -1968,7 +2021,7 @@ export default function TestExecutionPage() {
       setPrioritizationAnalysis(result.analysis);
       setAiPrioritizationEnabled(true);
       setSortBy('aiRecommended');
-      showNotification('success', `✨ AI analyzed ${result.analysis.totalTests} tests. ${result.analysis.highRiskTests} high-risk cases identified.`);
+      showNotification('success', `? AI analyzed ${result.analysis.totalTests} tests. ${result.analysis.highRiskTests} high-risk cases identified.`);
     } catch (error) {
       console.error('AI prioritization failed:', error);
       showNotification('error', 'AI prioritization failed. Using standard sorting.');
@@ -2055,7 +2108,7 @@ export default function TestExecutionPage() {
       
       // Trigger AI analysis for failures
       if (executionData.status === 'Fail' && executionData.notes.trim()) {
-        showNotification('info', '🤖 AI is analyzing this failure for related test cases...');
+        showNotification('info', '?? AI is analyzing this failure for related test cases...');
         setTimeout(() => {
           analyzeFailureWithAI(selectedTest, executionData.notes);
         }, 1000);
@@ -2072,7 +2125,7 @@ export default function TestExecutionPage() {
           showNotification('info', `Moving to next test: ${updatedRun.currentTest.title}`);
         } else {
           setSelectedTest(null);
-          showNotification('success', `🎉 Run "${activeRun.name}" completed! All ${activeRun.totalTests} tests finished.`);
+          showNotification('success', `?? Run "${activeRun.name}" completed! All ${activeRun.totalTests} tests finished.`);
         }
       } else {
         setSelectedTest(null);
@@ -2200,14 +2253,14 @@ export default function TestExecutionPage() {
   const displayTestCases = activeRunId ? activeRunTestCases : filteredTestCases;
 
   // Debug logging for test case display
-  console.log('🎯 === DISPLAY TEST CASES CALCULATION ===');
-  console.log('🔍 DEBUG: activeRunId:', activeRunId);
-  console.log('🔍 DEBUG: activeRunTestCases.length:', activeRunTestCases.length);
-  console.log('🔍 DEBUG: filteredTestCases.length:', filteredTestCases.length);
-  console.log('🔍 DEBUG: displayTestCases.length:', displayTestCases.length);
-  console.log('🔍 DEBUG: Will use:', activeRunId ? 'activeRunTestCases' : 'filteredTestCases');
-  console.log('🔍 DEBUG: displayTestCases sample:', displayTestCases.slice(0, 3).map(tc => ({ id: tc.id, title: tc.title, currentStatus: tc.currentStatus })));
-  console.log('🎯 ==========================================');
+  console.log('?? === DISPLAY TEST CASES CALCULATION ===');
+  console.log('?? DEBUG: activeRunId:', activeRunId);
+  console.log('?? DEBUG: activeRunTestCases.length:', activeRunTestCases.length);
+  console.log('?? DEBUG: filteredTestCases.length:', filteredTestCases.length);
+  console.log('?? DEBUG: displayTestCases.length:', displayTestCases.length);
+  console.log('?? DEBUG: Will use:', activeRunId ? 'activeRunTestCases' : 'filteredTestCases');
+  console.log('?? DEBUG: displayTestCases sample:', displayTestCases.slice(0, 3).map(tc => ({ id: tc.id, title: tc.title, currentStatus: tc.currentStatus })));
+  console.log('?? ==========================================');
 
   return (
     <Layout 
@@ -2591,15 +2644,27 @@ export default function TestExecutionPage() {
                 <label className="text-sm font-medium text-gray-700">Active Run:</label>
                 <select
                   value={activeRunId || ''}
-                  onChange={(e) => switchToRun(e.target.value)}
+                  onChange={(e) => {
+                    console.log('?? Dropdown onChange triggered with value:', e.target.value);
+                    console.log('?? Event target:', e.target);
+                    console.log('?? Event currentTarget:', e.currentTarget);
+                    switchToRun(e.target.value);
+                  }}
+                  onFocus={() => console.log('?? Dropdown focused')}
+                  onBlur={() => console.log('?? Dropdown blurred')}
+                  onClick={() => console.log('?? Dropdown clicked')}
                   className="flex-1 max-w-md px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white"
                 >
                   <option value="">Select an execution run...</option>
-                  {filteredRuns.map((run) => (
-                    <option key={run.id} value={run.id}>
-                      {run.name} ({run.completedTests}/{run.totalTests}) - {run.status} - {run.tester} ({getUserRole(run.tester)?.name || 'Unknown'})
-                    </option>
-                  ))}
+                  {(() => {
+                    console.log('?? filteredRuns for dropdown:', filteredRuns.length, 'runs');
+                    console.log('?? filteredRuns data:', filteredRuns.map(r => ({ id: r.id, name: r.name })));
+                    return filteredRuns.map((run) => (
+                      <option key={run.id} value={run.id}>
+                        {run.name} ({run.completedTests}/{run.totalTests}) - {run.status} - {run.tester} ({getUserRole(run.tester)?.name || 'Unknown'})
+                      </option>
+                    ));
+                  })()}
                 </select>
 
                 {/* Active Run Info Display */}
@@ -2831,7 +2896,7 @@ export default function TestExecutionPage() {
                     <div id="test-cases-preview" className="hidden max-h-32 overflow-y-auto border border-gray-200 rounded p-2 ml-7">
                       {filteredTestCases.slice(0, 5).map(test => (
                         <div key={test.id} className="text-xs text-gray-600 py-1">
-                          • {test.title}
+                          &bull; {test.title}
                         </div>
                       ))}
                       {filteredTestCases.length > 5 && (
@@ -3135,7 +3200,7 @@ export default function TestExecutionPage() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Tester</label>
                       {activeRun?.assignees && activeRun.assignees.length > 0 && (
                         <p className="text-xs text-blue-600 mb-2">
-                          📋 Showing run assignees only (inherited from "{activeRun.name}")
+                          ?? Showing run assignees only (inherited from "{activeRun.name}")
                         </p>
                       )}
                       <select
@@ -3144,8 +3209,8 @@ export default function TestExecutionPage() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white"
                       >
                         {(() => {
-                          console.log('🔍 DEBUG: activeRun?.assignees:', activeRun?.assignees);
-                          console.log('🔍 DEBUG: availableUsersForAssignment:', availableUsersForAssignment.map(u => ({ id: u.id, name: u.name, email: u.email })));
+                          console.log('?? DEBUG: activeRun?.assignees:', activeRun?.assignees);
+                          console.log('?? DEBUG: availableUsersForAssignment:', availableUsersForAssignment.map(u => ({ id: u.id, name: u.name, email: u.email })));
 
                           const filteredUsers = (activeRun?.assignees && activeRun.assignees.length > 0 ?
                             // Filter availableUsersForAssignment to only show run assignees
@@ -3158,7 +3223,7 @@ export default function TestExecutionPage() {
                             availableUsersForAssignment
                           );
 
-                          console.log('🔍 DEBUG: filteredUsers for tester dropdown:', filteredUsers.map(u => ({ id: u.id, name: u.name, email: u.email })));
+                          console.log('?? DEBUG: filteredUsers for tester dropdown:', filteredUsers.map(u => ({ id: u.id, name: u.name, email: u.email })));
                           return filteredUsers;
                         })().map((user) => (
                           <option key={user.name} value={user.name}>
@@ -3806,3 +3871,4 @@ export default function TestExecutionPage() {
     </Layout>
   );
 }
+

@@ -2,7 +2,6 @@ import './globals.css'
 import type { Metadata } from 'next'
 import { SettingsProvider } from '@/contexts/SettingsContext'
 import { TokenUsageProvider } from '@/contexts/TokenUsageContext'
-import UserInitializer from '@/components/UserInitializer'
 import { ClientOnly } from '@/components/ui/ClientOnly'
 
 export const metadata: Metadata = {
@@ -21,7 +20,6 @@ export default function RootLayout({
         <ClientOnly>
           <SettingsProvider>
             <TokenUsageProvider>
-              <UserInitializer />
               {children}
             </TokenUsageProvider>
           </SettingsProvider>

@@ -4,13 +4,9 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { Layout } from '@/components/layout/Layout'
 import { DataGrid } from '@/components/library/DataGrid'
 import { ReconcileDuplicatesButton } from '@/components/library/ReconcileDuplicatesButton'
-import { UserAssignment, AssignedUsersSummary } from '@/components/user-management/UserAssignment'
 import { CoverageDashboard } from '@/components/coverage/CoverageDashboard'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
-import { Input } from '@/components/ui/Input'
-import { Textarea } from '@/components/ui/Textarea'
 import { TestCase } from '@/types/index'
 import { getAllStoredTestCases, getStorageStats } from '@/lib/test-case-storage'
 import { getTestCaseSignature } from '@/lib/caseSignature'
@@ -30,49 +26,10 @@ import {
   Zap,
   Trash2,
   Play,
-  CheckCircle,
-  XCircle,
-  Clock,
-  AlertTriangle,
-  User,
-  Calendar,
-  Target,
-  Timer,
-  MessageSquare,
-  Activity,
-  List,
-  Grid,
-  Upload,
-  X
+  Upload
 } from 'lucide-react'
 
-// Test execution interfaces
-interface ExecutionRun {
-  id: string
-  name: string
-  description: string
-  testCases: TestCase[]
-  assignedTester: string
-  status: 'Not Started' | 'In Progress' | 'Completed' | 'Blocked'
-  createdAt: Date
-  updatedAt: Date
-  progress: {
-    total: number
-    executed: number
-    passed: number
-    failed: number
-    blocked: number
-    skipped: number
-  }
-}
 
-// Available users for test assignment
-const AVAILABLE_USERS = [
-  { id: '1', name: 'System Administrator', username: 'admin', role: 'super-admin' },
-  { id: '2', name: 'Sarah Johnson', username: 'sarah', role: 'lead' },
-  { id: '3', name: 'Mike Chen', username: 'mike', role: 'qa' },
-  { id: '4', name: 'Lisa Rodriguez', username: 'lisa', role: 'qa' }
-]
 
 export default function TestCaseManagement() {
   const [testCases, setTestCases] = useState<TestCase[]>([])
@@ -110,21 +67,6 @@ export default function TestCaseManagement() {
     complexity: 'Medium'
   })
 
-  // Execution Management State
-  const [viewMode, setViewMode] = useState<'library' | 'execution'>('library')
-  const [selectedTestCaseIds, setSelectedTestCaseIds] = useState<string[]>([])
-  const [executionRuns, setExecutionRuns] = useState<ExecutionRun[]>([])
-  const [activeRunId, setActiveRunId] = useState<string | null>(null)
-  const [showExecutionPanel, setShowExecutionPanel] = useState(false)
-  const [executingTestCase, setExecutingTestCase] = useState<TestCase | null>(null)
-  const [executionData, setExecutionData] = useState({
-    status: 'Not Executed' as 'Pass' | 'Fail' | 'Blocked' | 'Skip' | 'Not Executed',
-    tester: '',
-    environment: 'Production',
-    duration: '',
-    notes: '',
-    jiraTicket: ''
-  })
 
   // Get current user (memoized to prevent infinite re-renders)
   const [currentUser, setCurrentUser] = useState(() => AuthService.getCurrentUser())
@@ -137,63 +79,51 @@ export default function TestCaseManagement() {
     }, {} as Record<string, string>)
   }, [projects])
 
-  // Initialize execution data with current user (only once)
+  // Initialize current user
   useEffect(() => {
     const user = AuthService.getCurrentUser()
     if (user) {
       setCurrentUser(user)
-      setExecutionData(prev => ({
-        ...prev,
-        tester: user.name
-      }))
     }
   }, [])
 
-  // Load execution runs from localStorage
-  useEffect(() => {
-    try {
-      const storedRuns = localStorage.getItem('testCaseWriter_executionRuns')
-      if (storedRuns) {
-        const parsedRuns = JSON.parse(storedRuns).map((run: any) => ({
-          ...run,
-          createdAt: new Date(run.createdAt),
-          updatedAt: new Date(run.updatedAt)
-        }))
-        setExecutionRuns(parsedRuns)
-      }
-    } catch (error) {
-      console.error('Failed to load execution runs:', error)
-      setExecutionRuns([])
-    }
-  }, [])
-
-  // Load test cases from localStorage on component mount
+  // Load test cases from API on component mount
   useEffect(() => {
     const loadTestCases = async () => {
       try {
-        console.log('📚 Loading test cases from localStorage...')
-        
-        // Import and run cleanup for duplicate IDs
-        const { cleanupDuplicateTestCaseIds, getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
-        
-        // Clean up any existing duplicate IDs first
-        cleanupDuplicateTestCaseIds()
-        
-        const storedTestCases = getAllStoredTestCases()
-        const stats = getStorageStats()
-        
-        setTestCases(storedTestCases)
-        setStorageStats(stats)
+        console.log('📚 Loading test cases from API...')
 
+        const response = await fetch('/api/test-cases')
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        const apiTestCases = await response.json()
+
+        setTestCases(apiTestCases)
+        setStorageStats({
+          sessions: 1,
+          totalTestCases: apiTestCases.length,
+          storageSize: `${Math.round(JSON.stringify(apiTestCases).length / 1024)} KB`
+        })
 
         setLoading(false)
 
       } catch (error) {
-        console.error('❌ Failed to load test cases:', error)
+        console.error('❌ Failed to load test cases from API:', error)
+        // Fallback to localStorage if API fails
+        try {
+          const { getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
+          const storedTestCases = getAllStoredTestCases()
+          const stats = getStorageStats()
+          setTestCases(storedTestCases)
+          setStorageStats(stats)
+        } catch (fallbackError) {
+          console.error('❌ Fallback to localStorage also failed:', fallbackError)
+        }
         setLoading(false)
       }
     }
-    
+
     loadTestCases()
   }, [])
 
@@ -725,127 +655,6 @@ export default function TestCaseManagement() {
     setShowCreateModal(false)
   }
 
-  // Execution Management Functions
-  const createExecutionRun = () => {
-    if (selectedIds.length === 0) {
-      alert('Please select test cases to create an execution run')
-      return
-    }
-
-    const selectedTestCases = testCases.filter(tc => selectedIds.includes(tc.id))
-    const runName = prompt('Enter execution run name:', `Test Run ${executionRuns.length + 1}`)
-
-    if (!runName) return
-
-    const newRun: ExecutionRun = {
-      id: `run_${Date.now()}`,
-      name: runName,
-      description: `Execution run for ${selectedTestCases.length} test cases`,
-      testCases: selectedTestCases,
-      assignedTester: currentUser?.name || 'Unassigned',
-      status: 'Not Started',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      progress: {
-        total: selectedTestCases.length,
-        executed: 0,
-        passed: 0,
-        failed: 0,
-        blocked: 0,
-        skipped: 0
-      }
-    }
-
-    const updatedRuns = [...executionRuns, newRun]
-    setExecutionRuns(updatedRuns)
-    localStorage.setItem('testCaseWriter_executionRuns', JSON.stringify(updatedRuns))
-    setActiveRunId(newRun.id)
-    setViewMode('execution')
-    setSelectedIds([])
-
-    alert(`✅ Execution run "${runName}" created with ${selectedTestCases.length} test cases!`)
-  }
-
-  const executeTestCase = (testCase: TestCase) => {
-    setExecutingTestCase(testCase)
-    setShowExecutionPanel(true)
-    setExecutionData(prev => ({
-      ...prev,
-      status: testCase.testResult as any || 'Not Executed',
-      notes: testCase.remarks || ''
-    }))
-  }
-
-  const saveExecutionResult = () => {
-    if (!executingTestCase || !activeRunId) return
-
-    const runIndex = executionRuns.findIndex(run => run.id === activeRunId)
-    if (runIndex === -1) return
-
-    const updatedRuns = [...executionRuns]
-    const run = updatedRuns[runIndex]
-
-    // Update test case in the run
-    const testCaseIndex = run.testCases.findIndex(tc => tc.id === executingTestCase.id)
-    if (testCaseIndex !== -1) {
-      run.testCases[testCaseIndex] = {
-        ...run.testCases[testCaseIndex],
-        testResult: executionData.status,
-        remarks: executionData.notes
-      }
-
-      // Update progress
-      const executed = run.testCases.filter(tc => tc.testResult && tc.testResult !== 'Not Executed').length
-      const passed = run.testCases.filter(tc => tc.testResult === 'Pass').length
-      const failed = run.testCases.filter(tc => tc.testResult === 'Fail').length
-      const blocked = run.testCases.filter(tc => tc.testResult === 'Blocked').length
-      const skipped = run.testCases.filter(tc => tc.testResult === 'Skip').length
-
-      run.progress = {
-        total: run.testCases.length,
-        executed,
-        passed,
-        failed,
-        blocked,
-        skipped
-      }
-
-      run.updatedAt = new Date()
-
-      // Update run status
-      if (executed === run.testCases.length) {
-        run.status = 'Completed'
-      } else if (executed > 0) {
-        run.status = 'In Progress'
-      }
-    }
-
-    setExecutionRuns(updatedRuns)
-    localStorage.setItem('testCaseWriter_executionRuns', JSON.stringify(updatedRuns))
-    setShowExecutionPanel(false)
-    setExecutingTestCase(null)
-
-    // Reset execution data
-    setExecutionData({
-      status: 'Not Executed',
-      tester: currentUser?.name || '',
-      environment: 'Production',
-      duration: '',
-      notes: '',
-      jiraTicket: ''
-    })
-
-    alert('✅ Execution result saved successfully!')
-  }
-
-  const getActiveRun = () => {
-    return executionRuns.find(run => run.id === activeRunId)
-  }
-
-  const getActiveRunTestCases = () => {
-    const activeRun = getActiveRun()
-    return activeRun ? activeRun.testCases : []
-  }
 
   // Removed mock data loading function for production
 
@@ -889,13 +698,8 @@ export default function TestCaseManagement() {
   const groupedTestCases = groupTestCases(filteredTestCases, groupBy)
 
   const breadcrumbs = [
-    { label: viewMode === 'execution' ? 'Test Management' : 'Test Library' }
+    { label: 'Test Library' }
   ]
-
-  // Get display data based on view mode
-  const displayTestCases = viewMode === 'execution' && activeRunId
-    ? getActiveRunTestCases()
-    : filteredTestCases
 
   const handleExportAll = async () => {
     if (testCases.length === 0) {
@@ -972,66 +776,15 @@ export default function TestCaseManagement() {
 
   const actions = (
     <div className="flex items-center space-x-3">
-      {/* View Mode Toggle */}
-      <div className="flex items-center border rounded-lg">
-        <Button
-          variant={viewMode === 'library' ? 'primary' : 'ghost'}
-          size="sm"
-          onClick={() => setViewMode('library')}
-          className="rounded-r-none border-r"
-        >
-          <Grid className="h-4 w-4 mr-2" />
-          Library
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => window.location.href = '/library/execution'}
-          className="rounded-l-none"
-        >
-          <Play className="h-4 w-4 mr-2" />
-          Execution
-        </Button>
-      </div>
-
-      {/* Execution Actions */}
-      {viewMode === 'execution' && (
-        <div className="flex items-center space-x-3">
-          {/* Always visible: New Execution Run button */}
-          <Button
-            variant="primary"
-            size="md"
-            onClick={() => window.location.href = '/execution'}
-          >
-            <Target className="h-4 w-4 mr-2" />
-            New Execution Run
-          </Button>
-
-          {/* Create Run with selected test cases */}
-          {selectedIds.length > 0 && (
-            <Button variant="secondary" size="md" onClick={createExecutionRun}>
-              <Target className="h-4 w-4 mr-2" />
-              Create Run with Selected ({selectedIds.length})
-            </Button>
-          )}
-
-          {/* Execution Run Selector */}
-          {executionRuns.length > 0 && (
-            <select
-              value={activeRunId || ''}
-              onChange={(e) => setActiveRunId(e.target.value || null)}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm min-w-[200px]"
-            >
-              <option value="">Select Execution Run</option>
-              {executionRuns.map(run => (
-                <option key={run.id} value={run.id}>
-                  {run.name} ({run.progress.executed}/{run.progress.total})
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-      )}
+      {/* Execute button */}
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => window.location.href = '/execution'}
+      >
+        <Play className="h-4 w-4 mr-2" />
+        Execute Tests
+      </Button>
 
       {/* Generate More button when coming from generate page */}
       {isFromGenerate && (
@@ -1041,7 +794,7 @@ export default function TestCaseManagement() {
         </Button>
       )}
 
-      {testCases.length > 0 && viewMode === 'library' && (
+      {testCases.length > 0 && (
         <>
           <ReconcileDuplicatesButton
             projectId={selectedProjectFilter || undefined}
@@ -1068,7 +821,7 @@ export default function TestCaseManagement() {
       )}
 
       {/* Only show generate button if NOT coming from generate page */}
-      {!isFromGenerate && viewMode === 'library' && (
+      {!isFromGenerate && (
         <div className="flex space-x-3">
           <Button variant="primary" size="md" onClick={handleGenerateAI}>
             <Zap className="h-4 w-4 mr-2" />
@@ -1081,12 +834,10 @@ export default function TestCaseManagement() {
         </div>
       )}
 
-      {viewMode === 'library' && (
-        <Button variant="secondary" size="md" onClick={() => setShowCreateModal(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Test Case
-        </Button>
-      )}
+      <Button variant="secondary" size="md" onClick={() => setShowCreateModal(true)}>
+        <Plus className="h-4 w-4 mr-2" />
+        New Test Case
+      </Button>
     </div>
   )
 
@@ -1117,7 +868,7 @@ export default function TestCaseManagement() {
   return (
     <Layout
       breadcrumbs={breadcrumbs}
-      title={viewMode === 'execution' ? 'Test Case Management' : 'Test Case Library'}
+      title="Test Case Library"
       actions={actions}
     >
       <div className="space-y-6">
@@ -1178,171 +929,6 @@ export default function TestCaseManagement() {
           </Card>
         </div>
 
-
-        {/* Execution Dashboard */}
-        {viewMode === 'execution' && (
-          <div className="space-y-6">
-            {/* No Execution Runs Info */}
-            {executionRuns.length === 0 && (
-              <Card className="border-blue-200 bg-blue-50">
-                <CardContent className="p-6 text-center">
-                  <Target className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-blue-900 mb-2">Start Managing Test Executions</h3>
-                  <p className="text-blue-700 mb-4">
-                    Create execution runs to track test case execution progress and results.
-                  </p>
-                  <div className="flex justify-center space-x-3">
-                    <Button
-                      variant="primary"
-                      onClick={() => window.location.href = '/execution'}
-                    >
-                      <Target className="h-4 w-4 mr-2" />
-                      Create New Execution Run
-                    </Button>
-                  </div>
-                  <p className="text-xs text-blue-600 mt-3">
-                    You can create empty runs first, then add test cases later, or select test cases below to create a run with them.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Active Run Status */}
-            {activeRunId && getActiveRun() && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <Target className="h-5 w-5 text-primary-600" />
-                      <span>Active Execution Run</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-500">
-                        Assigned to: {getActiveRun()?.assignedTester}
-                      </span>
-                      <Badge variant={
-                        getActiveRun()?.status === 'Completed' ? 'success' :
-                        getActiveRun()?.status === 'In Progress' ? 'warning' :
-                        getActiveRun()?.status === 'Blocked' ? 'error' : 'secondary'
-                      }>
-                        {getActiveRun()?.status}
-                      </Badge>
-                    </div>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-blue-600">
-                        {getActiveRun()?.progress.total}
-                      </div>
-                      <div className="text-sm text-gray-500">Total</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-gray-600">
-                        {getActiveRun()?.progress.executed}
-                      </div>
-                      <div className="text-sm text-gray-500">Executed</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-green-600">
-                        {getActiveRun()?.progress.passed}
-                      </div>
-                      <div className="text-sm text-gray-500">Passed</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-red-600">
-                        {getActiveRun()?.progress.failed}
-                      </div>
-                      <div className="text-sm text-gray-500">Failed</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-yellow-600">
-                        {getActiveRun()?.progress.blocked}
-                      </div>
-                      <div className="text-sm text-gray-500">Blocked</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-gray-400">
-                        {getActiveRun()?.progress.skipped}
-                      </div>
-                      <div className="text-sm text-gray-500">Skipped</div>
-                    </div>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="mt-4">
-                    <div className="flex justify-between text-sm text-gray-600 mb-2">
-                      <span>Progress</span>
-                      <span>
-                        {getActiveRun()?.progress.executed}/{getActiveRun()?.progress.total}
-                        ({Math.round((getActiveRun()?.progress.executed || 0) / (getActiveRun()?.progress.total || 1) * 100)}%)
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div
-                        className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-                        style={{
-                          width: `${Math.round((getActiveRun()?.progress.executed || 0) / (getActiveRun()?.progress.total || 1) * 100)}%`
-                        }}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Execution Runs List */}
-            {executionRuns.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Execution Runs</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {executionRuns.map(run => (
-                      <div
-                        key={run.id}
-                        className={`p-4 border rounded-lg cursor-pointer transition-all ${
-                          activeRunId === run.id
-                            ? 'border-primary-300 bg-primary-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                        onClick={() => setActiveRunId(run.id)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="font-medium text-gray-900">{run.name}</h4>
-                            <p className="text-sm text-gray-500">{run.description}</p>
-                            <div className="flex items-center space-x-4 text-sm text-gray-500 mt-1">
-                              <span>Assigned to: {run.assignedTester}</span>
-                              <span>Updated: {run.updatedAt.toLocaleDateString()}</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-4">
-                            <div className="text-center">
-                              <div className="text-sm font-medium">
-                                {run.progress.executed}/{run.progress.total}
-                              </div>
-                              <div className="text-xs text-gray-500">Progress</div>
-                            </div>
-                            <Badge variant={
-                              run.status === 'Completed' ? 'success' :
-                              run.status === 'In Progress' ? 'warning' :
-                              run.status === 'Blocked' ? 'error' : 'secondary'
-                            }>
-                              {run.status}
-                            </Badge>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
 
         {/* Demo Data Loader */}
 
@@ -1517,36 +1103,18 @@ export default function TestCaseManagement() {
             {groupBy === 'none' ? (
               <div className="relative">
                 <DataGrid
-                  data={displayTestCases}
+                  data={filteredTestCases}
                   onSelectionChange={setSelectedIds}
                   onEdit={handleEdit}
                   onView={handleView}
-                  onDelete={viewMode === 'library' ? handleDelete : undefined}
+                  onDelete={handleDelete}
                   onExport={handleExport}
                   onBulkEdit={handleBulkEdit}
                   onVersionHistory={handleOpenVersionHistory}
                   loading={loading}
                   projects={projectsLookup}
-                  customActions={viewMode === 'execution' && activeRunId ? [
-                    {
-                      label: 'Execute',
-                      icon: Play,
-                      onClick: (testCase: TestCase) => executeTestCase(testCase),
-                      condition: (testCase: TestCase) => testCase.testResult !== 'Pass'
-                    }
-                  ] : undefined}
+                  customActions={undefined}
                 />
-                {viewMode === 'execution' && !activeRunId && (
-                  <div className="absolute inset-0 bg-gray-50 bg-opacity-75 flex items-center justify-center">
-                    <div className="text-center p-8">
-                      <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Execution Run</h3>
-                      <p className="text-gray-500 mb-4">
-                        Select test cases and create an execution run to start testing.
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
             ) : (
               <div className="space-y-6 p-6">
@@ -1877,195 +1445,6 @@ export default function TestCaseManagement() {
         </div>
       )}
 
-      {/* Test Execution Panel */}
-      {showExecutionPanel && executingTestCase && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900 flex items-center space-x-2">
-                  <Play className="h-5 w-5 text-primary-600" />
-                  <span>Execute Test Case</span>
-                </h2>
-                <button
-                  onClick={() => setShowExecutionPanel(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <XCircle className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Test Case Details */}
-                <div className="lg:col-span-2 space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Test Case Details</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div>
-                        <label className="text-sm font-medium text-gray-700">ID:</label>
-                        <p className="text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded">
-                          {executingTestCase.id}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-700">Title:</label>
-                        <p className="text-sm text-gray-900">{executingTestCase.testCase}</p>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-700">Steps:</label>
-                        <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded whitespace-pre-wrap">
-                          {executingTestCase.testSteps?.map(step => `${step.step}. ${step.description}`).join('\n') || 'No test steps defined'}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-700">Expected Result:</label>
-                        <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded whitespace-pre-wrap">
-                          {executingTestCase.data?.expectedResult || 'No expected result defined'}
-                        </div>
-                      </div>
-                      {executingTestCase.testData && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Test Data:</label>
-                          <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded whitespace-pre-wrap">
-                            {executingTestCase.testData}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Execution Form */}
-                <div className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Execution Results</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Test Result <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={executionData.status}
-                          onChange={(e) => setExecutionData(prev => ({
-                            ...prev,
-                            status: e.target.value as any
-                          }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
-                        >
-                          <option value="Not Executed">Not Executed</option>
-                          <option value="Pass">Pass</option>
-                          <option value="Fail">Fail</option>
-                          <option value="Blocked">Blocked</option>
-                          <option value="Skip">Skip</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Tester</label>
-                        <select
-                          value={executionData.tester}
-                          onChange={(e) => setExecutionData(prev => ({
-                            ...prev,
-                            tester: e.target.value
-                          }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
-                        >
-                          {AVAILABLE_USERS.map(user => (
-                            <option key={user.id} value={user.name}>
-                              {user.name} ({user.role})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Environment</label>
-                        <select
-                          value={executionData.environment}
-                          onChange={(e) => setExecutionData(prev => ({
-                            ...prev,
-                            environment: e.target.value
-                          }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
-                        >
-                          <option value="Development">Development</option>
-                          <option value="Staging">Staging</option>
-                          <option value="Production">Production</option>
-                          <option value="UAT">UAT</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Duration (optional)</label>
-                        <Input
-                          type="text"
-                          placeholder="e.g., 5 minutes"
-                          value={executionData.duration}
-                          onChange={(e) => setExecutionData(prev => ({
-                            ...prev,
-                            duration: e.target.value
-                          }))}
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Jira Ticket (optional)</label>
-                        <Input
-                          type="text"
-                          placeholder="e.g., PROJ-123"
-                          value={executionData.jiraTicket}
-                          onChange={(e) => setExecutionData(prev => ({
-                            ...prev,
-                            jiraTicket: e.target.value
-                          }))}
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                        <Textarea
-                          rows={4}
-                          placeholder="Add execution notes, observations, or issues..."
-                          value={executionData.notes}
-                          onChange={(e) => setExecutionData(prev => ({
-                            ...prev,
-                            notes: e.target.value
-                          }))}
-                        />
-                      </div>
-
-                      <div className="flex space-x-3 pt-4">
-                        <Button
-                          variant="secondary"
-                          onClick={() => setShowExecutionPanel(false)}
-                          className="flex-1"
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          variant="primary"
-                          onClick={saveExecutionResult}
-                          className="flex-1"
-                          disabled={!executionData.status || executionData.status === 'Not Executed'}
-                        >
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Save Result
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Import Test Cases Modal */}
       {showImportModal && (
