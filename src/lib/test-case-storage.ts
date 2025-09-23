@@ -223,6 +223,114 @@ export function saveGeneratedTestCasesWithIntelligentDedup(
   }
 }
 
+// New async function that uses DatabaseService for production database integration
+export async function saveGeneratedTestCasesAsync(
+  testCases: TestCase[],
+  documentNames: string[] = [],
+  model: string = 'gpt-4o',
+  projectId?: string,
+  projectName?: string,
+  continueSessionId?: string,
+  skipDuplicates: boolean = true
+): Promise<SaveResult> {
+  try {
+    const { DatabaseService } = await import('@/lib/database-service')
+
+    let newTestCases: TestCase[] = []
+    let duplicateSignatures: string[] = []
+    let skipped = 0
+
+    if (skipDuplicates) {
+      // Get existing test cases from database (with localStorage fallback)
+      const existingTestCases = await DatabaseService.getTestCases(projectId)
+      const existingSignatures = new Set<string>()
+      const projectFilter = projectId || 'all'
+
+      // Build signature set for existing test cases in this project
+      existingTestCases.forEach(tc => {
+        if (projectFilter === 'all' || tc.projectId === projectId) {
+          const signature = getTestCaseSignature(tc)
+          existingSignatures.add(signature)
+        }
+      })
+
+      // Deduplicate incoming test cases
+      for (const testCase of testCases) {
+        const signature = getTestCaseSignature(testCase)
+
+        if (existingSignatures.has(signature)) {
+          duplicateSignatures.push(signature)
+          skipped++
+        } else {
+          const simhash = buildTestCaseSimhash(testCase)
+          newTestCases.push({
+            ...testCase,
+            projectId: projectId || testCase.projectId || 'default',
+            data: {
+              ...testCase.data,
+              signature,
+              simhash
+            }
+          })
+          existingSignatures.add(signature)
+        }
+      }
+
+      // Auto-bypass duplicate detection if rate is too high
+      const duplicateRate = skipped / testCases.length
+      if (duplicateRate > 0.8 && testCases.length > 10) {
+        console.log('🚨 High duplicate rate detected, importing all test cases')
+        newTestCases = testCases.map(testCase => {
+          const signature = getTestCaseSignature(testCase)
+          const simhash = buildTestCaseSimhash(testCase)
+          return {
+            ...testCase,
+            projectId: projectId || testCase.projectId || 'default',
+            data: { ...testCase.data, signature, simhash }
+          }
+        })
+        skipped = 0
+        duplicateSignatures = []
+      }
+    } else {
+      // Import all test cases without duplicate checking
+      newTestCases = testCases.map(testCase => {
+        const signature = getTestCaseSignature(testCase)
+        const simhash = buildTestCaseSimhash(testCase)
+        return {
+          ...testCase,
+          projectId: projectId || testCase.projectId || 'default',
+          data: { ...testCase.data, signature, simhash }
+        }
+      })
+    }
+
+    // Save to database using DatabaseService
+    if (newTestCases.length > 0) {
+      const saveResult = await DatabaseService.saveTestCases(newTestCases)
+      if (!saveResult.success) {
+        throw new Error(saveResult.error || 'Failed to save test cases')
+      }
+    }
+
+    const sessionId = continueSessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    return {
+      sessionId,
+      saved: newTestCases.length,
+      skipped,
+      duplicateSignatures,
+      exactDuplicates: skipped,
+      autoMerged: 0,
+      reviewRequired: 0,
+      mergeConflicts: []
+    }
+  } catch (error) {
+    console.error('❌ Failed to save test cases to database:', error)
+    throw new Error('Failed to save test cases to database')
+  }
+}
+
 // Original function (kept for backward compatibility)
 export function saveGeneratedTestCases(
   testCases: TestCase[],
@@ -470,29 +578,49 @@ export function getTestCasesBySessionId(sessionId: string): TestCase[] {
 }
 
 export function getAllStoredTestCases(): TestCase[] {
+  console.log('📖 GetAllStoredTestCases - Loading from localStorage key:', STORAGE_KEY)
+
   const sessions = getStoredTestCaseSessions()
+  console.log('📖 GetAllStoredTestCases - Found sessions:', sessions.length, sessions.map(s => ({ id: s.id, count: s.testCases.length })))
+
   const allTestCases: TestCase[] = []
-  
+
   sessions.forEach(session => {
     allTestCases.push(...session.testCases)
   })
-  
+
+  console.log('📖 GetAllStoredTestCases - Total test cases loaded:', allTestCases.length)
+
   return allTestCases
 }
 
 export function deleteTestCasesByIds(testCaseIds: string[]): void {
   try {
+    console.log('🗑️ DeleteTestCasesByIds - Input IDs:', testCaseIds)
+
     const sessions = getStoredTestCaseSessions()
-    
+    console.log('🗑️ DeleteTestCasesByIds - Sessions before delete:', sessions.length, sessions.map(s => ({ id: s.id, count: s.testCases.length })))
+
     // Remove test cases with matching IDs from all sessions
-    const updatedSessions = sessions.map(session => ({
-      ...session,
-      testCases: session.testCases.filter(tc => !testCaseIds.includes(tc.id)),
-      totalCount: session.testCases.filter(tc => !testCaseIds.includes(tc.id)).length
-    })).filter(session => session.testCases.length > 0) // Remove empty sessions
-    
+    const updatedSessions = sessions.map(session => {
+      const beforeCount = session.testCases.length
+      const filteredTestCases = session.testCases.filter(tc => !testCaseIds.includes(tc.id))
+      const afterCount = filteredTestCases.length
+
+      console.log(`🗑️ Session ${session.id}: ${beforeCount} -> ${afterCount} test cases`)
+
+      return {
+        ...session,
+        testCases: filteredTestCases,
+        totalCount: filteredTestCases.length
+      }
+    }).filter(session => session.testCases.length > 0) // Remove empty sessions
+
+    console.log('🗑️ DeleteTestCasesByIds - Sessions after delete:', updatedSessions.length, updatedSessions.map(s => ({ id: s.id, count: s.testCases.length })))
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSessions))
-    
+    console.log('🗑️ DeleteTestCasesByIds - Successfully updated localStorage')
+
   } catch (error) {
     console.error('❌ Failed to delete test cases:', error)
     throw new Error('Failed to delete test cases')
@@ -501,8 +629,10 @@ export function deleteTestCasesByIds(testCaseIds: string[]): void {
 
 export function clearStoredTestCases(): void {
   try {
+    console.log('🧹 ClearStoredTestCases - Clearing localStorage key:', STORAGE_KEY)
     localStorage.removeItem(STORAGE_KEY)
-    
+    console.log('🧹 ClearStoredTestCases - Successfully cleared localStorage')
+
   } catch (error) {
     console.error('❌ Failed to clear stored test cases:', error)
   }

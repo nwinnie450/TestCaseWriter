@@ -5,6 +5,37 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useSettings } from '@/contexts/SettingsContext'
 import { getAvailableProviders, getProvider } from '@/lib/ai-providers'
+
+// Helper function to get optimal tokens for display (matches ai-providers.ts)
+function getModelOptimalTokens(model: string): number {
+  if (model.includes('gpt-4o')) {
+    return 16000  // GPT-4o can handle much larger responses
+  } else if (model.includes('gpt-4-turbo')) {
+    return 12000  // GPT-4 turbo has good capacity
+  } else if (model.includes('gpt-4')) {
+    return 8000   // Standard GPT-4
+  } else if (model.includes('gpt-3.5-turbo')) {
+    return 4000   // GPT-3.5 turbo
+  } else if (model.includes('claude-3-5-sonnet')) {
+    return 16000  // Claude 3.5 Sonnet can handle large responses
+  } else if (model.includes('claude-3-opus')) {
+    return 12000  // Claude 3 Opus
+  } else if (model.includes('claude-3-sonnet')) {
+    return 10000  // Claude 3 Sonnet
+  } else if (model.includes('claude-3-haiku')) {
+    return 6000   // Claude 3 Haiku
+  } else if (model.includes('gemini-1.5-pro')) {
+    return 12000  // Gemini 1.5 Pro
+  } else if (model.includes('gemini-1.5-flash')) {
+    return 8000   // Gemini 1.5 Flash
+  } else if (model.includes('gemini-pro')) {
+    return 6000   // Gemini Pro
+  } else if (model.includes('grok')) {
+    return 8000   // Grok models
+  } else {
+    return 4000   // Conservative default
+  }
+}
 import { 
   Settings, 
   Key, 
@@ -74,10 +105,9 @@ export function AIProviderSettings() {
   const getProviderIcon = (providerId: string) => {
     switch (providerId) {
       case 'openai': return '🤖'
-      case 'claude': return '🧠'  
+      case 'claude': return '🧠'
       case 'gemini': return '💎'
       case 'grok': return '🚀'
-      case 'azure': return '☁️'
       default: return '🔮'
     }
   }
@@ -101,7 +131,7 @@ export function AIProviderSettings() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {availableProviders.map((provider) => (
               <div
                 key={provider.id}
@@ -117,12 +147,12 @@ export function AIProviderSettings() {
                     <Check className="h-5 w-5 text-primary-500" />
                   </div>
                 )}
-                
-                <div className="flex items-center space-x-3">
+
+                <div className="flex items-center space-x-3 mb-3">
                   <div className="text-2xl">
                     {getProviderIcon(provider.id)}
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-medium text-gray-900">{provider.name}</h3>
                     <p className="text-sm text-gray-500">
                       {provider.models.length} model{provider.models.length !== 1 ? 's' : ''}
@@ -130,27 +160,25 @@ export function AIProviderSettings() {
                   </div>
                 </div>
 
-                {/* Show models for selected provider */}
-                {settings.ai.providerId === provider.id && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <p className="text-xs font-medium text-gray-700 mb-2">Available Models:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {provider.models.slice(0, 3).map((model) => (
-                        <span
-                          key={model}
-                          className="inline-block px-2 py-1 text-xs bg-gray-100 rounded-md"
-                        >
-                          {model}
-                        </span>
-                      ))}
-                      {provider.models.length > 3 && (
-                        <span className="inline-block px-2 py-1 text-xs bg-gray-100 rounded-md">
-                          +{provider.models.length - 3} more
-                        </span>
-                      )}
-                    </div>
+                {/* Always show models for all providers - standardized display */}
+                <div className="pt-3 border-t border-gray-200">
+                  <p className="text-xs font-medium text-gray-700 mb-2">Available Models:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {provider.models.slice(0, 3).map((model) => (
+                      <span
+                        key={model}
+                        className="inline-block px-2 py-1 text-xs bg-gray-100 rounded-md"
+                      >
+                        {model}
+                      </span>
+                    ))}
+                    {provider.models.length > 3 && (
+                      <span className="inline-block px-2 py-1 text-xs bg-gray-100 rounded-md">
+                        +{provider.models.length - 3} more
+                      </span>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             ))}
           </div>
@@ -257,20 +285,20 @@ export function AIProviderSettings() {
 
             {/* Advanced Settings */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Max Tokens */}
+              {/* Max Tokens - Now auto-calculated */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Max Tokens
+                  Max Tokens (Auto-Optimized)
                 </label>
                 <input
-                  type="number"
-                  value={settings.ai.maxTokens}
-                  onChange={(e) => updateAIConfig({ maxTokens: parseInt(e.target.value) || 128000 })}
-                  min={100}
-                  max={1000000}
-                  className="w-full py-2 px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  type="text"
+                  value={`${getModelOptimalTokens(settings.ai.model)} (Auto)`}
+                  readOnly
+                  className="w-full py-2 px-3 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
                 />
-                <p className="text-xs text-gray-500 mt-1">Maximum tokens in the response</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Automatically optimized for {settings.ai.model}. System manages token limits for best results.
+                </p>
               </div>
 
               {/* Temperature */}

@@ -122,24 +122,6 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
     }
   },
 
-  azure: {
-    id: 'azure',
-    name: 'Azure OpenAI',
-    models: [
-      'gpt-4o',
-      'gpt-4-turbo',
-      'gpt-4',
-      'gpt-35-turbo'
-    ],
-    apiKeyLabel: 'Azure OpenAI API Key',
-    baseUrl: 'https://{resource-name}.openai.azure.com/openai/deployments/{deployment-name}/chat/completions',
-    pricing: {
-      'gpt-4': { input: 0.03 / 1000, output: 0.06 / 1000 },
-      'gpt-4-turbo': { input: 0.01 / 1000, output: 0.03 / 1000 },
-      'gpt-4o': { input: 0.005 / 1000, output: 0.015 / 1000 },
-      'gpt-35-turbo': { input: 0.0015 / 1000, output: 0.002 / 1000 }
-    }
-  },
 
   grok: {
     id: 'grok',
@@ -160,6 +142,38 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
 // Abstract AI provider interface
 interface BaseAIProvider {
   generateTestCases(request: TestCaseGenerationRequest): Promise<TestCaseGenerationResult>
+}
+
+// Get optimal max tokens for each model
+function getModelMaxTokens(model: string): number {
+  // Use model-specific maximums based on their actual context windows
+  if (model.includes('gpt-4o')) {
+    return 16000  // GPT-4o can handle much larger responses
+  } else if (model.includes('gpt-4-turbo')) {
+    return 12000  // GPT-4 turbo has good capacity
+  } else if (model.includes('gpt-4')) {
+    return 8000   // Standard GPT-4
+  } else if (model.includes('gpt-3.5-turbo')) {
+    return 4000   // GPT-3.5 turbo
+  } else if (model.includes('claude-3-5-sonnet')) {
+    return 16000  // Claude 3.5 Sonnet can handle large responses
+  } else if (model.includes('claude-3-opus')) {
+    return 12000  // Claude 3 Opus
+  } else if (model.includes('claude-3-sonnet')) {
+    return 10000  // Claude 3 Sonnet
+  } else if (model.includes('claude-3-haiku')) {
+    return 6000   // Claude 3 Haiku
+  } else if (model.includes('gemini-1.5-pro')) {
+    return 12000  // Gemini 1.5 Pro
+  } else if (model.includes('gemini-1.5-flash')) {
+    return 8000   // Gemini 1.5 Flash
+  } else if (model.includes('gemini-pro')) {
+    return 6000   // Gemini Pro
+  } else if (model.includes('grok')) {
+    return 8000   // Grok models
+  } else {
+    return 4000   // Conservative default
+  }
 }
 
 class OpenAIProvider implements BaseAIProvider {
@@ -190,22 +204,19 @@ class OpenAIProvider implements BaseAIProvider {
 
       const userPrompt = `Please analyze the following requirements document and generate EXACTLY ${config.maxTestCases} comprehensive test cases:\n\nDOCUMENT CONTENT:\n${documentContent}\n\nCONFIGURATION:\n- Maximum test cases: ${config.maxTestCases}\n- Coverage: ${config.coverage}\n- Include negative tests: ${config.includeNegativeTests}\n- Include edge cases: ${config.includeEdgeCases}\n- Custom instructions: ${config.customInstructions}\n\nIMPORTANT: Generate comprehensive test cases that cover EVERY requirement with multiple test scenarios:\n- Positive, negative, and edge case testing\n- Security and performance considerations\n- Integration and user workflow coverage\n- Realistic test data and conditions\n\nCRITICAL ORDERING: Generate test cases in the EXACT SAME ORDER as requirements appear in the document. Maintain logical flow and sequential numbering (TC-0001, TC-0002, TC-0003...).\n\nEnsure 100% requirement coverage with detailed, actionable test cases. Generate EXACTLY ${config.maxTestCases} test cases based on the ACTUAL requirements above.`
 
-      const supportsJsonFormat = aiConfig.model.includes('gpt-4') || 
-                                 aiConfig.model.includes('gpt-4o') || 
+      const supportsJsonFormat = aiConfig.model.includes('gpt-4') ||
+                                 aiConfig.model.includes('gpt-4o') ||
                                  aiConfig.model.includes('gpt-3.5-turbo')
 
-      // Calculate appropriate max_tokens to prevent truncation
+      // Use model-specific optimal max tokens instead of settings value
       const estimatedInputTokens = Math.ceil((systemPrompt.length + userPrompt.length) / 4) // Rough estimate
-      const safeMaxTokens = Math.min(
-        aiConfig.maxTokens,
-        // For most models, reserve some tokens for the response
-        aiConfig.model.includes('gpt-4') ? 8000 : 4000
-      )
-      
+      const optimalMaxTokens = getModelMaxTokens(aiConfig.model)
+
       console.log('🔍 Token calculation:', {
         estimatedInput: estimatedInputTokens,
-        maxOutput: safeMaxTokens,
-        total: estimatedInputTokens + safeMaxTokens
+        settingsMaxTokens: aiConfig.maxTokens,
+        modelOptimalTokens: optimalMaxTokens,
+        usingOptimal: true
       })
       
       const requestBody: any = {
@@ -214,7 +225,7 @@ class OpenAIProvider implements BaseAIProvider {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        max_tokens: safeMaxTokens,
+        max_tokens: optimalMaxTokens,
         temperature: aiConfig.temperature
       }
 
@@ -499,6 +510,14 @@ class GeminiProvider implements BaseAIProvider {
       
       const prompt = `You are an expert QA engineer specializing in comprehensive test case generation.\n\nYour task is to analyze requirements documents and generate EXACTLY ${config.maxTestCases} comprehensive test cases following this template format:\n\n${template}\n\nCRITICAL REQUIREMENTS FOR COMPREHENSIVE COVERAGE:\n\n1. FOR EACH REQUIREMENT, create multiple test cases covering:\n   - POSITIVE SCENARIOS: Happy path with valid data, boundary conditions, different data types\n   - NEGATIVE SCENARIOS: Invalid inputs, missing fields, error conditions, unauthorized access\n   - EDGE CASES: Extremely large/small values, special characters, concurrent operations\n   - INTEGRATION SCENARIOS: API interactions, database operations, external services\n   - SECURITY SCENARIOS: Input validation, authentication, data sanitization\n   - PERFORMANCE SCENARIOS: Load conditions, resource limits, timeouts\n\n2. TEST CASE STRUCTURE:\n   - Each test case MUST have AT LEAST 5-8 detailed test steps\n   - Include specific test data and expected results for each step\n   - Cover setup, execution, validation, and cleanup phases\n   - Consider different user roles and permissions\n   - Include realistic test data and conditions\n\n3. QUALITY STANDARDS:\n   - Ensure 100% requirement coverage across all test cases\n   - Each test case must be specific and actionable\n   - Consider business impact and risk levels\n   - Generate test cases that can be executed immediately\n\nRequirements document:\n${documentContent}\n\nGenerate EXACTLY ${config.maxTestCases} comprehensive test cases in JSON format as an array. Ensure 100% requirement coverage with detailed, actionable test cases.`
 
+      const optimalMaxTokens = getModelMaxTokens(aiConfig.model)
+
+      console.log('🔍 Gemini Token calculation:', {
+        settingsMaxTokens: aiConfig.maxTokens,
+        modelOptimalTokens: optimalMaxTokens,
+        usingOptimal: true
+      })
+
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${aiConfig.model}:generateContent?key=${aiConfig.apiKey}`, {
         method: 'POST',
         headers: {
@@ -512,7 +531,7 @@ class GeminiProvider implements BaseAIProvider {
           }],
           generationConfig: {
             temperature: aiConfig.temperature,
-            maxOutputTokens: aiConfig.maxTokens,
+            maxOutputTokens: optimalMaxTokens,
           }
         })
       })
@@ -631,6 +650,14 @@ class ClaudeProvider implements BaseAIProvider {
       
       const userPrompt = `Generate EXACTLY ${config.maxTestCases} comprehensive test cases using this template:\n\n${template}\n\nRequirements document:\n${documentContent}\n\nIMPORTANT: Generate comprehensive test cases that cover EVERY requirement with multiple test scenarios:\n- Positive, negative, and edge case testing\n- Security and performance considerations\n- Integration and user workflow coverage\n- Realistic test data and conditions\n\nEnsure 100% requirement coverage with detailed, actionable test cases. Generate in JSON array format.`
 
+      const optimalMaxTokens = getModelMaxTokens(aiConfig.model)
+
+      console.log('🔍 Claude Token calculation:', {
+        settingsMaxTokens: aiConfig.maxTokens,
+        modelOptimalTokens: optimalMaxTokens,
+        usingOptimal: true
+      })
+
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -640,7 +667,7 @@ class ClaudeProvider implements BaseAIProvider {
         },
         body: JSON.stringify({
           model: aiConfig.model,
-          max_tokens: aiConfig.maxTokens,
+          max_tokens: optimalMaxTokens,
           temperature: aiConfig.temperature,
           system: systemPrompt,
           messages: [
@@ -764,13 +791,21 @@ class GrokProvider implements BaseAIProvider {
 
       const userPrompt = `Please analyze the following requirements document and generate EXHAUSTIVE test coverage:\n\nDOCUMENT CONTENT:\n${documentContent}\n\nIMPORTANT: Generate comprehensive test cases that cover EVERY requirement with multiple test scenarios:\n- Positive, negative, and edge case testing\n- Security and performance considerations\n- Integration and user workflow coverage\n- Realistic test data and conditions\n\nEnsure 100% requirement coverage with detailed, actionable test cases.`
 
+      const optimalMaxTokens = getModelMaxTokens(aiConfig.model)
+
+      console.log('🔍 Grok Token calculation:', {
+        settingsMaxTokens: aiConfig.maxTokens,
+        modelOptimalTokens: optimalMaxTokens,
+        usingOptimal: true
+      })
+
       const requestBody = {
         model: aiConfig.model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        max_tokens: aiConfig.maxTokens,
+        max_tokens: optimalMaxTokens,
         temperature: aiConfig.temperature,
         stream: false
       }

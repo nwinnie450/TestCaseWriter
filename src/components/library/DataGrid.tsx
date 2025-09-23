@@ -16,7 +16,7 @@ import {
 } from '@tanstack/react-table'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { TestCase, TableColumn } from '@/types'
+import { TestCase, TableColumn } from '@/types/index'
 import { ExpandableRow } from './ExpandableRow'
 import { 
   ChevronUp, 
@@ -544,62 +544,7 @@ export function DataGrid({
       },
       size: 500
     }),
-    columnHelper.accessor('priority', {
-      header: 'Priority',
-      cell: (info) => (
-        <span className={cn(
-          'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium capitalize',
-          priorityColors[info.getValue()]
-        )}>
-          {info.getValue()}
-        </span>
-      ),
-      filterFn: (row, columnId, value) => {
-        const testCase = row.original
-        const priority = testCase.priority || testCase.data?.priority || 'medium'
-        console.log('🔍 Priority filter check:', { testCaseId: testCase.id, priority, filterValue: value, matches: priority.toLowerCase() === value.toLowerCase() })
-        return priority.toLowerCase() === value.toLowerCase()
-      },
-      size: 100
-    }),
-    columnHelper.accessor('status', {
-      header: 'Status',
-      cell: (info) => (
-        <span className={cn(
-          'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium capitalize',
-          statusColors[info.getValue()]
-        )}>
-          {info.getValue()}
-        </span>
-      ),
-      filterFn: (row, columnId, value) => {
-        const testCase = row.original
-        const status = testCase.status || testCase.data?.status || 'draft'
-        console.log('🔍 Status filter check:', { testCaseId: testCase.id, status, filterValue: value, matches: status.toLowerCase() === value.toLowerCase() })
-        return status.toLowerCase() === value.toLowerCase()
-      },
-      size: 100
-    }),
-    columnHelper.accessor((row) => row.data?.feature || row.feature || row.module || 'General', {
-      id: 'feature',
-      header: 'Feature',
-      cell: (info) => {
-        const feature = info.getValue()
-        return (
-          <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
-            {feature}
-          </span>
-        )
-      },
-      filterFn: (row, columnId, value) => {
-        const testCase = row.original
-        const feature = testCase.data?.feature || testCase.feature || testCase.module || 'General'
-        const matches = feature.toLowerCase().includes(value.toLowerCase())
-        console.log('🔍 Feature filter check:', { testCaseId: testCase.id, feature, filterValue: value, matches })
-        return matches
-      },
-      size: 120
-    }),
+    // 1. Project Column
     columnHelper.accessor((row) => row.data?.projectId || row.projectId, {
       id: 'projectId',
       header: 'Project',
@@ -627,6 +572,52 @@ export function DataGrid({
       },
       size: 120
     }),
+
+    // 2. Module Column
+    columnHelper.accessor((row) => row.data?.module || row.module || 'General', {
+      id: 'module',
+      header: 'Module',
+      cell: (info) => {
+        const module = info.getValue()
+        return (
+          <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
+            {module}
+          </span>
+        )
+      },
+      filterFn: (row, columnId, value) => {
+        const testCase = row.original
+        const module = testCase.data?.module || testCase.module || 'General'
+        const matches = module.toLowerCase().includes(value.toLowerCase())
+        console.log('🔍 Module filter check:', { testCaseId: testCase.id, module, filterValue: value, matches })
+        return matches
+      },
+      size: 120
+    }),
+
+    // 3. Feature Column
+    columnHelper.accessor((row) => row.data?.feature || row.feature || row.module || 'General', {
+      id: 'feature',
+      header: 'Feature',
+      cell: (info) => {
+        const feature = info.getValue()
+        return (
+          <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
+            {feature}
+          </span>
+        )
+      },
+      filterFn: (row, columnId, value) => {
+        const testCase = row.original
+        const feature = testCase.data?.feature || testCase.feature || testCase.module || 'General'
+        const matches = feature.toLowerCase().includes(value.toLowerCase())
+        console.log('🔍 Feature filter check:', { testCaseId: testCase.id, feature, filterValue: value, matches })
+        return matches
+      },
+      size: 120
+    }),
+
+    // 4. Enhancement Column
     columnHelper.accessor((row) => row.data?.enhancement || row.enhancement, {
       id: 'enhancement',
       header: 'Enhancement',
@@ -649,13 +640,15 @@ export function DataGrid({
       },
       size: 120
     }),
+
+    // 5. Ticket Column
     columnHelper.accessor((row) => row.data?.ticketId || row.ticketId, {
       id: 'ticketId',
       header: 'Ticket',
       cell: (info) => {
         const ticketId = info.getValue()
         return ticketId ? (
-          <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
+          <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-orange-100 text-orange-800">
             {ticketId}
           </span>
         ) : (
@@ -671,6 +664,8 @@ export function DataGrid({
       },
       size: 100
     }),
+
+    // 6. Tags Column
     columnHelper.accessor((row) => row.data?.tags || row.tags, {
       id: 'tags',
       header: 'Tags',
@@ -705,6 +700,46 @@ export function DataGrid({
       },
       enableSorting: false,
       size: 200
+    }),
+
+    // 7. Status Column
+    columnHelper.accessor('status', {
+      header: 'Status',
+      cell: (info) => (
+        <span className={cn(
+          'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium capitalize',
+          statusColors[info.getValue() as keyof typeof statusColors] || 'bg-gray-100 text-gray-800'
+        )}>
+          {info.getValue()}
+        </span>
+      ),
+      filterFn: (row, columnId, value) => {
+        const testCase = row.original
+        const status = testCase.status || testCase.data?.status || 'draft'
+        console.log('🔍 Status filter check:', { testCaseId: testCase.id, status, filterValue: value, matches: status.toLowerCase() === value.toLowerCase() })
+        return status.toLowerCase() === value.toLowerCase()
+      },
+      size: 100
+    }),
+
+    // 8. Priority Column
+    columnHelper.accessor('priority', {
+      header: 'Priority',
+      cell: (info) => (
+        <span className={cn(
+          'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium capitalize',
+          priorityColors[info.getValue() as keyof typeof priorityColors] || 'bg-gray-100 text-gray-800'
+        )}>
+          {info.getValue()}
+        </span>
+      ),
+      filterFn: (row, columnId, value) => {
+        const testCase = row.original
+        const priority = testCase.priority || testCase.data?.priority || 'medium'
+        console.log('🔍 Priority filter check:', { testCaseId: testCase.id, priority, filterValue: value, matches: priority.toLowerCase() === value.toLowerCase() })
+        return priority.toLowerCase() === value.toLowerCase()
+      },
+      size: 100
     }),
     columnHelper.accessor((row) => row.version || 1, {
       id: 'version',
@@ -1036,27 +1071,125 @@ export function DataGrid({
       {showFilters && (
         <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 mb-4">
           <h4 className="font-medium text-gray-900 mb-3">Filters</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. Project Filter */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
               <select 
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 onChange={(e) => {
-                  console.log('🔍 Priority filter changed:', e.target.value)
+                  console.log('🔍 Project filter changed:', e.target.value)
                   if (e.target.value) {
-                    setColumnFilters([...columnFilters.filter(f => f.id !== 'priority'), { id: 'priority', value: e.target.value }])
+                    setColumnFilters([...columnFilters.filter(f => f.id !== 'projectId'), { id: 'projectId', value: e.target.value }])
                   } else {
-                    setColumnFilters(columnFilters.filter(f => f.id !== 'priority'))
+                    setColumnFilters(columnFilters.filter(f => f.id !== 'projectId'))
                   }
                 }}
               >
-                <option value="">All Priorities</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
+                <option value="">All Projects</option>
+                {Object.entries(projects).map(([id, name]) => (
+                  <option key={id} value={id}>{name}</option>
+                ))}
               </select>
             </div>
+
+            {/* 2. Module Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Module</label>
+              <select 
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onChange={(e) => {
+                  console.log('🔍 Module filter changed:', e.target.value)
+                  if (e.target.value) {
+                    setColumnFilters([...columnFilters.filter(f => f.id !== 'module'), { id: 'module', value: e.target.value }])
+                  } else {
+                    setColumnFilters(columnFilters.filter(f => f.id !== 'module'))
+                  }
+                }}
+              >
+                <option value="">All Modules</option>
+                {Array.from(new Set(data.map(tc => tc.data?.module || tc.module).filter(Boolean))).map(module => (
+                  <option key={module} value={module}>{module}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 3. Feature Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Feature</label>
+              <select 
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onChange={(e) => {
+                  console.log('🔍 Feature filter changed:', e.target.value)
+                  if (e.target.value) {
+                    setColumnFilters([...columnFilters.filter(f => f.id !== 'feature'), { id: 'feature', value: e.target.value }])
+                  } else {
+                    setColumnFilters(columnFilters.filter(f => f.id !== 'feature'))
+                  }
+                }}
+              >
+                <option value="">All Features</option>
+                {Array.from(new Set(data.map(tc => tc.feature || tc.data?.module || tc.module).filter(Boolean))).map(feature => (
+                  <option key={feature} value={feature}>{feature}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 4. Enhancement Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Enhancement</label>
+              <input 
+                type="text"
+                placeholder="Filter by enhancement..."
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onChange={(e) => {
+                  console.log('🔍 Enhancement filter changed:', e.target.value)
+                  if (e.target.value) {
+                    setColumnFilters([...columnFilters.filter(f => f.id !== 'enhancement'), { id: 'enhancement', value: e.target.value }])
+                  } else {
+                    setColumnFilters(columnFilters.filter(f => f.id !== 'enhancement'))
+                  }
+                }}
+              />
+            </div>
+
+            {/* 5. Ticket Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ticket ID</label>
+              <input 
+                type="text"
+                placeholder="Filter by ticket ID..."
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onChange={(e) => {
+                  console.log('🔍 Ticket filter changed:', e.target.value)
+                  if (e.target.value) {
+                    setColumnFilters([...columnFilters.filter(f => f.id !== 'ticketId'), { id: 'ticketId', value: e.target.value }])
+                  } else {
+                    setColumnFilters(columnFilters.filter(f => f.id !== 'ticketId'))
+                  }
+                }}
+              />
+            </div>
+
+            {/* 6. Tag Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+              <input 
+                type="text"
+                placeholder="Filter by tags (comma-separated)..."
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onChange={(e) => {
+                  console.log('🔍 Tags filter changed:', e.target.value)
+                  if (e.target.value) {
+                    setColumnFilters([...columnFilters.filter(f => f.id !== 'tags'), { id: 'tags', value: e.target.value }])
+                  } else {
+                    setColumnFilters(columnFilters.filter(f => f.id !== 'tags'))
+                  }
+                }}
+              />
+            </div>
+
+            {/* 7. Status Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select 
@@ -1077,94 +1210,27 @@ export function DataGrid({
                 <option value="deprecated">Deprecated</option>
               </select>
             </div>
+
+            {/* 8. Priority Filter */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Feature</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
               <select 
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 onChange={(e) => {
-                  console.log('🔍 Feature filter changed:', e.target.value)
+                  console.log('🔍 Priority filter changed:', e.target.value)
                   if (e.target.value) {
-                    setColumnFilters([...columnFilters.filter(f => f.id !== 'feature'), { id: 'feature', value: e.target.value }])
+                    setColumnFilters([...columnFilters.filter(f => f.id !== 'priority'), { id: 'priority', value: e.target.value }])
                   } else {
-                    setColumnFilters(columnFilters.filter(f => f.id !== 'feature'))
+                    setColumnFilters(columnFilters.filter(f => f.id !== 'priority'))
                   }
                 }}
               >
-                <option value="">All Features</option>
-                <option value="Authentication">Authentication</option>
-                <option value="Shopping">Shopping</option>
-                <option value="File Management">File Management</option>
-                <option value="User Management">User Management</option>
-                <option value="Payment">Payment</option>
-                <option value="Reporting">Reporting</option>
+                <option value="">All Priorities</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
-              <select 
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                onChange={(e) => {
-                  console.log('🔍 Project filter changed:', e.target.value)
-                  if (e.target.value) {
-                    setColumnFilters([...columnFilters.filter(f => f.id !== 'projectId'), { id: 'projectId', value: e.target.value }])
-                  } else {
-                    setColumnFilters(columnFilters.filter(f => f.id !== 'projectId'))
-                  }
-                }}
-              >
-                <option value="">All Projects</option>
-                {Object.entries(projects).map(([id, name]) => (
-                  <option key={id} value={id}>{name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Enhancement</label>
-              <input 
-                type="text"
-                placeholder="Filter by enhancement..."
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                onChange={(e) => {
-                  console.log('🔍 Enhancement filter changed:', e.target.value)
-                  if (e.target.value) {
-                    setColumnFilters([...columnFilters.filter(f => f.id !== 'enhancement'), { id: 'enhancement', value: e.target.value }])
-                  } else {
-                    setColumnFilters(columnFilters.filter(f => f.id !== 'enhancement'))
-                  }
-                }}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ticket ID</label>
-              <input 
-                type="text"
-                placeholder="Filter by ticket ID..."
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                onChange={(e) => {
-                  console.log('🔍 Ticket filter changed:', e.target.value)
-                  if (e.target.value) {
-                    setColumnFilters([...columnFilters.filter(f => f.id !== 'ticketId'), { id: 'ticketId', value: e.target.value }])
-                  } else {
-                    setColumnFilters(columnFilters.filter(f => f.id !== 'ticketId'))
-                  }
-                }}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
-              <input 
-                type="text"
-                placeholder="Filter by tags (comma-separated)..."
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                onChange={(e) => {
-                  console.log('🔍 Tags filter changed:', e.target.value)
-                  if (e.target.value) {
-                    setColumnFilters([...columnFilters.filter(f => f.id !== 'tags'), { id: 'tags', value: e.target.value }])
-                  } else {
-                    setColumnFilters(columnFilters.filter(f => f.id !== 'tags'))
-                  }
-                }}
-              />
             </div>
           </div>
           <div className="mt-3 flex space-x-2">

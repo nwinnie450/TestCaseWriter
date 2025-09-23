@@ -846,7 +846,9 @@ Template: ${selectedTemplate.description}`
       
       setGeneratedTestCases(testCasesWithMetadata)
       setDuplicateInfo(null)
-      
+
+      console.log('🎯 Generation completed, about to save test cases:', testCasesWithMetadata.length)
+
       // Save generated test cases to localStorage for persistence
       try {
         const documentNames = completedDocuments.map(doc => doc.file.name)
@@ -866,6 +868,15 @@ Template: ${selectedTemplate.description}`
           }
         }
         
+        // Save test cases (use localStorage in development, database in production)
+        console.log('🔄 About to save test cases:', {
+          count: testCasesWithMetadata.length,
+          projectId,
+          projectName,
+          currentSessionId,
+          sampleTestCase: testCasesWithMetadata[0]
+        })
+
         const { saveGeneratedTestCases } = await import('@/lib/test-case-storage')
         const saveResult = saveGeneratedTestCases(
           testCasesWithMetadata as TestCase[],
@@ -873,7 +884,7 @@ Template: ${selectedTemplate.description}`
           aiConfig.model,
           projectId,
           projectName,
-          currentSessionId || undefined // Pass existing session ID to continue the session
+          currentSessionId || undefined
         )
         
         console.log('✅ Test cases saved:', saveResult)
@@ -904,6 +915,11 @@ Template: ${selectedTemplate.description}`
         }
       } catch (saveError) {
         console.error('⚠️ Failed to save test cases:', saveError)
+        console.error('Save error details:', {
+          error: saveError,
+          message: saveError instanceof Error ? saveError.message : 'Unknown error',
+          stack: saveError instanceof Error ? saveError.stack : undefined
+        })
         // Don't fail the generation if saving fails
       }
     
@@ -1055,6 +1071,44 @@ Template: ${selectedTemplate.description}`
     const url = `/library${projectParam}`
     console.log('🔍 Session View - Navigating to:', url, { projectId })
     window.location.href = url
+  }
+
+  const handleResetSession = () => {
+    console.log('🔄 Resetting session and requirements...')
+
+    // Reset session
+    setCurrentSessionId(null)
+
+    // Clear all documents and requirements
+    setCompletedDocuments([])
+    setTextRequirements([])
+    setUploadedMatrices([])
+    setUploadProgress([])
+
+    // Reset analysis data
+    setDocumentAnalysis(null)
+    setRequirementSections([])
+    setShowDocumentAnalysis(false)
+
+    // Reset test case context
+    setTestCaseContext({
+      applicationType: 'web',
+      featureCategory: 'other',
+      userRole: 'customer',
+      testPriority: 'medium',
+      businessDomain: 'other',
+      testEnvironment: 'staging'
+    })
+
+    // Reset metadata
+    setEnhancement('')
+    setTicketId('')
+    setTags([])
+
+    // Go back to step 1
+    setCurrentStep(1)
+
+    console.log('✅ Session reset complete')
   }
 
 
@@ -1471,12 +1525,12 @@ Template: ${selectedTemplate.description}`
                           You need to configure your OpenAI API key in Settings &gt; AI Configuration to generate test cases with AI.
                         </p>
                         <div className="mt-3">
-                          <Button 
-                            variant="secondary" 
+                          <Button
+                            variant="secondary"
                             size="sm"
-                            onClick={() => window.location.href = '/settings'}
+                            onClick={() => setShowAPIKeyModal(true)}
                           >
-                            Configure AI Settings
+                            Configure API Key
                           </Button>
                         </div>
                       </div>
@@ -1484,18 +1538,23 @@ Template: ${selectedTemplate.description}`
                   </div>
                 )}
                 
-                <div className="flex justify-center space-x-4">
-                  <Button variant="secondary" onClick={() => setCurrentStep(3)} disabled={isGenerating}>
-                    Back to Settings
+                <div className="flex justify-between">
+                  <Button variant="secondary" onClick={handleResetSession} disabled={isGenerating}>
+                    Reset Session & Back to Step 1
                   </Button>
-                  <Button 
-                    variant="primary" 
-                    onClick={startGeneration}
-                    icon={Wand2}
-                    disabled={isGenerating}
-                  >
-                    {isGenerating ? 'Generating...' : 'Generate Test Cases'}
-                  </Button>
+                  <div className="flex space-x-4">
+                    <Button variant="secondary" onClick={() => setCurrentStep(3)} disabled={isGenerating}>
+                      Back to Settings
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onClick={startGeneration}
+                      icon={Wand2}
+                      disabled={isGenerating}
+                    >
+                      {isGenerating ? 'Generating...' : 'Generate Test Cases'}
+                    </Button>
+                  </div>
                 </div>
                 
                 {isGenerating && (

@@ -24,6 +24,7 @@ import {
   Filter,
   BarChart3,
   Zap,
+  RefreshCw,
   Trash2,
   Play,
   Upload
@@ -68,8 +69,27 @@ export default function TestCaseManagement() {
   })
 
 
+
   // Get current user (memoized to prevent infinite re-renders)
   const [currentUser, setCurrentUser] = useState(() => AuthService.getCurrentUser())
+
+  // Function to refresh test cases
+  const refreshTestCases = async () => {
+    setLoading(true)
+    try {
+      const { getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
+      const storedTestCases = getAllStoredTestCases()
+      const stats = getStorageStats()
+
+      setTestCases(storedTestCases)
+      setStorageStats(stats)
+      console.log('🔄 Refreshed test cases from localStorage:', storedTestCases.length)
+    } catch (error) {
+      console.error('❌ Failed to refresh test cases:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Memoize projects object to prevent DataGrid re-renders
   const projectsLookup = useMemo(() => {
@@ -87,39 +107,49 @@ export default function TestCaseManagement() {
     }
   }, [])
 
-  // Load test cases from API on component mount
+  // Load test cases from localStorage (primary) with API fallback
   useEffect(() => {
     const loadTestCases = async () => {
       try {
-        console.log('📚 Loading test cases from API...')
+        console.log('📚 Loading test cases from localStorage (primary)...')
 
-        const response = await fetch('/api/test-cases')
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
+        // Load from localStorage first (since we're in development)
+        const { getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
+        const storedTestCases = getAllStoredTestCases()
+        const stats = getStorageStats()
+
+        if (storedTestCases.length > 0) {
+          setTestCases(storedTestCases)
+          setStorageStats(stats)
+          setLoading(false)
+          console.log('✅ Successfully loaded test cases from localStorage:', storedTestCases.length)
+          return
         }
-        const apiTestCases = await response.json()
 
-        setTestCases(apiTestCases)
-        setStorageStats({
-          sessions: 1,
-          totalTestCases: apiTestCases.length,
-          storageSize: `${Math.round(JSON.stringify(apiTestCases).length / 1024)} KB`
-        })
+        // Fallback to API if no localStorage data
+        console.log('⚠️ No localStorage data, trying API...')
+        const response = await fetch('/api/test-cases')
+        if (response.ok) {
+          const apiTestCases = await response.json()
+          setTestCases(apiTestCases)
+          setStorageStats({
+            sessions: 1,
+            totalTestCases: apiTestCases.length,
+            storageSize: `${Math.round(JSON.stringify(apiTestCases).length / 1024)} KB`
+          })
+          setLoading(false)
+          console.log('✅ Successfully loaded test cases from API:', apiTestCases.length)
+          return
+        }
 
+        // No data found anywhere
+        console.log('⚠️ No test cases found in localStorage or API')
+        setTestCases([])
+        setStorageStats({ sessions: 0, totalTestCases: 0, storageSize: '0 KB' })
         setLoading(false)
 
       } catch (error) {
-        console.error('❌ Failed to load test cases from API:', error)
-        // Fallback to localStorage if API fails
-        try {
-          const { getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
-          const storedTestCases = getAllStoredTestCases()
-          const stats = getStorageStats()
-          setTestCases(storedTestCases)
-          setStorageStats(stats)
-        } catch (fallbackError) {
-          console.error('❌ Fallback to localStorage also failed:', fallbackError)
-        }
+        console.error('❌ Failed to load test cases:', error)
         setLoading(false)
       }
     }
@@ -341,24 +371,47 @@ export default function TestCaseManagement() {
     
     if (confirm(`Are you sure you want to delete ${testCaseIds.length} test case(s)? This action cannot be undone.`)) {
       try {
-        // Import the delete function and delete from storage
-        const { deleteTestCasesByIds, getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
-        
         console.log('🗑️ Deleting test cases with IDs:', testCaseIds)
-        
-        // Delete the test cases
-        deleteTestCasesByIds(testCaseIds)
-        
-        // Refresh the UI by reloading test cases from storage
-        const updatedTestCases = getAllStoredTestCases()
-        const updatedStats = getStorageStats()
 
-        setTestCases(updatedTestCases)
-        setStorageStats(updatedStats)
+        // Try API delete first (production)
+        const response = await fetch('/api/test-cases', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: testCaseIds })
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          console.log('✅ API delete successful:', result)
+
+          // Refresh from API
+          const refreshResponse = await fetch('/api/test-cases')
+          if (refreshResponse.ok) {
+            const updatedTestCases = await refreshResponse.json()
+            setTestCases(updatedTestCases)
+            setStorageStats({
+              sessions: 1,
+              totalTestCases: updatedTestCases.length,
+              storageSize: `${Math.round(JSON.stringify(updatedTestCases).length / 1024)} KB`
+            })
+          }
+        } else {
+          // Fallback to localStorage if API fails
+          console.log('⚠️ API delete failed, falling back to localStorage...')
+          const { deleteTestCasesByIds, getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
+
+          deleteTestCasesByIds(testCaseIds)
+
+          const updatedTestCases = getAllStoredTestCases()
+          const updatedStats = getStorageStats()
+
+          setTestCases(updatedTestCases)
+          setStorageStats(updatedStats)
+        }
+
         setSelectedIds([]) // Clear selection
-        
         alert(`✅ Successfully deleted ${testCaseIds.length} test case(s)!`)
-        
+
       } catch (error) {
         console.error('Failed to delete test cases:', error)
         alert('❌ Failed to delete test cases. Please try again.')
@@ -748,13 +801,24 @@ export default function TestCaseManagement() {
   const handleClearStorage = async () => {
     if (confirm('Are you sure you want to clear all stored test cases? This action cannot be undone. (Projects will be preserved)')) {
       try {
-        const { clearStoredTestCases } = await import('@/lib/test-case-storage')
-
         // Preserve current projects before clearing
         const currentProjects = [...projects]
         const currentProjectFilter = selectedProjectFilter
 
-        clearStoredTestCases()
+        // Try API clear first (production)
+        const response = await fetch('/api/test-cases/clear', {
+          method: 'DELETE'
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          console.log('✅ API clear successful:', result)
+        } else {
+          // Fallback to localStorage if API fails
+          console.log('⚠️ API clear failed, falling back to localStorage...')
+          const { clearStoredTestCases } = await import('@/lib/test-case-storage')
+          clearStoredTestCases()
+        }
 
         // Refresh UI but preserve projects
         setTestCases([])
@@ -830,6 +894,10 @@ export default function TestCaseManagement() {
           <Button variant="secondary" size="md" onClick={() => setShowImportModal(true)}>
             <Upload className="h-4 w-4 mr-2" />
             Import Test Cases
+          </Button>
+          <Button variant="secondary" size="md" onClick={refreshTestCases} disabled={loading}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            {loading ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
       )}
@@ -932,58 +1000,6 @@ export default function TestCaseManagement() {
 
         {/* Demo Data Loader */}
 
-        {/* Filtering Controls */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Filter className="h-5 w-5" />
-              <span>Filters</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center space-x-4">
-              <div className="min-w-0 flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Filter by Project
-                </label>
-                <select
-                  value={selectedProjectFilter}
-                  onChange={(e) => {
-                    setSelectedProjectFilter(e.target.value)
-                  }}
-                  className="input w-full md:w-64"
-                >
-                  <option value="">All Projects</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="flex items-center space-x-3">
-                <div className="text-sm text-gray-600">
-                  {selectedProjectFilter ? (
-                    <>Showing <span className="font-medium">{filteredTestCases.length}</span> of <span className="font-medium">{testCases.length}</span> test cases</>
-                  ) : (
-                    <>Showing all <span className="font-medium">{testCases.length}</span> test cases</>
-                  )}
-                </div>
-                
-                {selectedProjectFilter && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => setSelectedProjectFilter('')}
-                  >
-                    Clear Filter
-                  </Button>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Coverage Dashboard */}
         {showCoverage && activeDocId && (

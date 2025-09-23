@@ -213,7 +213,7 @@ export function RunCreateWizard({
         id: user.id,
         name: user.name,
         email: user.email,
-        username: user.username,
+        username: user.name, // Use name as username fallback
         avatar: user.avatar,
         role: user.role
       }))
@@ -238,10 +238,8 @@ export function RunCreateWizard({
       console.log('🔍 Applying search filter:', searchTerm)
       filtered = filtered.filter(tc =>
         tc.id.toLowerCase().includes(searchLower) ||
-        (tc.title && tc.title.toLowerCase().includes(searchLower)) ||
         (tc.testCase && tc.testCase.toLowerCase().includes(searchLower)) ||
         (tc.data?.testCase && tc.data.testCase.toLowerCase().includes(searchLower)) ||
-        (tc.category && tc.category.toLowerCase().includes(searchLower)) ||
         (tc.data?.module && tc.data.module.toLowerCase().includes(searchLower)) ||
         tc.tags?.some((tag: string) => tag.toLowerCase().includes(searchLower))
       )
@@ -252,7 +250,7 @@ export function RunCreateWizard({
     if (filterStatus !== 'all') {
       console.log('🔍 Applying status filter:', filterStatus)
       const beforeLength = filtered.length
-      filtered = filtered.filter(tc => (tc.currentStatus || tc.status) === filterStatus)
+      filtered = filtered.filter(tc => tc.status === filterStatus)
       console.log('🔍 After status filter:', filtered.length, 'cases (was', beforeLength, ')')
     }
 
@@ -268,7 +266,7 @@ export function RunCreateWizard({
     if (filterProject !== 'all') {
       console.log('🔍 Applying project filter:', filterProject)
       const beforeLength = filtered.length
-      filtered = filtered.filter(tc => (tc.category || tc.data?.module || 'Uncategorized') === filterProject)
+      filtered = filtered.filter(tc => (tc.data?.module || 'Uncategorized') === filterProject)
       console.log('🔍 After project filter:', filtered.length, 'cases (was', beforeLength, ')')
     }
 
@@ -458,18 +456,18 @@ export function RunCreateWizard({
                               {testCase.id}
                             </span>
                             <Badge variant="secondary" className="text-xs">
-                              {testCase.currentStatus || testCase.status}
+                              {testCase.status}
                             </Badge>
                             <Badge variant="outline" className="text-xs">
                               {testCase.priority}
                             </Badge>
                           </div>
                           <p className="text-sm font-medium text-gray-900 truncate">
-                            {testCase.title || testCase.testCase || testCase.data?.testCase || 'Untitled Test Case'}
+                            {testCase.testCase || testCase.data?.testCase || 'Untitled Test Case'}
                           </p>
-                          {(testCase.category || testCase.data?.module) && (
+                          {testCase.data?.module && (
                             <p className="text-xs text-gray-600">
-                              Category: {testCase.category || testCase.data?.module}
+                              Category: {testCase.data.module}
                             </p>
                           )}
                         </div>
@@ -534,7 +532,7 @@ export function RunCreateWizard({
                           return (
                             <Badge
                               key={assigneeId}
-                              variant="primary"
+                              variant="default"
                               className="flex items-center gap-1"
                             >
                               {user?.avatar && (
@@ -617,7 +615,7 @@ export function RunCreateWizard({
                     {environments.map((env) => (
                       <Badge
                         key={env}
-                        variant="primary"
+                        variant="default"
                         className="flex items-center justify-between p-2"
                       >
                         <span>{env}</span>

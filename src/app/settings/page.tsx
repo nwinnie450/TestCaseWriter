@@ -1530,7 +1530,7 @@ function Settings() {
         </div>
 
         {/* Main Content */}
-        <div className="max-w-4xl">
+        <div className="w-full">
           {renderTabContent()}
         </div>
       </div>

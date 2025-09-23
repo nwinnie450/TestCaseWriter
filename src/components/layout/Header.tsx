@@ -37,7 +37,7 @@ import { NotificationDropdown } from '@/components/notifications/NotificationDro
 const navigationItems = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Generate', href: '/generate', icon: Wand2 },
-  { name: 'Generators', href: '/simple-templates', icon: Zap },
+  // { name: 'Generators', href: '/simple-templates', icon: Zap },
   { name: 'Test Cases', href: '/library', icon: Database },
   { name: 'Execution', href: '/execution', icon: Play },
   { name: 'Reports', href: '/reports/runs', icon: BarChart3 },

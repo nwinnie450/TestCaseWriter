@@ -753,6 +753,9 @@ startxref
                 <h4 className="font-medium text-gray-900">Uploaded Documents:</h4>
                 {completedDocuments.map((doc, index) => {
                   const getFileCostInfo = (fileName: string) => {
+                    if (!fileName) {
+                      return { level: 'unknown', color: 'gray', icon: AlertTriangle, label: 'Unknown cost' }
+                    }
                     const ext = fileName.toLowerCase().split('.').pop()
                     if (ext === 'txt' || ext === 'md') {
                       return { level: 'low', color: 'green', icon: TrendingDown, label: 'Low cost' }

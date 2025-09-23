@@ -145,6 +145,55 @@ model UserPreference {
   @@map("user_preferences")
 }
 
+// Test Case Library - Core test case storage
+model TestCase {
+  id            String   @id @default(cuid())
+  testCase      String   // Test case title/name
+  module        String?  // Feature/component being tested
+  priority      String   @default("medium") // high|medium|low
+  status        String   @default("active") // active|draft|archived
+  projectId     String?  // Associated project
+  templateId    String?  // Template used for generation
+
+  // Test execution details
+  testSteps     Json?    // Array of test steps [{step, description, testData, expectedResult}]
+  testResult    String   @default("Not Executed") // Not Executed|Pass|Fail|Blocked|Skipped
+  qa            String?  // QA notes
+  remarks       String?  // Additional remarks
+
+  // Metadata
+  tags          Json?    // Array of tags
+  enhancement   String?  // Enhancement/feature reference
+  ticketId      String?  // Ticket/issue reference
+  estimatedTime Int?     // Estimated execution time in minutes
+  actualTime    Int?     // Actual execution time in minutes
+
+  // Generation metadata
+  data          Json?    // Additional metadata from AI generation
+
+  // Audit fields
+  createdBy     String?
+  lastModifiedBy String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("test_cases")
+}
+
+// Test Generation Sessions - Track AI generation sessions
+model GenerationSession {
+  id            String   @id @default(cuid())
+  projectId     String?
+  projectName   String?
+  model         String   // AI model used (gpt-4o, claude-3, etc.)
+  totalCount    Int      @default(0) // Total test cases in this session
+  documentNames Json?    // Array of uploaded document names
+  settings      Json?    // Generation settings used
+  timestamp     DateTime @default(now())
+
+  @@map("generation_sessions")
+}
+
 // Flaky test detection
 model FlakyCase {
   id              String   @id @default(cuid())

@@ -8,7 +8,7 @@ import { GenerateMoreResponse } from '@/app/api/v1/generate-more/route'
 import { generateTestCasesWithAI } from '@/lib/ai-providers'
 import { saveGeneratedTestCases } from '@/lib/test-case-storage'
 import { buildGenerationPrompt } from '@/lib/prompt/buildGenerationPrompt'
-import { TestCase } from '@/types'
+import { TestCase } from '@/types/index'
 import { useSettings } from '@/contexts/SettingsContext'
 
 interface ChunkStatus {
@@ -286,7 +286,7 @@ export function GenerateMoreButton({
             }))
 
             // Save generated test cases
-            const saveResult = await saveGeneratedTestCases(
+            const saveResult = saveGeneratedTestCases(
               testCasesWithMetadata,
               [`chunk-${chunk.chunkIndex}-${correctDocId as string}`],
               settings.model,
