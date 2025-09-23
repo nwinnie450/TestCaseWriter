@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { TestCase } from '@/types'
+import { TestCase } from '@/types/index'
 import { 
   Edit, 
   X, 
@@ -16,7 +16,8 @@ import {
   Tags,
   AlertTriangle,
   Flag,
-  CheckCircle
+  CheckCircle,
+  Settings
 } from 'lucide-react'
 
 interface BulkEditModalProps {
@@ -29,6 +30,7 @@ interface BulkEditModalProps {
 export function BulkEditModal({ isOpen, onClose, selectedTestCases, onSave }: BulkEditModalProps) {
   const [priority, setPriority] = useState<string>('')
   const [status, setStatus] = useState<string>('')
+  const [module, setModule] = useState<string>('')
   const [feature, setFeature] = useState<string>('')
   const [enhancement, setEnhancement] = useState<string>('')
   const [ticketId, setTicketId] = useState<string>('')
@@ -42,6 +44,7 @@ export function BulkEditModal({ isOpen, onClose, selectedTestCases, onSave }: Bu
     if (isOpen) {
       setPriority('')
       setStatus('')
+      setModule('')
       setFeature('')
       setEnhancement('')
       setTicketId('')
@@ -70,13 +73,14 @@ export function BulkEditModal({ isOpen, onClose, selectedTestCases, onSave }: Bu
     // Only include fields that have been modified
     if (priority) updates.priority = priority as any
     if (status) updates.status = status as any
+    if (module) updates.module = module
     if (feature) updates.feature = feature
     if (enhancement) updates.enhancement = enhancement
     if (ticketId) updates.ticketId = ticketId
 
     // Handle tags based on the selected action
     if (tags.length > 0) {
-      updates._tagAction = tagAction
+      (updates as any)._tagAction = tagAction
       updates.tags = tags
     }
 
@@ -202,8 +206,22 @@ export function BulkEditModal({ isOpen, onClose, selectedTestCases, onSave }: Bu
             </div>
           </div>
 
-          {/* Feature and Enhancement */}
+          {/* Module and Feature */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Settings className="inline h-4 w-4 mr-1" />
+                Module
+              </label>
+              <input
+                type="text"
+                value={module}
+                onChange={(e) => setModule(e.target.value)}
+                placeholder="e.g., Usage Control Settings, API Key Controls"
+                className="input w-full"
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <Users className="inline h-4 w-4 mr-1" />
@@ -213,24 +231,25 @@ export function BulkEditModal({ isOpen, onClose, selectedTestCases, onSave }: Bu
                 type="text"
                 value={feature}
                 onChange={(e) => setFeature(e.target.value)}
-                placeholder="e.g., User Management, Payment Processing"
+                placeholder="e.g., Token Per Minute Setting, API Key Creation"
                 className="input w-full"
               />
             </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Ticket className="inline h-4 w-4 mr-1" />
-                Enhancement
-              </label>
-              <input
-                type="text"
-                value={enhancement}
-                onChange={(e) => setEnhancement(e.target.value)}
-                placeholder="e.g., Authentication, API Integration"
-                className="input w-full"
-              />
-            </div>
+          {/* Enhancement */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Ticket className="inline h-4 w-4 mr-1" />
+              Enhancement
+            </label>
+            <input
+              type="text"
+              value={enhancement}
+              onChange={(e) => setEnhancement(e.target.value)}
+              placeholder="e.g., Performance improvement, UI enhancement"
+              className="input w-full"
+            />
           </div>
 
           {/* Ticket ID */}

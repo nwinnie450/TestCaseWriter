@@ -186,7 +186,7 @@ export function TestCaseEditModal({
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Priority
@@ -218,20 +218,38 @@ export function TestCaseEditModal({
                       <option value="deprecated">Deprecated</option>
                     </select>
                   </div>
+                </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Feature/Module
+                      Module
                     </label>
                     <input
                       type="text"
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={editedTestCase.feature || editedTestCase.module || ''}
+                      value={editedTestCase.module || editedTestCase.data?.module || ''}
+                      onChange={(e) => {
+                        updateField('module', e.target.value)
+                        updateDataField('module', e.target.value)
+                      }}
+                      placeholder="e.g., Usage Control Settings"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Feature
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={editedTestCase.feature || editedTestCase.data?.feature || ''}
                       onChange={(e) => {
                         updateField('feature', e.target.value)
-                        updateField('module', e.target.value)
+                        updateDataField('feature', e.target.value)
                       }}
-                      placeholder="e.g., User Management"
+                      placeholder="e.g., Token Per Minute Setting"
                     />
                   </div>
                 </div>
