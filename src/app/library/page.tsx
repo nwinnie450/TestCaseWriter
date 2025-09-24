@@ -805,7 +805,7 @@ export default function TestCaseManagement() {
         const currentProjects = [...projects]
         const currentProjectFilter = selectedProjectFilter
 
-        // Try API clear first (production)
+        // Clear both API (MongoDB) and localStorage
         const response = await fetch('/api/test-cases/clear', {
           method: 'DELETE'
         })
@@ -814,11 +814,13 @@ export default function TestCaseManagement() {
           const result = await response.json()
           console.log('✅ API clear successful:', result)
         } else {
-          // Fallback to localStorage if API fails
-          console.log('⚠️ API clear failed, falling back to localStorage...')
-          const { clearStoredTestCases } = await import('@/lib/test-case-storage')
-          clearStoredTestCases()
+          console.log('⚠️ API clear failed')
         }
+
+        // Always clear localStorage
+        const { clearStoredTestCases } = await import('@/lib/test-case-storage')
+        clearStoredTestCases()
+        console.log('✅ localStorage cleared')
 
         // Refresh UI but preserve projects
         setTestCases([])
