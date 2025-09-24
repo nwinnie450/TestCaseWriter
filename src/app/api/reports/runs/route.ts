@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
     const suite = searchParams.get('suite')
     const runName = searchParams.get('runName')
 
+    console.log('📊 Report API - Request params:', { from, to, projectId, suite, runName })
+
     if (!from || !to) {
       return NextResponse.json(
         { error: 'from and to date parameters are required' },
@@ -22,6 +24,8 @@ export async function GET(request: NextRequest) {
     const toDate = new Date(to)
     toDate.setHours(23, 59, 59, 999) // End of day
 
+    console.log('📊 Report API - Date range:', { fromDate, toDate })
+
     // Build query filters
     const where: any = {
       createdAt: {
@@ -33,13 +37,11 @@ export async function GET(request: NextRequest) {
     // Handle name filters (suite and runName are mutually exclusive)
     if (runName) {
       where.name = {
-        contains: runName,
-        mode: 'insensitive'
+        contains: runName
       }
     } else if (suite) {
       where.name = {
-        contains: suite,
-        mode: 'insensitive'
+        contains: suite
       }
     }
 
@@ -47,20 +49,15 @@ export async function GET(request: NextRequest) {
     const runs = await prisma.run.findMany({
       where,
       include: {
-        runCases: {
-          select: {
-            status: true,
-            component: true,
-            caseId: true,
-            titleSnapshot: true,
-            createdAt: true
-          }
-        }
+        runCases: true
       },
       orderBy: {
         createdAt: 'desc'
       }
     })
+
+    console.log('📊 Report API - Found runs:', runs.length)
+    console.log('📊 Report API - Query filter:', JSON.stringify(where, null, 2))
 
     if (runs.length === 0) {
       return NextResponse.json({
@@ -99,7 +96,23 @@ export async function GET(request: NextRequest) {
     for (const run of runs) {
       const total = run.runCases.length
       const passed = run.runCases.filter(rc => rc.status === 'Pass').length
+      const failed = run.runCases.filter(rc => rc.status === 'Fail').length
+      const blocked = run.runCases.filter(rc => rc.status === 'Blocked').length
+      const skipped = run.runCases.filter(rc => rc.status === 'Skip' || rc.status === 'Skipped').length
+      const notRun = run.runCases.filter(rc => rc.status === 'Not Run').length
       const passRate = total > 0 ? passed / total : 0
+
+      console.log('📊 Report API - Run case statuses:', {
+        runId: run.id,
+        total,
+        passed,
+        failed,
+        blocked,
+        skipped,
+        notRun,
+        passRate,
+        statuses: run.runCases.map(rc => ({ id: rc.caseId, status: rc.status }))
+      })
 
       totalTests += total
       totalPassRates += passRate
@@ -150,6 +163,21 @@ export async function GET(request: NextRequest) {
 
     const averagePassRate = runs.length > 0 ? totalPassRates / runs.length : 0
 
+    // Calculate overall status counts across all runs
+    let overallPassed = 0
+    let overallFailed = 0
+    let overallBlocked = 0
+    let overallSkipped = 0
+    let overallNotRun = 0
+
+    for (const run of runs) {
+      overallPassed += run.runCases.filter(rc => rc.status === 'Pass').length
+      overallFailed += run.runCases.filter(rc => rc.status === 'Fail').length
+      overallBlocked += run.runCases.filter(rc => rc.status === 'Blocked').length
+      overallSkipped += run.runCases.filter(rc => rc.status === 'Skip' || rc.status === 'Skipped').length
+      overallNotRun += run.runCases.filter(rc => rc.status === 'Not Run').length
+    }
+
     // Build top failing components (sorted by failure rate)
     const topFailingComponents = Array.from(componentFailures.entries())
       .map(([component, data]) => ({
@@ -171,6 +199,12 @@ export async function GET(request: NextRequest) {
       totalRuns: runs.length,
       averagePassRate,
       totalTests,
+      passCount: overallPassed,
+      failCount: overallFailed,
+      blockerCount: overallBlocked,
+      skippedCount: overallSkipped,
+      notExecutedCount: overallNotRun,
+      avgExecutionTime: 0,
       dateRange: `${fromDate.toLocaleDateString()} - ${toDate.toLocaleDateString()}`
     }
 
