@@ -672,21 +672,7 @@ export default function UserManagement() {
       {/* Email Configuration Tab */}
       {activeTab === 'email' && (
         <div className="pt-6">
-          <EmailConfigurationTab
-            testResult={testResult}
-            testEmail={testEmail}
-            setTestEmail={setTestEmail}
-            sendingTest={sendingTest}
-            emailLoading={emailLoading}
-            onTestConfig={testEmailConfig}
-            onSendTest={sendTestEmail}
-            emailConfig={emailConfig}
-            setEmailConfig={setEmailConfig}
-            showConfigForm={showConfigForm}
-            setShowConfigForm={setShowConfigForm}
-            onSaveConfig={saveEmailConfig}
-            savingConfig={savingConfig}
-          />
+          <SimplifiedGmailConfig />
         </div>
       )}
 
@@ -760,6 +746,382 @@ export default function UserManagement() {
       )}
 
     </Layout>
+  )
+}
+
+// Simplified Gmail Configuration Component
+function SimplifiedGmailConfig() {
+  const [config, setConfig] = useState({
+    provider: 'gmail' as 'gmail' | 'sendgrid' | 'development',
+    gmailUser: '',
+    gmailPassword: '',
+    fromEmail: '',
+    fromName: 'Test Case Writer'
+  })
+
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [configSaved, setConfigSaved] = useState(false)
+  const [testEmail, setTestEmail] = useState('')
+  const [sendingTest, setSendingTest] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
+
+  // Load current configuration
+  useEffect(() => {
+    const emailService = EmailService.getInstance()
+    const currentConfig = emailService.getConfig()
+
+    setConfig({
+      provider: currentConfig.provider || 'gmail',
+      gmailUser: currentConfig.gmailUser || '',
+      gmailPassword: currentConfig.gmailPassword || '',
+      fromEmail: currentConfig.fromEmail || '',
+      fromName: currentConfig.fromName || 'Test Case Writer'
+    })
+
+    // Auto-sync fromEmail with gmailUser for Gmail
+    if (currentConfig.provider === 'gmail' && currentConfig.gmailUser && !currentConfig.fromEmail) {
+      setConfig(prev => ({ ...prev, fromEmail: currentConfig.gmailUser! }))
+    }
+  }, [])
+
+  // Auto-sync fromEmail with gmailUser when gmailUser changes
+  useEffect(() => {
+    if (config.provider === 'gmail' && config.gmailUser && !config.fromEmail) {
+      setConfig(prev => ({ ...prev, fromEmail: config.gmailUser }))
+    }
+  }, [config.gmailUser, config.provider, config.fromEmail])
+
+  const testConfiguration = async () => {
+    setLoading(true)
+    setTestResult(null) // Clear previous result
+    console.log('🧪 Starting email configuration test...', config)
+
+    try {
+      // Apply current config temporarily for testing
+      const emailService = EmailService.getInstance()
+      emailService.applyConfig(config)
+
+      console.log('🔧 Applied email config, testing connection...')
+      const result = await emailService.testEmailConfiguration()
+      console.log('📧 Test result:', result)
+
+      setTestResult(result)
+
+      // Show alert for immediate feedback
+      if (result.success) {
+        alert('✅ Gmail configuration test successful! Ready to send emails.')
+      } else {
+        alert('❌ Gmail configuration test failed: ' + result.message)
+      }
+    } catch (error) {
+      console.error('❌ Failed to test email configuration:', error)
+      const message = error instanceof Error ? error.message : 'Unknown error occurred'
+      const errorResult = {
+        success: false,
+        message: `Failed to test email configuration: ${message}`
+      }
+      setTestResult(errorResult)
+      alert('❌ Test failed: ' + errorResult.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const saveConfiguration = async () => {
+    setSaving(true)
+    try {
+      const emailService = EmailService.getInstance()
+      emailService.applyConfig(config, { persist: true })
+
+      setConfigSaved(true)
+      setTimeout(() => setConfigSaved(false), 3000)
+
+      // Test the configuration after saving
+      await testConfiguration()
+    } catch (error) {
+      console.error('Failed to save email configuration:', error)
+      alert('Failed to save configuration. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const sendTestEmail = async () => {
+    if (!testEmail) {
+      alert('Please enter a test email address')
+      return
+    }
+
+    setSendingTest(true)
+    setEmailSent(false)
+    console.log('📧 Sending test email to:', testEmail)
+
+    try {
+      const emailService = EmailService.getInstance()
+
+      // Apply current config before sending
+      emailService.applyConfig(config)
+
+      const template = EmailService.getWelcomeEmailTemplate()
+
+      const success = await emailService.sendEmail({
+        to: testEmail,
+        template,
+        variables: {
+          userName: 'Test User',
+          userEmail: testEmail,
+          userRole: 'QA Tester',
+          tempPassword: 'TestPassword123!',
+          resetPasswordUrl: EmailService.generatePasswordResetUrl(testEmail)
+        }
+      })
+
+      if (success) {
+        setEmailSent(true)
+        alert(`✅ Test email sent successfully to ${testEmail}!\n\nCheck your inbox for a welcome email from ${config.fromName}.`)
+        console.log('✅ Test email sent successfully')
+      } else {
+        alert('❌ Failed to send test email. Check console for errors.')
+        console.error('❌ Failed to send test email')
+      }
+    } catch (error) {
+      console.error('❌ Test email error:', error)
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      alert('❌ Error sending test email: ' + message)
+    } finally {
+      setSendingTest(false)
+    }
+  }
+
+  const getStatusIcon = () => {
+    if (loading) return <Settings className="w-5 h-5 text-gray-500 animate-spin" />
+    if (!testResult) return <AlertTriangle className="w-5 h-5 text-yellow-500" />
+    return testResult.success ?
+      <CheckCircle className="w-5 h-5 text-green-500" /> :
+      <XCircle className="w-5 h-5 text-red-500" />
+  }
+
+  const getStatusColor = () => {
+    if (loading) return 'bg-gray-50 border-gray-200'
+    if (!testResult) return 'bg-yellow-50 border-yellow-200'
+    return testResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+  }
+
+  const [showInstructions, setShowInstructions] = useState(false)
+
+  return (
+    <div className="max-w-3xl">
+      {/* Compact Quick Guide */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Mail className="w-5 h-5 text-blue-600" />
+            <span className="font-medium text-blue-900">Quick Setup:</span>
+            <span className="text-sm text-blue-800">Google Account → Security → App passwords → Generate for Mail</span>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowInstructions(!showInstructions)}
+            className="text-blue-600 hover:text-blue-800"
+          >
+            {showInstructions ? 'Hide Guide' : 'Show Guide'}
+          </Button>
+        </div>
+
+        {showInstructions && (
+          <div className="mt-3 pt-3 border-t border-blue-200">
+            <ol className="list-decimal list-inside space-y-1 text-xs text-blue-800">
+              <li>Go to <strong>Google Account → Security</strong></li>
+              <li>Enable <strong>2-Step Verification</strong> (required)</li>
+              <li>Go to <strong>App passwords</strong> → Select <strong>Mail</strong></li>
+              <li>Copy the 16-character password below</li>
+            </ol>
+          </div>
+        )}
+      </div>
+
+      {/* Gmail Configuration Form */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          {/* Gmail Address */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Gmail Address</label>
+            <Input
+              type="email"
+              value={config.gmailUser}
+              onChange={(e) => setConfig(prev => ({
+                ...prev,
+                gmailUser: e.target.value,
+                fromEmail: e.target.value
+              }))}
+              placeholder="your.email@gmail.com"
+              className="w-full"
+            />
+          </div>
+
+          {/* From Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">From Name</label>
+            <Input
+              type="text"
+              value={config.fromName}
+              onChange={(e) => setConfig(prev => ({ ...prev, fromName: e.target.value }))}
+              placeholder="Test Case Writer"
+              className="w-full"
+            />
+          </div>
+        </div>
+
+        {/* App Password */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Gmail App Password</label>
+          <div className="flex items-center space-x-2">
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              value={config.gmailPassword}
+              onChange={(e) => setConfig(prev => ({ ...prev, gmailPassword: e.target.value }))}
+              placeholder="16-character app password"
+              className="flex-1"
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowPassword(!showPassword)}
+              className="px-3"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </Button>
+          </div>
+        </div>
+
+        {/* Action Buttons & Status */}
+        <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+          <div className="flex items-center space-x-2">
+            <Button
+              onClick={saveConfiguration}
+              disabled={!config.gmailUser || !config.gmailPassword || saving}
+              size="sm"
+              className="flex items-center space-x-1"
+            >
+              <Settings className="w-3 h-3" />
+              <span>{saving ? 'Saving...' : 'Save'}</span>
+            </Button>
+
+            <Button
+              variant="secondary"
+              onClick={testConfiguration}
+              disabled={!config.gmailUser || !config.gmailPassword || loading}
+              size="sm"
+              className="flex items-center space-x-1"
+            >
+              <CheckCircle className="w-3 h-3" />
+              <span>{loading ? 'Testing...' : 'Test'}</span>
+            </Button>
+          </div>
+
+          {/* Status Indicator */}
+          <div className="flex items-center space-x-2">
+            {configSaved && (
+              <div className="flex items-center space-x-1 text-green-600">
+                <CheckCircle className="w-3 h-3" />
+                <span className="text-xs">Saved!</span>
+              </div>
+            )}
+
+            {testResult && (
+              <div className={`flex items-center space-x-1 ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                {testResult.success ? (
+                  <CheckCircle className="w-3 h-3" />
+                ) : (
+                  <XCircle className="w-3 h-3" />
+                )}
+                <span className="text-xs">
+                  {testResult.success ? 'Connected' : 'Failed'}
+                </span>
+              </div>
+            )}
+
+            {loading && (
+              <div className="flex items-center space-x-1 text-gray-500">
+                <Settings className="w-3 h-3 animate-spin" />
+                <span className="text-xs">Testing...</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Success/Error Message */}
+        {testResult && (
+          <div className={`mt-3 p-3 rounded-lg border ${
+            testResult.success
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
+            <div className="flex items-center space-x-2">
+              {testResult.success ? (
+                <CheckCircle className="w-4 h-4 text-green-600" />
+              ) : (
+                <XCircle className="w-4 h-4 text-red-600" />
+              )}
+              <span className="text-sm font-medium">
+                {testResult.success ? 'Test Successful!' : 'Test Failed'}
+              </span>
+            </div>
+            <p className="text-xs mt-1 ml-6">
+              {testResult.message}
+            </p>
+            {testResult.success && (
+              <p className="text-xs mt-1 ml-6 text-green-600">
+                Gmail is configured and ready to send emails to users.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Send Test Email Section */}
+      {testResult?.success && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="flex items-center space-x-2 mb-3">
+            <Send className="w-4 h-4 text-blue-600" />
+            <h3 className="font-medium text-gray-900">Send Test Email</h3>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Input
+              type="email"
+              value={testEmail}
+              onChange={(e) => setTestEmail(e.target.value)}
+              placeholder="Enter email to test..."
+              className="flex-1"
+            />
+            <Button
+              onClick={sendTestEmail}
+              disabled={!testEmail || sendingTest}
+              size="sm"
+              className="flex items-center space-x-1"
+            >
+              <Send className="w-3 h-3" />
+              <span>{sendingTest ? 'Sending...' : 'Send Test'}</span>
+            </Button>
+          </div>
+
+          {emailSent && (
+            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700">
+              ✅ Test email sent to {testEmail}! Check your inbox.
+            </div>
+          )}
+
+          <p className="text-xs text-gray-500 mt-2">
+            This will send a sample welcome email to verify Gmail is working properly.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 
