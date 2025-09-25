@@ -72,7 +72,7 @@ function GenerateTestCases() {
   const [uploadedMatrices, setUploadedMatrices] = useState<Array<{ file: File; matrix: any }>>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>('custom_qa_template_v1')
   
-  // Enhanced context for better test case generation
+  // Enhanced context for better test case generation - with smart defaults
   const [testCaseContext, setTestCaseContext] = useState<TestCaseContext>({
     applicationType: 'web',
     featureCategory: 'other',
@@ -82,17 +82,68 @@ function GenerateTestCases() {
     testEnvironment: 'staging'
   })
 
+  const [showAdvancedContext, setShowAdvancedContext] = useState(false)
+
+  // Team presets for quick configuration
+  const teamPresets = {
+    'web-team': {
+      name: 'Web Application Team',
+      context: {
+        applicationType: 'web' as const,
+        featureCategory: 'ui' as const,
+        userRole: 'customer' as const,
+        testPriority: 'high' as const,
+        businessDomain: 'ecommerce' as const,
+        testEnvironment: 'staging' as const
+      }
+    },
+    'api-team': {
+      name: 'API/Backend Team',
+      context: {
+        applicationType: 'api' as const,
+        featureCategory: 'integration' as const,
+        userRole: 'system' as const,
+        testPriority: 'high' as const,
+        businessDomain: 'saas' as const,
+        testEnvironment: 'staging' as const
+      }
+    },
+    'mobile-team': {
+      name: 'Mobile App Team',
+      context: {
+        applicationType: 'mobile' as const,
+        featureCategory: 'ui' as const,
+        userRole: 'customer' as const,
+        testPriority: 'medium' as const,
+        businessDomain: 'ecommerce' as const,
+        testEnvironment: 'staging' as const
+      }
+    },
+    'general': {
+      name: 'General QA',
+      context: {
+        applicationType: 'web' as const,
+        featureCategory: 'other' as const,
+        userRole: 'customer' as const,
+        testPriority: 'medium' as const,
+        businessDomain: 'other' as const,
+        testEnvironment: 'staging' as const
+      }
+    }
+  }
+
   // Document analysis state
   const [documentAnalysis, setDocumentAnalysis] = useState<any>(null)
   const [requirementSections, setRequirementSections] = useState<any[]>([])
   const [showDocumentAnalysis, setShowDocumentAnalysis] = useState(false)
   
   const [generationConfig, setGenerationConfig] = useState({
-    coverage: 'focused' as 'comprehensive' | 'focused' | 'minimal',
+    coverage: 'smart' as 'comprehensive' | 'focused' | 'minimal' | 'smart',
     includeNegativeTests: true,
     includeEdgeCases: true,
     maxTestCases: 10,
     enableEnhancedGeneration: true,
+    autoDetectComplexity: true,
     customInstructions: `Generate focused test coverage prioritizing:
 - Core positive scenarios (happy path, valid inputs)
 - Critical negative scenarios (invalid inputs, error conditions)
@@ -112,6 +163,67 @@ CRITICAL ORDERING: Generate test cases in the EXACT SAME ORDER as requirements a
 
 Ensure each test case has detailed steps with specific test data and expected results.`
   })
+
+  // Smart generation suggestions based on context
+  const [smartSuggestions, setSmartSuggestions] = useState({
+    recommendedCoverage: 'focused' as 'comprehensive' | 'focused' | 'minimal',
+    recommendedMaxTests: 10,
+    detectedComplexity: 'medium' as 'low' | 'medium' | 'high',
+    suggestedFeatures: [] as string[]
+  })
+
+  // Auto-detect and suggest settings based on uploaded documents
+  useEffect(() => {
+    if (completedDocuments.length > 0 || textRequirements.length > 0) {
+      // Analyze content complexity
+      const allText = [
+        ...completedDocuments.map(d => d.content),
+        ...textRequirements
+      ].join(' ')
+
+      const wordCount = allText.split(/\s+/).length
+      const hasComplexKeywords = /integration|api|security|performance|load|stress|database|authentication/i.test(allText)
+      const hasMultipleFeatures = /feature|module|component|section/gi.test(allText) && (allText.match(/feature|module|component|section/gi)?.length || 0) > 3
+
+      let complexity: 'low' | 'medium' | 'high' = 'medium'
+      let recommendedCoverage: 'comprehensive' | 'focused' | 'minimal' = 'focused'
+      let recommendedMaxTests = 10
+
+      // Determine complexity
+      if (wordCount > 2000 || hasComplexKeywords || hasMultipleFeatures) {
+        complexity = 'high'
+        recommendedCoverage = 'comprehensive'
+        recommendedMaxTests = 20
+      } else if (wordCount < 500) {
+        complexity = 'low'
+        recommendedCoverage = 'minimal'
+        recommendedMaxTests = 5
+      }
+
+      // Extract suggested features
+      const featureMatches = allText.match(/(?:feature|test|verify|validate):\s*([^.\n]{5,50})/gi) || []
+      const suggestedFeatures = featureMatches.slice(0, 5).map(m => m.replace(/^(feature|test|verify|validate):\s*/i, '').trim())
+
+      setSmartSuggestions({
+        recommendedCoverage,
+        recommendedMaxTests,
+        detectedComplexity: complexity,
+        suggestedFeatures
+      })
+
+      // Auto-apply smart settings if enabled
+      if (generationConfig.autoDetectComplexity) {
+        setGenerationConfig(prev => ({
+          ...prev,
+          coverage: 'smart',
+          maxTestCases: recommendedMaxTests,
+          includeNegativeTests: complexity !== 'low',
+          includeEdgeCases: complexity === 'high'
+        }))
+      }
+    }
+  }, [completedDocuments, textRequirements])
+
   // New metadata state
   const [projectId, setProjectId] = useState('')
   const [enhancement, setEnhancement] = useState('')
@@ -502,8 +614,23 @@ Ensure each test case has detailed steps with specific test data and expected re
   // Check if user can proceed from requirements step
   const canProceedFromRequirements = completedDocuments.length > 0 || textRequirements.length > 0 || uploadedMatrices.length > 0
 
-  // Mock templates data - in a real app this would come from a database or API
-  const templates = [
+  // Load templates from localStorage
+  const [customTemplates, setCustomTemplates] = useState<any[]>([])
+
+  useEffect(() => {
+    const stored = localStorage.getItem('customTemplates')
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored)
+        setCustomTemplates(parsed)
+      } catch (error) {
+        console.error('Error loading custom templates:', error)
+      }
+    }
+  }, [])
+
+  // Built-in templates + custom templates
+  const builtInTemplates = [
     {
       id: 'custom_qa_template_v1',
       name: 'Your Custom QA Template',
@@ -537,6 +664,22 @@ Ensure each test case has detailed steps with specific test data and expected re
       updatedAt: new Date('2024-01-01'),
       createdBy: 'user-1'
     }
+  ]
+
+  // Combine built-in and custom templates
+  const templates = [
+    ...builtInTemplates,
+    ...customTemplates.map(ct => ({
+      id: ct.id,
+      name: ct.name,
+      description: ct.description || `Custom template with ${ct.fields?.length || 0} fields`,
+      fields: ct.fields || [],
+      version: 1,
+      isPublished: true,
+      createdAt: new Date(ct.createdAt),
+      updatedAt: new Date(ct.createdAt),
+      createdBy: 'user'
+    }))
   ]
 
   const breadcrumbs = [
@@ -1105,10 +1248,19 @@ Template: ${selectedTemplate.description}`
     setTicketId('')
     setTags([])
 
+    // Clear session storage
+    sessionStorage.removeItem('testCaseWriter_lastGenerationSession')
+
+    // Reset generation state
+    setGeneratedTestCases([])
+    setGenerationError(null)
+    setGenerationProgress(0)
+    setGenerationStep('')
+
     // Go back to step 1
     setCurrentStep(1)
 
-    console.log('✅ Session reset complete')
+    console.log('✅ Session reset complete - all files and data cleared')
   }
 
 
@@ -1255,17 +1407,135 @@ Template: ${selectedTemplate.description}`
             </Card>
 
             {/* Configuration Settings - Compact */}
+            {/* Smart Recommendations */}
+            {smartSuggestions.detectedComplexity && (completedDocuments.length > 0 || textRequirements.length > 0) && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-medium text-blue-900 mb-2">Smart Recommendations</h4>
+                    <div className="space-y-2 text-sm text-blue-800">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium">Detected Complexity:</span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          smartSuggestions.detectedComplexity === 'high' ? 'bg-red-100 text-red-700' :
+                          smartSuggestions.detectedComplexity === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-green-100 text-green-700'
+                        }`}>
+                          {smartSuggestions.detectedComplexity.toUpperCase()}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="font-medium">Recommended:</span> {smartSuggestions.recommendedMaxTests} test cases, {smartSuggestions.recommendedCoverage} coverage
+                      </div>
+                      {smartSuggestions.suggestedFeatures.length > 0 && (
+                        <div>
+                          <span className="font-medium">Detected Features:</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {smartSuggestions.suggestedFeatures.map((feature, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+                                {feature}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <Card data-section="generation-settings">
               <CardHeader>
                 <CardTitle className="text-lg">2. Generation Settings</CardTitle>
               </CardHeader>
-              <CardContent>
-                <EnhancedConfigForm
-                  generationConfig={generationConfig}
-                  onConfigChange={setGenerationConfig}
-                  context={testCaseContext}
-                  onContextChange={setTestCaseContext}
-                />
+              <CardContent className="space-y-4">
+                {/* Team Preset Selector */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quick Setup (Optional)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(teamPresets).map(([key, preset]) => (
+                      <button
+                        key={key}
+                        onClick={() => setTestCaseContext(preset.context)}
+                        className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-primary-500 text-left"
+                      >
+                        <div className="font-medium text-gray-900">{preset.name}</div>
+                        <div className="text-xs text-gray-500">{preset.context.applicationType} • {preset.context.featureCategory}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Advanced Context Toggle */}
+                <button
+                  onClick={() => setShowAdvancedContext(!showAdvancedContext)}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center space-x-1"
+                >
+                  <span>{showAdvancedContext ? '▼' : '▶'}</span>
+                  <span>{showAdvancedContext ? 'Hide' : 'Show'} Advanced Test Context</span>
+                </button>
+
+                {/* Advanced Configuration */}
+                {showAdvancedContext && (
+                  <div className="border-t pt-4">
+                    <EnhancedConfigForm
+                      generationConfig={generationConfig}
+                      onConfigChange={setGenerationConfig}
+                      context={testCaseContext}
+                      onContextChange={setTestCaseContext}
+                    />
+                  </div>
+                )}
+
+                {/* Simple Config when advanced is hidden */}
+                {!showAdvancedContext && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Max Test Cases
+                      </label>
+                      <input
+                        type="number"
+                        value={generationConfig.maxTestCases}
+                        onChange={(e) => setGenerationConfig(prev => ({ ...prev, maxTestCases: parseInt(e.target.value) || 10 }))}
+                        min="1"
+                        max="50"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Recommended: {smartSuggestions.recommendedMaxTests}</p>
+                    </div>
+
+                    <div className="flex items-center space-x-4">
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={generationConfig.includeNegativeTests}
+                          onChange={(e) => setGenerationConfig(prev => ({ ...prev, includeNegativeTests: e.target.checked }))}
+                          className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-gray-700">Include Negative Tests</span>
+                      </label>
+
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={generationConfig.includeEdgeCases}
+                          onChange={(e) => setGenerationConfig(prev => ({ ...prev, includeEdgeCases: e.target.checked }))}
+                          className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-gray-700">Include Edge Cases</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

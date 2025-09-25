@@ -7,7 +7,7 @@ import { dataService } from '@/lib/data-service'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, projectId, filters, assignees, environments, build, dueAt, notes, selectedTestCaseIds } = body
+    const { name, projectId, filters, assignees, environments, build, dueAt, notes, selectedTestCaseIds, testCaseSnapshots } = body
 
     // Validate required fields
     if (!name || !projectId) {
@@ -22,10 +22,29 @@ export async function POST(request: NextRequest) {
 
     // Get test cases from library based on selection
     let testCasesToInclude = []
-    if (selectedTestCaseIds && selectedTestCaseIds.length > 0) {
-      // Specific test cases selected from the library API
+
+    // If testCaseSnapshots provided, use them directly (for localStorage test cases)
+    if (testCaseSnapshots && testCaseSnapshots.length > 0) {
+      console.log('📊 Creating run - Using test case snapshots:', testCaseSnapshots.length)
+      testCasesToInclude = testCaseSnapshots.map((tc: any) => ({
+        id: tc.id,
+        testCase: tc.title || tc.testCase,
+        priority: tc.priority?.toLowerCase() || 'medium',
+        tags: tc.tags || [],
+        data: {
+          testCase: tc.title || tc.testCase,
+          module: tc.category || tc.module,
+          testSteps: tc.steps || tc.testSteps || []
+        }
+      }))
+    } else if (selectedTestCaseIds && selectedTestCaseIds.length > 0) {
+      // Fetch from library API
       const allTestCases = await dataService.getAllTestCases()
+      console.log('📊 Creating run - All test cases from DB:', allTestCases.length)
+      console.log('📊 Creating run - First 5 DB IDs:', allTestCases.slice(0, 5).map((tc: any) => tc.id))
+      console.log('📊 Creating run - Selected IDs:', selectedTestCaseIds)
       testCasesToInclude = allTestCases.filter((tc: any) => selectedTestCaseIds.includes(tc.id))
+      console.log('📊 Creating run - Filtered test cases:', testCasesToInclude.length)
 
       // Transform library test cases to the expected format
       testCasesToInclude = testCasesToInclude.map((tc: any) => ({

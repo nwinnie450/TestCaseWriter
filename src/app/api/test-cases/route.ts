@@ -12,7 +12,23 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' }
     });
 
-    return NextResponse.json(testCases);
+    // Transform Prisma data to match the expected format for RunCreateWizard
+    const transformedTestCases = testCases.map(tc => ({
+      id: tc.id,
+      title: tc.testCase,
+      currentStatus: tc.status,
+      priority: tc.priority,
+      category: tc.module || 'General',
+      tags: Array.isArray(tc.tags) ? tc.tags : (tc.tags ? JSON.parse(tc.tags as string) : []),
+      projectId: tc.projectId || 'default',
+      description: tc.qa || '',
+      steps: Array.isArray(tc.testSteps) ? tc.testSteps : (tc.testSteps ? JSON.parse(tc.testSteps as string) : []),
+      expectedResult: tc.remarks || '',
+      createdDate: tc.createdAt,
+      lastModified: tc.updatedAt
+    }));
+
+    return NextResponse.json(transformedTestCases);
   } catch (error) {
     console.error('Failed to fetch test cases:', error);
     return NextResponse.json({ error: 'Failed to fetch test cases' }, { status: 500 });

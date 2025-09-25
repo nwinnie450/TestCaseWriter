@@ -16,7 +16,15 @@ import {
   Filter,
   Target,
   AlertTriangle,
-  ExternalLink
+  ExternalLink,
+  CheckCircle,
+  XCircle,
+  Pause,
+  Clock,
+  Shield,
+  User,
+  AlertOctagon,
+  TrendingDown as Blocked
 } from 'lucide-react'
 
 interface RunsReportData {
@@ -25,6 +33,12 @@ interface RunsReportData {
     averagePassRate: number
     totalTests: number
     dateRange: string
+    passCount: number
+    failCount: number
+    blockerCount: number
+    skippedCount: number
+    notExecutedCount: number
+    avgExecutionTime: number
   }
   trends: Array<{
     runId: string
@@ -32,12 +46,19 @@ interface RunsReportData {
     passRate: number
     createdAt: string
     totalTests: number
+    passCount: number
+    failCount: number
+    blockerCount: number
+    skippedCount: number
+    executionTime: number
+    status: 'completed' | 'in_progress' | 'failed' | 'cancelled'
   }>
   topFailingComponents: Array<{
     component: string
     failureCount: number
     totalTests: number
     failureRate: number
+    blockerCount: number
   }>
   topFailingCases: Array<{
     caseId: string
@@ -45,6 +66,47 @@ interface RunsReportData {
     failureCount: number
     lastFailure: string
     component: string
+    status: 'pass' | 'fail' | 'blocked' | 'skipped' | 'not_executed'
+    blockerReason?: string
+  }>
+  blockers: Array<{
+    id: string
+    runId: string
+    runName: string
+    testCaseId: string
+    testCaseTitle: string
+    component: string
+    reason: string
+    severity: 'critical' | 'high' | 'medium' | 'low'
+    reportedDate: string
+    assignee?: string
+    status: 'open' | 'in_progress' | 'resolved' | 'closed'
+  }>
+  executionMetrics: {
+    totalExecutionTime: number
+    avgTimePerTest: number
+    fastestRun: {
+      runId: string
+      name: string
+      time: number
+    }
+    slowestRun: {
+      runId: string
+      name: string
+      time: number
+    }
+  }
+  moduleBreakdown: Array<{
+    module: string
+    totalExecuted: number
+    passCount: number
+    failCount: number
+    blockedCount: number
+    skippedCount: number
+    notExecutedCount: number
+    passRate: number
+    avgExecutionTime: number
+    lastExecuted: string
   }>
 }
 
@@ -205,8 +267,8 @@ export default function RunsReportPage() {
                 >
                   <option value="">All runs</option>
                   {availableRuns.map((run) => (
-                    <option key={run.id} value={run.name}>
-                      {run.name}
+                    <option key={run.id} value={run.name || run.id}>
+                      {run.name || `Run ${run.id}`}
                     </option>
                   ))}
                 </select>
@@ -223,7 +285,7 @@ export default function RunsReportPage() {
         {data && (
           <>
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -241,7 +303,7 @@ export default function RunsReportPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Avg Pass Rate</p>
-                      <p className="text-2xl font-bold text-gray-900">{Math.round(data.summary.averagePassRate)}%</p>
+                      <p className="text-2xl font-bold text-green-900">{Math.round(data.summary.averagePassRate)}%</p>
                     </div>
                     <Target className="h-8 w-8 text-green-600" />
                   </div>
@@ -262,30 +324,121 @@ export default function RunsReportPage() {
 
               <Card>
                 <CardContent className="p-6">
-                  <div className="flex items-center justify-space-between">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Blockers</p>
+                      <p className="text-2xl font-bold text-red-900">{data.summary.blockerCount || 0}</p>
+                    </div>
+                    <AlertOctagon className="h-8 w-8 text-red-600" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Avg Time</p>
+                      <p className="text-2xl font-bold text-blue-900">{Math.round(data.summary.avgExecutionTime || 0)}m</p>
+                    </div>
+                    <Clock className="h-8 w-8 text-blue-600" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-600">Period</p>
                       <p className="text-sm font-bold text-gray-900">{data.summary.dateRange}</p>
-                    </div>
-                    <div className="flex space-x-2">
-                      <Button size="sm" variant="secondary" onClick={() => exportReport('csv')}>
-                        <Download className="h-4 w-4 mr-1" />
-                        CSV
-                      </Button>
-                      <Button size="sm" variant="secondary" onClick={() => exportReport('markdown')}>
-                        <Download className="h-4 w-4 mr-1" />
-                        MD
-                      </Button>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
+            {/* Detailed Pass/Fail/Blocker Statistics */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-green-600">Passed</p>
+                      <p className="text-3xl font-bold text-green-700">{data.summary.passCount || 0}</p>
+                      <p className="text-sm text-gray-500">{Math.round(((data.summary.passCount || 0) / data.summary.totalTests) * 100)}%</p>
+                    </div>
+                    <CheckCircle className="h-10 w-10 text-green-500" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-red-600">Failed</p>
+                      <p className="text-3xl font-bold text-red-700">{data.summary.failCount || 0}</p>
+                      <p className="text-sm text-gray-500">{Math.round(((data.summary.failCount || 0) / data.summary.totalTests) * 100)}%</p>
+                    </div>
+                    <XCircle className="h-10 w-10 text-red-500" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-orange-600">Blocked</p>
+                      <p className="text-3xl font-bold text-orange-700">{data.summary.blockerCount || 0}</p>
+                      <p className="text-sm text-gray-500">{Math.round(((data.summary.blockerCount || 0) / data.summary.totalTests) * 100)}%</p>
+                    </div>
+                    <Shield className="h-10 w-10 text-orange-500" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Skipped</p>
+                      <p className="text-3xl font-bold text-gray-700">{data.summary.skippedCount || 0}</p>
+                      <p className="text-sm text-gray-500">{Math.round(((data.summary.skippedCount || 0) / data.summary.totalTests) * 100)}%</p>
+                    </div>
+                    <Pause className="h-10 w-10 text-gray-500" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Export Actions */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="font-medium text-gray-900">Export Report</h3>
+                    <p className="text-sm text-gray-500">Download detailed execution analysis</p>
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button size="sm" variant="secondary" onClick={() => exportReport('csv')}>
+                      <Download className="h-4 w-4 mr-1" />
+                      CSV
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => exportReport('markdown')}>
+                      <Download className="h-4 w-4 mr-1" />
+                      MD
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Pass Rate Trend */}
             <Card>
               <CardHeader>
-                <CardTitle>Pass Rate Trend Over Time</CardTitle>
+                <CardTitle>Execution Run Details</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -295,28 +448,82 @@ export default function RunsReportPage() {
                     const trendIcon = trend > 0 ? TrendingUp : trend < 0 ? TrendingDown : null
 
                     return (
-                      <div key={run.runId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <div className="flex items-center space-x-3 flex-1">
-                          <div className={`w-3 h-3 rounded-full ${passRate >= 90 ? 'bg-green-500' : passRate >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}></div>
-                          <div className="flex-1">
-                            <button
-                              onClick={() => navigateToRun(run.runId)}
-                              className="font-medium text-left text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex items-center gap-1"
-                            >
-                              {run.name}
-                              <ExternalLink className="h-3 w-3" />
-                            </button>
-                            <p className="text-sm text-gray-600">{new Date(run.createdAt).toLocaleDateString()}</p>
+                      <div key={run.runId} className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center space-x-3 flex-1">
+                            <div className={`w-4 h-4 rounded-full ${
+                              run.status === 'completed' ? 'bg-green-500' :
+                              run.status === 'in_progress' ? 'bg-blue-500' :
+                              run.status === 'failed' ? 'bg-red-500' : 'bg-gray-500'
+                            }`}></div>
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => navigateToRun(run.runId)}
+                                  className="font-medium text-left text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex items-center gap-1"
+                                >
+                                  {run.name || `Run ${run.id}`}
+                                  <ExternalLink className="h-3 w-3" />
+                                </button>
+                                <Badge variant={
+                                  run.status === 'completed' ? 'default' :
+                                  run.status === 'in_progress' ? 'secondary' :
+                                  run.status === 'failed' ? 'destructive' : 'outline'
+                                }>
+                                  {(run.status || 'draft').replace('_', ' ').toUpperCase()}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-gray-600">{new Date(run.createdAt || Date.now()).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <div className="text-right flex items-center space-x-3">
+                            <div>
+                              <div className="font-bold text-lg">{passRate}%</div>
+                              <div className="text-sm text-gray-600">{run.executionTime}min</div>
+                            </div>
+                            {trendIcon && (
+                              <trendIcon className={`h-5 w-5 ${trend > 0 ? 'text-green-600' : 'text-red-600'}`} />
+                            )}
                           </div>
                         </div>
-                        <div className="text-right flex items-center space-x-2">
-                          <div>
-                            <div className="font-bold">{passRate}%</div>
-                            <div className="text-sm text-gray-600">{run.totalTests} tests</div>
+
+                        {/* Detailed Statistics */}
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-3 border-t border-gray-200">
+                          <div className="text-center">
+                            <div className="flex items-center justify-center space-x-1">
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                              <span className="font-bold text-green-700">{run.passCount}</span>
+                            </div>
+                            <div className="text-xs text-gray-500">Passed</div>
                           </div>
-                          {trendIcon && (
-                            <trendIcon className={`h-4 w-4 ${trend > 0 ? 'text-green-600' : 'text-red-600'}`} />
-                          )}
+                          <div className="text-center">
+                            <div className="flex items-center justify-center space-x-1">
+                              <XCircle className="h-4 w-4 text-red-500" />
+                              <span className="font-bold text-red-700">{run.failCount}</span>
+                            </div>
+                            <div className="text-xs text-gray-500">Failed</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="flex items-center justify-center space-x-1">
+                              <Shield className="h-4 w-4 text-orange-500" />
+                              <span className="font-bold text-orange-700">{run.blockedCount}</span>
+                            </div>
+                            <div className="text-xs text-gray-500">Blocked</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="flex items-center justify-center space-x-1">
+                              <Pause className="h-4 w-4 text-gray-500" />
+                              <span className="font-bold text-gray-700">{run.skippedCount}</span>
+                            </div>
+                            <div className="text-xs text-gray-500">Skipped</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="flex items-center justify-center space-x-1">
+                              <Calendar className="h-4 w-4 text-purple-500" />
+                              <span className="font-bold text-purple-700">{run.totalTests}</span>
+                            </div>
+                            <div className="text-xs text-gray-500">Total</div>
+                          </div>
                         </div>
                       </div>
                     )
@@ -324,6 +531,141 @@ export default function RunsReportPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Module Breakdown Details */}
+            {data.moduleBreakdown && data.moduleBreakdown.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Module Execution Breakdown</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Module</th>
+                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Executed</th>
+                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Pass</th>
+                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Fail</th>
+                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Blocked</th>
+                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Skipped</th>
+                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Pass Rate</th>
+                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Time</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {data.moduleBreakdown.map((module) => (
+                          <tr key={module.module} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{module.module}</div>
+                              <div className="text-xs text-gray-500">Last: {new Date(module.lastExecuted).toLocaleDateString()}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <div className="text-sm font-bold text-gray-900">{module.totalExecuted}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <div className="flex items-center justify-center space-x-1">
+                                <CheckCircle className="h-4 w-4 text-green-500" />
+                                <span className="text-sm font-bold text-green-700">{module.passCount}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <div className="flex items-center justify-center space-x-1">
+                                <XCircle className="h-4 w-4 text-red-500" />
+                                <span className="text-sm font-bold text-red-700">{module.failCount}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <div className="flex items-center justify-center space-x-1">
+                                <Shield className="h-4 w-4 text-orange-500" />
+                                <span className="text-sm font-bold text-orange-700">{module.blockedCount}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <div className="flex items-center justify-center space-x-1">
+                                <Pause className="h-4 w-4 text-gray-500" />
+                                <span className="text-sm font-bold text-gray-700">{module.skippedCount}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <div className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                module.passRate >= 90 ? 'bg-green-100 text-green-800' :
+                                module.passRate >= 70 ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {Math.round(module.passRate)}%
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <div className="text-sm text-gray-900">{Math.round(module.avgExecutionTime)}m</div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Blockers Section */}
+            {data.blockers && data.blockers.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <AlertOctagon className="h-5 w-5 text-red-600" />
+                    <span>Active Blockers</span>
+                    <Badge variant="destructive">{data.blockers.filter(b => b.status === 'open').length}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {data.blockers.slice(0, 15).map((blocker) => (
+                      <div key={blocker.id} className={`p-4 rounded-lg border-l-4 ${
+                        blocker.severity === 'critical' ? 'border-red-500 bg-red-50' :
+                        blocker.severity === 'high' ? 'border-orange-500 bg-orange-50' :
+                        blocker.severity === 'medium' ? 'border-yellow-500 bg-yellow-50' :
+                        'border-blue-500 bg-blue-50'
+                      }`}>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <Badge variant={
+                                blocker.severity === 'critical' ? 'destructive' :
+                                blocker.severity === 'high' ? 'secondary' :
+                                blocker.severity === 'medium' ? 'outline' : 'default'
+                              }>
+                                {blocker.severity.toUpperCase()}
+                              </Badge>
+                              <Badge variant={
+                                blocker.status === 'open' ? 'destructive' :
+                                blocker.status === 'in_progress' ? 'secondary' :
+                                'default'
+                              }>
+                                {blocker.status.replace('_', ' ').toUpperCase()}
+                              </Badge>
+                            </div>
+                            <h4 className="font-medium text-gray-900">{blocker.testCaseTitle}</h4>
+                            <p className="text-sm text-gray-600 mt-1">{blocker.reason}</p>
+                            <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                              <span>Run: {blocker.runName}</span>
+                              <span>Component: {blocker.component}</span>
+                              <span>Reported: {new Date(blocker.reportedDate).toLocaleDateString()}</span>
+                              {blocker.assignee && (
+                                <div className="flex items-center space-x-1">
+                                  <User className="h-3 w-3" />
+                                  <span>{blocker.assignee}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Top Failing Components */}
             {data.topFailingComponents.length > 0 && (
@@ -344,6 +686,9 @@ export default function RunsReportPage() {
                         <div className="text-right">
                           <div className="font-bold text-red-600">{comp.failureCount} failures</div>
                           <div className="text-sm text-gray-600">{Math.round(comp.failureRate * 100)}% failure rate</div>
+                          {comp.blockerCount > 0 && (
+                            <div className="text-sm text-orange-600">{comp.blockerCount} blockers</div>
+                          )}
                         </div>
                       </div>
                     ))}

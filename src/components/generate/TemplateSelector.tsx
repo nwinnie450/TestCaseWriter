@@ -329,29 +329,14 @@ export function TemplateSelector({
         </Card>
       )}
 
-      {/* Navigation */}
-      <div className="flex items-center justify-between pt-6">
-        <div>
-          {onBack && (
-            <Button variant="secondary" onClick={onBack}>
-              Back
-            </Button>
-          )}
-        </div>
-        
-        <div className="flex items-center space-x-3">
+      {/* Selection Status */}
+      {selectedTemplate && (
+        <div className="pt-4 text-center">
           <p className="text-sm text-gray-600">
-            {selectedTemplate ? `Template "${selectedTemplate.name}" selected` : 'Select a template to continue'}
+            Template "{selectedTemplate.name}" selected ✓
           </p>
-          <Button
-            variant="primary"
-            onClick={onNext}
-            disabled={!selectedTemplateId}
-          >
-            Continue
-          </Button>
         </div>
-      </div>
+      )}
     </div>
   )
 }

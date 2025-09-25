@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Layout } from '@/components/layout/Layout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -113,6 +114,7 @@ interface ExecutionData {
 export default function TestExecutionPage() {
   console.log('?? TestExecutionPage component loaded with debugging');
 
+  const router = useRouter();
   const [testCases, setTestCases] = useState<PrioritizedTestCase[]>([]);
   const [aiPrioritizationEnabled, setAiPrioritizationEnabled] = useState(false);
   const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
@@ -327,6 +329,7 @@ export default function TestExecutionPage() {
     console.log('?? Found run:', run);
     if (run) {
       console.log('?? Setting activeRunId to:', runId);
+      console.log('?? Run has test cases:', run.testCases?.length || 0);
       setActiveRunId(runId);
       // setSelectedTest(run.currentTest); // Commented out - function not defined
       // setExecutionData(prev => ({ // Commented out - function not defined
@@ -358,35 +361,129 @@ export default function TestExecutionPage() {
 
   const activeRun = executionRuns.find(r => r.id === activeRunId);
 
-  // Load test cases for active run
-  const normalizeRunCase = useCallback((runCase: any) => {
-    let normalizedStatus = runCase.status || 'Not_Executed';
-    if (normalizedStatus === 'Not Run') {
-      normalizedStatus = 'Not_Executed';
+  function normalizeStatus(status?: string | null) {
+    if (!status) {
+      return 'Not_Executed';
     }
 
-    let stepsSnapshot: any[] = [];
+    const normalized = status.toLowerCase();
+
+    if (normalized === 'not run' || normalized === 'not_executed' || normalized === 'not executed') {
+      return 'Not_Executed';
+    }
+
+    if (normalized === 'skipped' || normalized === 'skip') {
+      return 'Skip';
+    }
+
+    if (normalized === 'blocked') {
+      return 'Blocked';
+    }
+
+    if (normalized === 'fail' || normalized === 'failed') {
+      return 'Fail';
+    }
+
+    if (normalized === 'pass' || normalized === 'passed') {
+      return 'Pass';
+    }
+
+    return status;
+  }
+
+  function normalizePriority(priority?: string | null) {
+    if (!priority) {
+      return 'Medium';
+    }
+
+    switch (priority.toLowerCase()) {
+      case 'critical':
+        return 'Critical';
+      case 'high':
+        return 'High';
+      case 'medium':
+        return 'Medium';
+      case 'low':
+        return 'Low';
+      default:
+        return priority;
+    }
+  }
+
+  function parseStepsSnapshot(runCase: any) {
+    let parsedSteps: any[] = [];
+
     if (Array.isArray(runCase.stepsSnapshot)) {
-      stepsSnapshot = runCase.stepsSnapshot;
+      parsedSteps = runCase.stepsSnapshot;
     } else if (typeof runCase.stepsSnapshot === 'string' && runCase.stepsSnapshot.trim().length > 0) {
       try {
-        stepsSnapshot = JSON.parse(runCase.stepsSnapshot);
+        parsedSteps = JSON.parse(runCase.stepsSnapshot);
       } catch (error) {
         console.warn('Failed to parse stepsSnapshot for runCase', runCase.id, error);
       }
     }
 
+    if (!Array.isArray(parsedSteps)) {
+      parsedSteps = [];
+    }
+
+    if (parsedSteps.length === 0 && Array.isArray(runCase.runSteps)) {
+      parsedSteps = runCase.runSteps.map((step: any, index: number) => ({
+        stepNumber: step.stepNumber ?? step.idx ?? index + 1,
+        action: step.action ?? step.description ?? '',
+        expected: step.expected ?? step.expectedResult ?? '',
+      }));
+    }
+
+    return parsedSteps
+      .map((step: any, index: number) => ({
+        stepNumber: step.stepNumber ?? step.idx ?? index + 1,
+        action: step.action ?? step.description ?? '',
+        expected: step.expected ?? step.expectedResult ?? '',
+      }))
+      .filter(step => step.action || step.expected);
+  }
+
+  function parseRunCaseTags(tags: unknown) {
+    const toStringArray = (values: unknown[]): string[] =>
+      values
+        .map(value => (typeof value === 'string' ? value : String(value)))
+        .filter(value => value && value.trim().length > 0);
+
+    if (Array.isArray(tags)) {
+      return toStringArray(tags);
+    }
+
+    if (typeof tags === 'string') {
+      try {
+        const parsed = JSON.parse(tags);
+        return Array.isArray(parsed) ? toStringArray(parsed) : [];
+      } catch (error) {
+        console.warn('Failed to parse tags for runCase', error);
+      }
+    }
+
+    return [];
+  }
+
+  // Load test cases for active run
+  const normalizeRunCase = useCallback((runCase: any) => {
+    const normalizedStatus = normalizeStatus(runCase.status);
+    const normalizedPriority = normalizePriority(runCase.priority);
+    const normalizedSteps = parseStepsSnapshot(runCase);
+
     return {
       id: runCase.caseId,
-      title: runCase.titleSnapshot,
-      description: runCase.description || '',
+      title: runCase.titleSnapshot ?? runCase.caseId,
+      description: runCase.description || runCase.notes || '',
       category: runCase.component || 'General',
-      priority: runCase.priority || 'Medium',
+      priority: normalizedPriority,
       status: normalizedStatus,
       currentStatus: normalizedStatus,
-      steps: stepsSnapshot,
+      steps: normalizedSteps,
       expectedResult: runCase.expectedResult || '',
-      assignee: runCase.assignee,
+      assignee: runCase.assignee || '',
+      linkedRequirements: parseRunCaseTags(runCase.tags),
     };
   }, []);
 
@@ -403,11 +500,16 @@ export default function TestExecutionPage() {
       let runStats: any = null;
 
       try {
+        console.log('?? DEBUG: Fetching run details for runId:', runId);
         const response = await fetch(`/api/run-details/${runId}`, { cache: 'no-store' });
+        console.log('?? DEBUG: Run details API response status:', response.status, response.ok);
         if (response.ok) {
           const directData = await response.json();
+          console.log('?? DEBUG: Run details API response data:', directData);
           runPayload = directData?.run ?? null;
           runStats = directData?.stats ?? null;
+          console.log('?? DEBUG: Extracted runPayload:', runPayload);
+          console.log('?? DEBUG: Extracted runStats:', runStats);
         } else {
           console.warn('Direct fetch for run details returned non-OK status:', response.status);
         }
@@ -426,9 +528,14 @@ export default function TestExecutionPage() {
         return;
       }
 
-      if (runPayload?.runCases) {
+      console.log('?? DEBUG: runPayload exists:', !!runPayload);
+      console.log('?? DEBUG: runPayload.runCases exists:', !!runPayload?.runCases);
+      console.log('?? DEBUG: runPayload.runCases length:', runPayload?.runCases?.length);
+
+      if (runPayload?.runCases && runPayload.runCases.length > 0) {
         const runTestCases = runPayload.runCases.map(normalizeRunCase);
         console.log('?? DEBUG: Active run test cases set from payload:', runTestCases.length);
+        console.log('?? DEBUG: First test case:', runTestCases[0]);
 
         setActiveRunTestCases(runTestCases);
 
@@ -456,7 +563,17 @@ export default function TestExecutionPage() {
         }));
       } else {
         console.log('?? DEBUG: No runCases returned for runId:', runId);
+        
+        // Fallback: Try to get test cases from the run object itself
+        const currentRun = executionRuns.find(run => run.id === runId);
+        if (currentRun?.testCases && currentRun.testCases.length > 0) {
+          console.log('?? DEBUG: Using fallback test cases from run object:', currentRun.testCases.length);
+          const fallbackTestCases = currentRun.testCases.map(normalizeRunCase);
+          setActiveRunTestCases(fallbackTestCases);
+        } else {
+          console.log('?? DEBUG: No test cases found in run object either');
         setActiveRunTestCases([]);
+        }
       }
     } catch (error) {
       if (activeRunIdRef.current === runId) {
@@ -468,7 +585,7 @@ export default function TestExecutionPage() {
         setLoadingActiveRunTestCases(false);
       }
     }
-  }, [normalizeRunCase, setExecutionRuns]);
+  }, [normalizeRunCase]);
 
   useEffect(() => {
     console.log('?? useEffect triggered for activeRunId change:', activeRunId);
@@ -492,7 +609,7 @@ export default function TestExecutionPage() {
     // Refresh the runs list to show the newly created run
     await loadExecutionRuns()
 
-    // Set the new run as active
+    // Set the new run as active to display its test cases
     setActiveRunId(runId)
 
     // Close wizard
@@ -707,12 +824,13 @@ export default function TestExecutionPage() {
     loadProjects();
   }, []);
 
-  // Load real execution runs from API
+  // Load real execution runs from API with localStorage fallback
   const loadExecutionRuns = async () => {
     try {
       const result = await RunsService.getRuns({ limit: 50 });
       console.log('?? DEBUG: API result from getRuns:', result);
 
+      if (result.runs && result.runs.length > 0) {
       // Transform API runs to ExecutionRun format
       const transformedRuns: ExecutionRun[] = result.runs.map(run => {
         console.log('?? DEBUG: Processing run:', run.id, 'stats:', run.stats);
@@ -755,11 +873,63 @@ export default function TestExecutionPage() {
         if (firstActiveRun) {
           setActiveRunId(firstActiveRun.id);
         }
+        }
+      } else {
+        console.log('?? DEBUG: No runs in database, trying localStorage fallback');
+        // Fallback to localStorage for dev environment
+        await loadExecutionRunsFromLocalStorage();
       }
     } catch (error) {
-      console.error('Failed to load execution runs:', error);
+      console.error('Failed to load execution runs from API, trying localStorage fallback:', error);
+      // Fallback to localStorage for dev environment
+      await loadExecutionRunsFromLocalStorage();
     }
   };
+
+  // Load execution runs from localStorage (dev environment fallback)
+  const loadExecutionRunsFromLocalStorage = async () => {
+    try {
+      console.log('?? DEBUG: Loading execution runs from localStorage...');
+      
+      // Check if there are any stored execution runs in localStorage
+      const storedRuns = localStorage.getItem('testCaseWriter_executionRuns');
+      if (storedRuns) {
+        const parsedRuns = JSON.parse(storedRuns);
+        console.log('?? DEBUG: Found stored execution runs:', parsedRuns.length);
+        
+        const transformedRuns: ExecutionRun[] = parsedRuns.map((run: any) => ({
+          id: run.id,
+          name: run.name,
+          project: run.project || 'Unknown Project',
+          tester: run.tester || 'Unknown',
+          environment: run.environment || 'SIT',
+          status: run.status || 'active',
+          testCases: run.testCases || [],
+          startTime: run.startTime || new Date().toISOString(),
+          totalTests: run.totalTests || 0,
+          completedTests: run.completedTests || 0,
+          currentTest: run.currentTest || null
+        }));
+        
+        setExecutionRuns(transformedRuns);
+        
+        // Set the first active run as active if no active run is set
+        if (!activeRunId && transformedRuns.length > 0) {
+          const firstActiveRun = transformedRuns.find(run => run.status === 'active');
+          if (firstActiveRun) {
+            setActiveRunId(firstActiveRun.id);
+          }
+        }
+      } else {
+        console.log('?? DEBUG: No execution runs found in localStorage either');
+        setExecutionRuns([]);
+      }
+    } catch (error) {
+      console.error('Failed to load execution runs from localStorage:', error);
+      setExecutionRuns([]);
+    }
+  };
+
 
   useEffect(() => {
     loadExecutionRuns();
@@ -1489,527 +1659,55 @@ export default function TestExecutionPage() {
       const response = await fetch('/api/test-cases');
       if (response.ok) {
         const testCases = await response.json();
+        console.log('📊 API test cases loaded:', testCases.length);
+        if (testCases.length > 0) {
         setTestCases(testCases);
         return;
+        } else {
+          console.log('📊 API returned empty array, trying localStorage fallback');
+        }
       }
     } catch (error) {
-      console.warn('API not available, using fallback data:', error);
+      console.warn('API not available, trying localStorage fallback:', error);
     }
 
-    // Comprehensive mock data for AI demo
-    const fallbackTestCases: TestCase[] = [
-      // Authentication Test Cases
-      {
-        id: 'TC_AUTH_001',
-        title: 'User Login with Valid Credentials',
-        description: 'Verify that users can successfully log in using valid username and password',
-        category: 'Authentication',
-        priority: 'Critical',
-        currentStatus: 'Pass',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Navigate to login page',
-            expected: 'Login form is displayed with username and password fields'
-          },
-          {
-            stepNumber: 2,
-            action: 'Enter valid username: testuser@example.com',
-            expected: 'Username field accepts input'
-          },
-          {
-            stepNumber: 3,
-            action: 'Enter valid password: SecurePass123!',
-            expected: 'Password field shows masked characters'
-          },
-          {
-            stepNumber: 4,
-            action: 'Click Login button',
-            expected: 'User is redirected to dashboard'
-          }
-        ],
-        expectedResult: 'User successfully logs in and accesses dashboard',
-        linkedRequirements: ['REQ_AUTH_001', 'REQ_SECURITY_001'],
-        projectId: 'PROJ_ECOMMERCE_001',
-        lastExecution: {
-          date: '2025-09-15T09:15:00Z',
-          tester: 'alice.qa@company.com',
-          status: 'Pass',
-          notes: 'Login successful, redirected to dashboard within 2 seconds'
-        }
-      },
-      {
-        id: 'TC_AUTH_002',
-        title: 'User Login with Invalid Credentials',
-        description: 'Verify that login fails gracefully with invalid credentials',
-        category: 'Authentication',
-        priority: 'High',
-        currentStatus: 'Fail',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Navigate to login page',
-            expected: 'Login form is displayed'
-          },
-          {
-            stepNumber: 2,
-            action: 'Enter invalid username: wronguser@example.com',
-            expected: 'Username field accepts input'
-          },
-          {
-            stepNumber: 3,
-            action: 'Enter invalid password: WrongPass123',
-            expected: 'Password field shows masked characters'
-          },
-          {
-            stepNumber: 4,
-            action: 'Click Login button',
-            expected: 'Error message is displayed'
-          }
-        ],
-        expectedResult: 'Error message displayed: "Invalid username or password"',
-        linkedRequirements: ['REQ_AUTH_002', 'REQ_SECURITY_002'],
-        projectId: 'PROJ_ECOMMERCE_001',
-        lastExecution: {
-          date: '2025-09-15T09:20:00Z',
-          tester: 'alice.qa@company.com',
-          status: 'Fail',
-          notes: 'Authentication service timeout after 10 seconds. Server returned 500 error instead of proper error message. Login button becomes unresponsive.'
-        }
-      },
-      {
-        id: 'TC_AUTH_003',
-        title: 'Password Reset Functionality',
-        description: 'Verify that users can reset their password via email',
-        category: 'Authentication',
-        priority: 'Medium',
-        currentStatus: 'Blocked',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Click "Forgot Password" link on login page',
-            expected: 'Password reset form is displayed'
-          },
-          {
-            stepNumber: 2,
-            action: 'Enter valid email address',
-            expected: 'Email field accepts input'
-          },
-          {
-            stepNumber: 3,
-            action: 'Click "Send Reset Link" button',
-            expected: 'Confirmation message is displayed'
-          }
-        ],
-        expectedResult: 'Reset email sent and confirmation shown',
-        linkedRequirements: ['REQ_AUTH_003'],
-        projectId: 'PROJ_ECOMMERCE_001',
-        lastExecution: {
-          date: '2025-09-15T09:25:00Z',
-          tester: 'alice.qa@company.com',
-          status: 'Blocked',
-          notes: 'Email service is down. SMTP server connection failed. Blocked by ticket DEV-456.'
-        }
-      },
-      {
-        id: 'TC_AUTH_004',
-        title: 'Two-Factor Authentication Setup',
-        description: 'Verify users can enable and configure 2FA',
-        category: 'Authentication',
-        priority: 'High',
-        currentStatus: 'Not_Executed',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Navigate to Security Settings',
-            expected: '2FA setup option is available'
-          },
-          {
-            stepNumber: 2,
-            action: 'Click "Enable 2FA" button',
-            expected: 'QR code is displayed'
-          },
-          {
-            stepNumber: 3,
-            action: 'Scan QR code with authenticator app',
-            expected: 'App generates 6-digit code'
-          }
-        ],
-        expectedResult: '2FA successfully enabled',
-        linkedRequirements: ['REQ_AUTH_004', 'REQ_SECURITY_003'],
-        projectId: 'PROJ_ECOMMERCE_001'
-      },
-
-      // API Test Cases
-      {
-        id: 'TC_API_001',
-        title: 'User Profile API - GET Request',
-        description: 'Verify that GET /api/users/profile returns correct user data',
-        category: 'API',
-        priority: 'Critical',
-        currentStatus: 'Pass',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Send GET request to /api/users/profile with valid auth token',
-            expected: 'Request sent successfully'
-          },
-          {
-            stepNumber: 2,
-            action: 'Verify response status code',
-            expected: 'Status code is 200'
-          },
-          {
-            stepNumber: 3,
-            action: 'Verify response contains user data',
-            expected: 'Response includes id, name, email, preferences'
-          }
-        ],
-        expectedResult: 'API returns complete user profile data',
-        linkedRequirements: ['REQ_API_001'],
-        projectId: 'PROJ_ECOMMERCE_001',
-        lastExecution: {
-          date: '2025-09-15T09:30:00Z',
-          tester: 'bob.api@company.com',
-          status: 'Pass',
-          notes: 'API response time: 150ms. All fields present and correct.'
-        }
-      },
-      {
-        id: 'TC_API_002',
-        title: 'User Profile API - Invalid Auth Token',
-        description: 'Verify API properly handles invalid authentication tokens',
-        category: 'API',
-        priority: 'High',
-        currentStatus: 'Fail',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Send GET request to /api/users/profile with invalid token',
-            expected: 'Request sent with invalid auth header'
-          },
-          {
-            stepNumber: 2,
-            action: 'Verify response status code',
-            expected: 'Status code is 401 Unauthorized'
-          },
-          {
-            stepNumber: 3,
-            action: 'Verify error message in response',
-            expected: 'Response contains "Invalid authentication token"'
-          }
-        ],
-        expectedResult: 'API returns 401 with proper error message',
-        linkedRequirements: ['REQ_API_002', 'REQ_SECURITY_001'],
-        projectId: 'PROJ_ECOMMERCE_001',
-        lastExecution: {
-          date: '2025-09-15T09:35:00Z',
-          tester: 'bob.api@company.com',
-          status: 'Fail',
-          notes: 'API endpoint returns 500 Internal Server Error instead of 401. Database connection timeout detected. Error handling is not working properly for invalid tokens.'
-        }
-      },
-      {
-        id: 'TC_API_003',
-        title: 'Product Search API - Performance Test',
-        description: 'Verify search API responds within acceptable time limits',
-        category: 'API',
-        priority: 'Medium',
-        currentStatus: 'Not_Executed',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Send GET request to /api/products/search?q=laptop',
-            expected: 'Search request sent'
-          },
-          {
-            stepNumber: 2,
-            action: 'Measure response time',
-            expected: 'Response received within 500ms'
-          },
-          {
-            stepNumber: 3,
-            action: 'Verify search results',
-            expected: 'Relevant products returned'
-          }
-        ],
-        expectedResult: 'Search API responds quickly with accurate results',
-        linkedRequirements: ['REQ_API_003', 'REQ_PERFORMANCE_001'],
-        projectId: 'PROJ_ECOMMERCE_001'
-      },
-
-      // UI/UX Test Cases
-      {
-        id: 'TC_UI_001',
-        title: 'Homepage Layout Responsiveness',
-        description: 'Verify homepage displays correctly on different screen sizes',
-        category: 'UI/UX',
-        priority: 'High',
-        currentStatus: 'Pass',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Open homepage on desktop (1920x1080)',
-            expected: 'Page loads with full layout'
-          },
-          {
-            stepNumber: 2,
-            action: 'Resize to tablet view (768x1024)',
-            expected: 'Layout adjusts responsively'
-          },
-          {
-            stepNumber: 3,
-            action: 'Resize to mobile view (375x667)',
-            expected: 'Mobile layout with hamburger menu'
-          }
-        ],
-        expectedResult: 'Homepage is fully responsive across all devices',
-        linkedRequirements: ['REQ_UI_001'],
-        projectId: 'PROJ_ECOMMERCE_001',
-        lastExecution: {
-          date: '2025-09-15T09:40:00Z',
-          tester: 'carol.ui@company.com',
-          status: 'Pass',
-          notes: 'All breakpoints work correctly. Smooth transitions between layouts.'
-        }
-      },
-      {
-        id: 'TC_UI_002',
-        title: 'Shopping Cart Button Visibility',
-        description: 'Verify shopping cart button is visible and functional',
-        category: 'UI/UX',
-        priority: 'Critical',
-        currentStatus: 'Fail',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Navigate to product page',
-            expected: 'Product details displayed'
-          },
-          {
-            stepNumber: 2,
-            action: 'Locate "Add to Cart" button',
-            expected: 'Button is clearly visible'
-          },
-          {
-            stepNumber: 3,
-            action: 'Click "Add to Cart" button',
-            expected: 'Product added to cart with confirmation'
-          }
-        ],
-        expectedResult: 'Cart functionality works smoothly',
-        linkedRequirements: ['REQ_UI_002', 'REQ_CART_001'],
-        projectId: 'PROJ_ECOMMERCE_001',
-        lastExecution: {
-          date: '2025-09-15T09:45:00Z',
-          tester: 'carol.ui@company.com',
-          status: 'Fail',
-          notes: 'Add to Cart button is not visible on mobile devices due to CSS overflow issue. Button appears to be hidden behind product image. UI layout broken on screens smaller than 480px.'
-        }
-      },
-
-      // Performance Test Cases
-      {
-        id: 'TC_PERF_001',
-        title: 'Page Load Time - Homepage',
-        description: 'Verify homepage loads within acceptable time limits',
-        category: 'Performance',
-        priority: 'High',
-        currentStatus: 'Not_Executed',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Clear browser cache',
-            expected: 'Cache cleared'
-          },
-          {
-            stepNumber: 2,
-            action: 'Navigate to homepage',
-            expected: 'Page starts loading'
-          },
-          {
-            stepNumber: 3,
-            action: 'Measure time to fully loaded',
-            expected: 'Page loads within 3 seconds'
-          }
-        ],
-        expectedResult: 'Homepage loads quickly for good user experience',
-        linkedRequirements: ['REQ_PERFORMANCE_001'],
-        projectId: 'PROJ_ECOMMERCE_001'
-      },
-      {
-        id: 'TC_PERF_002',
-        title: 'Database Query Performance',
-        description: 'Verify database queries execute within acceptable timeframes',
-        category: 'Performance',
-        priority: 'Medium',
-        currentStatus: 'Blocked',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Execute complex product search query',
-            expected: 'Query starts execution'
-          },
-          {
-            stepNumber: 2,
-            action: 'Measure query execution time',
-            expected: 'Query completes within 1 second'
-          },
-          {
-            stepNumber: 3,
-            action: 'Verify result accuracy',
-            expected: 'Correct products returned'
-          }
-        ],
-        expectedResult: 'Database performs efficiently under load',
-        linkedRequirements: ['REQ_PERFORMANCE_002'],
-        projectId: 'PROJ_ECOMMERCE_001',
-        lastExecution: {
-          date: '2025-09-15T09:50:00Z',
-          tester: 'david.perf@company.com',
-          status: 'Blocked',
-          notes: 'Database server is under maintenance. Performance testing cannot proceed until DB team completes index optimization. Blocked by ticket OPS-789.'
-        }
-      },
-
-      // Security Test Cases
-      {
-        id: 'TC_SEC_001',
-        title: 'SQL Injection Prevention',
-        description: 'Verify application prevents SQL injection attacks',
-        category: 'Security',
-        priority: 'Critical',
-        currentStatus: 'Pass',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Navigate to search form',
-            expected: 'Search form is accessible'
-          },
-          {
-            stepNumber: 2,
-            action: 'Enter SQL injection payload: \' OR \'1\'=\'1',
-            expected: 'Input is accepted'
-          },
-          {
-            stepNumber: 3,
-            action: 'Submit search request',
-            expected: 'No database error or data exposure'
-          }
-        ],
-        expectedResult: 'Application safely handles malicious input',
-        linkedRequirements: ['REQ_SECURITY_001'],
-        projectId: 'PROJ_ECOMMERCE_001',
-        lastExecution: {
-          date: '2025-09-15T09:55:00Z',
-          tester: 'eve.security@company.com',
-          status: 'Pass',
-          notes: 'Input properly sanitized. No SQL injection vulnerability detected.'
-        }
-      },
-      {
-        id: 'TC_SEC_002',
-        title: 'Cross-Site Scripting (XSS) Prevention',
-        description: 'Verify application prevents XSS attacks in user input',
-        category: 'Security',
-        priority: 'Critical',
-        currentStatus: 'Fail',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Navigate to user profile edit page',
-            expected: 'Profile form is displayed'
-          },
-          {
-            stepNumber: 2,
-            action: 'Enter XSS payload in name field: <script>alert("XSS")</script>',
-            expected: 'Input is accepted'
-          },
-          {
-            stepNumber: 3,
-            action: 'Save profile and view public profile',
-            expected: 'Script should be escaped, not executed'
-          }
-        ],
-        expectedResult: 'Malicious scripts are safely escaped',
-        linkedRequirements: ['REQ_SECURITY_002'],
-        projectId: 'PROJ_ECOMMERCE_001',
-        lastExecution: {
-          date: '2025-09-15T10:00:00Z',
-          tester: 'eve.security@company.com',
-          status: 'Fail',
-          notes: 'XSS vulnerability detected! Script tag executed when viewing profile. Input validation is insufficient. User input not properly escaped on display. Critical security issue requires immediate fix.'
-        }
-      },
-
-      // Integration Test Cases
-      {
-        id: 'TC_INT_001',
-        title: 'Payment Gateway Integration',
-        description: 'Verify integration with external payment processor',
-        category: 'Integration',
-        priority: 'Critical',
-        currentStatus: 'Not_Executed',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Add item to cart and proceed to checkout',
-            expected: 'Checkout page displays'
-          },
-          {
-            stepNumber: 2,
-            action: 'Enter payment details',
-            expected: 'Payment form accepts input'
-          },
-          {
-            stepNumber: 3,
-            action: 'Submit payment',
-            expected: 'Payment processed successfully'
-          }
-        ],
-        expectedResult: 'Payment integration works seamlessly',
-        linkedRequirements: ['REQ_PAYMENT_001'],
-        projectId: 'PROJ_ECOMMERCE_001'
-      },
-
-      // Mobile-specific Test Cases
-      {
-        id: 'TC_MOB_001',
-        title: 'Mobile Touch Navigation',
-        description: 'Verify touch gestures work correctly on mobile devices',
-        category: 'Mobile',
-        priority: 'High',
-        currentStatus: 'Pass',
-        steps: [
-          {
-            stepNumber: 1,
-            action: 'Open app on mobile device',
-            expected: 'App loads in mobile view'
-          },
-          {
-            stepNumber: 2,
-            action: 'Swipe left to navigate between products',
-            expected: 'Smooth swipe navigation'
-          },
-          {
-            stepNumber: 3,
-            action: 'Pinch to zoom on product images',
-            expected: 'Zoom functionality works'
-          }
-        ],
-        expectedResult: 'All touch gestures work smoothly',
-        linkedRequirements: ['REQ_MOBILE_001'],
-        projectId: 'PROJ_ECOMMERCE_001',
-        lastExecution: {
-          date: '2025-09-15T10:05:00Z',
-          tester: 'frank.mobile@company.com',
-          status: 'Pass',
-          notes: 'Touch gestures responsive and intuitive. Good user experience on mobile.'
-        }
+    // Try localStorage fallback
+    try {
+      const { getAllStoredTestCases } = await import('@/lib/test-case-storage');
+      const storedTestCases = getAllStoredTestCases();
+      console.log('📊 localStorage test cases found:', storedTestCases.length);
+      
+      if (storedTestCases.length > 0) {
+        // Transform localStorage test cases to match the expected format
+        const transformedTestCases = storedTestCases.map(tc => ({
+          id: tc.id,
+          title: tc.data?.title || tc.testCase || tc.id,
+          description: tc.data?.description || '',
+          category: tc.data?.module || tc.module || 'General',
+          priority: tc.priority || 'medium',
+          currentStatus: tc.status || 'active',
+          steps: tc.testSteps?.map((step: any, index: number) => ({
+            stepNumber: index + 1,
+            action: step.description || step.action || '',
+            expected: step.expectedResult || step.expected || ''
+          })) || [],
+          expectedResult: tc.data?.expectedResult || '',
+          linkedRequirements: [],
+          projectId: tc.projectId || 'default',
+          lastExecution: undefined,
+          executionHistory: []
+        }));
+        
+        console.log('✅ Transformed localStorage test cases:', transformedTestCases.length);
+        setTestCases(transformedTestCases);
+        return;
       }
-    ];
-    
-    setTestCases(fallbackTestCases);
+    } catch (localStorageError) {
+      console.warn('localStorage not available:', localStorageError);
+    }
+
+    // No fallback test cases - show empty state when no test cases are available
+    setTestCases([]);
   };
 
   // AI Prioritization Functions
@@ -2059,51 +1757,85 @@ export default function TestExecutionPage() {
 
   const handleExecuteTest = async () => {
     if (!selectedTest) return;
-    
+
     setLoading(true);
     try {
-      // Try to call the API first
-      try {
-        const response = await fetch('/api/test-cases', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            testCaseId: selectedTest.id,
-            executionData: executionData
-          }),
-        });
+      // If this is part of an active run, update the run case
+      if (activeRunId) {
+        try {
+          // Find the run case for this test in the active run
+          const response = await fetch(`/api/run-details/${activeRunId}`);
+          const data = await response.json();
+          const runCase = data.run?.runCases?.find((rc: any) => rc.caseId === selectedTest.id);
 
-        if (response.ok) {
-          // API call successful, reload data
-          await loadTestCases();
-          showNotification('success', `Test ${selectedTest.id} executed successfully with status: ${executionData.status}`);
-        } else {
-          throw new Error('API call failed');
-        }
-      } catch (apiError) {
-        console.warn('API not available, updating locally:', apiError);
-        
-        // Fallback: Update local state
-        const updatedTestCases = testCases.map(tc => {
-          if (tc.id === selectedTest.id) {
-            return {
-              ...tc,
-              currentStatus: executionData.status,
-              lastExecution: {
-                date: new Date().toISOString(),
-                tester: executionData.tester,
+          if (runCase) {
+            // Update the run case status
+            const updateResponse = await fetch(`/api/run-cases/${runCase.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
                 status: executionData.status,
-                notes: executionData.notes
-              }
-            };
+                notes: executionData.notes,
+                assignee: executionData.tester
+              })
+            });
+
+            if (updateResponse.ok) {
+              // Reload the active run test cases to reflect the update
+              await loadActiveRunTestCases(activeRunId);
+              showNotification('success', `Test ${selectedTest!.id} executed with status: ${executionData.status}`);
+            } else {
+              throw new Error('Failed to update run case');
+            }
+          } else {
+            throw new Error('Run case not found');
           }
-          return tc;
-        });
-        
-        setTestCases(updatedTestCases);
-        showNotification('info', `Test ${selectedTest.id} executed locally with status: ${executionData.status}`);
+        } catch (runError) {
+          console.error('Failed to update run case:', runError);
+          showNotification('error', 'Failed to update test case status');
+        }
+      } else {
+        // Not part of a run, update general test case
+        try {
+          const response = await fetch('/api/test-cases', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              testCaseId: selectedTest!.id,
+              executionData: executionData
+            }),
+          });
+
+          if (response.ok) {
+            await loadTestCases();
+            showNotification('success', `Test ${selectedTest!.id} executed successfully with status: ${executionData.status}`);
+          } else {
+            throw new Error('API call failed');
+          }
+        } catch (apiError) {
+          console.warn('API not available, updating locally:', apiError);
+
+          const updatedTestCases = testCases.map(tc => {
+            if (tc.id === selectedTest!.id) {
+              return {
+                ...tc,
+                currentStatus: executionData.status,
+                lastExecution: {
+                  date: new Date().toISOString(),
+                  tester: executionData.tester,
+                  status: executionData.status,
+                  notes: executionData.notes
+                }
+              };
+            }
+            return tc;
+          });
+
+          setTestCases(updatedTestCases);
+          showNotification('info', `Test ${selectedTest!.id} executed locally with status: ${executionData.status}`);
+        }
       }
       
       // Trigger AI analysis for failures
@@ -2250,15 +1982,22 @@ export default function TestExecutionPage() {
     });
 
   // Use the state-managed activeRunTestCases or fall back to filteredTestCases
-  const displayTestCases = activeRunId ? activeRunTestCases : filteredTestCases;
+  // If we have an active run, prioritize its test cases, but if they're not loaded yet, show filteredTestCases
+  const runScopedTestCases = activeRunTestCases.length > 0
+    ? activeRunTestCases
+    : (activeRun?.testCases ?? []);
+
+  const displayTestCases = activeRunId
+    ? (runScopedTestCases.length > 0 ? runScopedTestCases : filteredTestCases)
+    : filteredTestCases;
 
   // Debug logging for test case display
   console.log('?? === DISPLAY TEST CASES CALCULATION ===');
   console.log('?? DEBUG: activeRunId:', activeRunId);
-  console.log('?? DEBUG: activeRunTestCases.length:', activeRunTestCases.length);
+  console.log('?? DEBUG: runScopedTestCases.length:', runScopedTestCases.length);
   console.log('?? DEBUG: filteredTestCases.length:', filteredTestCases.length);
   console.log('?? DEBUG: displayTestCases.length:', displayTestCases.length);
-  console.log('?? DEBUG: Will use:', activeRunId ? 'activeRunTestCases' : 'filteredTestCases');
+  console.log('?? DEBUG: Will use:', activeRunId && runScopedTestCases.length > 0 ? 'runScopedTestCases' : 'filteredTestCases');
   console.log('?? DEBUG: displayTestCases sample:', displayTestCases.slice(0, 3).map(tc => ({ id: tc.id, title: tc.title, currentStatus: tc.currentStatus })));
   console.log('?? ==========================================');
 
@@ -2316,8 +2055,8 @@ export default function TestExecutionPage() {
             </div>
           )}
 
-          {/* Enhanced Statistics Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Enhanced Statistics Grid - REMOVED */}
+          {false && <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -2356,11 +2095,10 @@ export default function TestExecutionPage() {
                 <Clock className="w-8 h-8 text-neutral" />
               </div>
             </div>
-          </div>
-        </div>
+          </div>}
 
-        {/* Controls and Filters */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        {/* Controls and Filters - REMOVED */}
+        {false && <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="space-y-6">
             {/* Top Row: Search and Project Selection */}
             <div className="flex flex-col lg:flex-row gap-4">
@@ -2490,7 +2228,7 @@ export default function TestExecutionPage() {
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
 
         {/* Multi-Run Execution Tabs */}
@@ -2894,8 +2632,8 @@ export default function TestExecutionPage() {
                       </label>
                     </div>
                     <div id="test-cases-preview" className="hidden max-h-32 overflow-y-auto border border-gray-200 rounded p-2 ml-7">
-                      {filteredTestCases.slice(0, 5).map(test => (
-                        <div key={test.id} className="text-xs text-gray-600 py-1">
+                      {filteredTestCases.slice(0, 5).map((test, index) => (
+                        <div key={`${test.id}-preview-${index}`} className="text-xs text-gray-600 py-1">
                           &bull; {test.title}
                         </div>
                       ))}
@@ -2945,7 +2683,7 @@ export default function TestExecutionPage() {
             <div className="p-6 border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-gray-900">
-                  {activeRun ? `${activeRun.name} - Test Cases (${displayTestCases.length})` : `Test Cases (${filteredTestCases.length})`}
+                  {activeRun?.name || 'Test Cases'}
                 </h2>
                 <div className="flex items-center gap-3">
                   {!aiPrioritizationEnabled ? (
@@ -2993,12 +2731,20 @@ export default function TestExecutionPage() {
                       Fetching test cases for the selected run
                     </p>
                   </div>
-                ) : (activeRunId ? displayTestCases.length === 0 : filteredTestCases.length === 0) ? (
+                ) : activeRunId && activeRunTestCases.length === 0 && !loadingActiveRunTestCases && displayTestCases.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <Target className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No test cases in this run</h3>
+                    <p className="text-gray-500">
+                      This run doesn't have any test cases assigned yet. Add test cases to get started.
+                    </p>
+                  </div>
+                ) : displayTestCases.length === 0 ? (
                   <div className="p-8 text-center">
                     <Target className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No test cases found</h3>
                     <p className="text-gray-500">
-                      {activeRunId && activeRun && activeRun.status === 'draft'
+                      {activeRunId && activeRun?.status === 'draft'
                         ? 'Add test cases to this run to get started with execution.'
                         : searchQuery || filter.status !== 'all' || filter.category !== 'all' || filter.priority !== 'all'
                         ? 'Try adjusting your search or filters'
@@ -3008,13 +2754,13 @@ export default function TestExecutionPage() {
                   </div>
                 ) : (
                   displayTestCases.map((testCase, index) => (
-                    <div
-                      key={testCase.id}
-                      className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
-                        selectedTest?.id === testCase.id ? 'bg-blue-50 border-r-4 border-blue-500' : ''
-                      }`}
-                      onClick={() => setSelectedTest(testCase)}
-                    >
+                      <div
+                        key={`${testCase.id}-${index}`}
+                        className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
+                          selectedTest?.id === testCase.id ? 'bg-blue-50 border-r-4 border-blue-500' : ''
+                        }`}
+                        onClick={() => setSelectedTest(testCase)}
+                      >
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-3 mb-2">
@@ -3107,22 +2853,22 @@ export default function TestExecutionPage() {
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {/* Test Case Info */}
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">{selectedTest.title}</h4>
-                  <p className="text-sm text-gray-600 mb-3">{selectedTest.description}</p>
+                  <h4 className="font-medium text-gray-900 mb-2">{selectedTest!.title}</h4>
+                  <p className="text-sm text-gray-600 mb-3">{selectedTest!.description}</p>
 
                   <div className="grid grid-cols-1 gap-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-500">ID:</span>
-                      <span className="text-gray-900 font-mono">{selectedTest.id}</span>
+                      <span className="text-gray-900 font-mono">{selectedTest!.id}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Category:</span>
-                      <span className="text-gray-900">{selectedTest.category}</span>
+                      <span className="text-gray-900">{selectedTest!.category}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Priority:</span>
-                      <Badge className={getPriorityColor(selectedTest.priority)} size="sm">
-                        {selectedTest.priority}
+                      <Badge className={getPriorityColor(selectedTest!.priority)} size="sm">
+                        {selectedTest!.priority}
                       </Badge>
                     </div>
                   </div>
@@ -3132,7 +2878,7 @@ export default function TestExecutionPage() {
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">Test Steps</h4>
                   <div className="space-y-2">
-                    {(selectedTest.steps || []).map((step) => (
+                    {(selectedTest?.steps || []).map((step) => (
                       <div key={step.stepNumber} className="bg-gray-50 rounded p-3 text-sm">
                         <div className="flex items-start gap-2">
                           <span className="inline-flex items-center justify-center w-5 h-5 bg-primary-100 text-primary-600 text-xs font-medium rounded-full flex-shrink-0">
@@ -3149,29 +2895,29 @@ export default function TestExecutionPage() {
                 </div>
 
                 {/* Last Execution */}
-                {selectedTest.lastExecution && (
+                {selectedTest?.lastExecution && (
                   <div>
                     <h4 className="font-medium text-gray-900 mb-2">Last Execution</h4>
                     <div className="bg-gray-50 rounded p-3 space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-500">Date:</span>
-                        <span className="text-gray-900">{new Date(selectedTest.lastExecution.date).toLocaleDateString()}</span>
+                        <span className="text-gray-900">{new Date(selectedTest!.lastExecution!.date).toLocaleDateString()}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">Tester:</span>
-                        <span className="text-gray-900">{selectedTest.lastExecution.tester}</span>
+                        <span className="text-gray-900">{selectedTest!.lastExecution!.tester}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">Status:</span>
-                        <Badge className={getStatusColor(selectedTest.lastExecution.status)} size="sm">
-                          {getStatusIcon(selectedTest.lastExecution.status)}
-                          <span className="ml-1">{selectedTest.lastExecution.status}</span>
+                        <Badge className={getStatusColor(selectedTest!.lastExecution!.status)} size="sm">
+                          {getStatusIcon(selectedTest!.lastExecution!.status)}
+                          <span className="ml-1">{selectedTest!.lastExecution!.status}</span>
                         </Badge>
                       </div>
-                      {selectedTest.lastExecution.notes && (
+                      {selectedTest!.lastExecution!.notes && (
                         <div>
                           <span className="text-gray-500 block mb-1">Notes:</span>
-                          <p className="text-gray-900 text-xs bg-white p-2 rounded border">{selectedTest.lastExecution.notes}</p>
+                          <p className="text-gray-900 text-xs bg-white p-2 rounded border">{selectedTest!.lastExecution!.notes}</p>
                         </div>
                       )}
                     </div>
@@ -3198,9 +2944,9 @@ export default function TestExecutionPage() {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Tester</label>
-                      {activeRun?.assignees && activeRun.assignees.length > 0 && (
+                      {activeRun?.assignees && activeRun!.assignees!.length > 0 && (
                         <p className="text-xs text-blue-600 mb-2">
-                          ?? Showing run assignees only (inherited from "{activeRun.name}")
+                          ?? Showing run assignees only (inherited from "{activeRun?.name}")
                         </p>
                       )}
                       <select
@@ -3212,10 +2958,10 @@ export default function TestExecutionPage() {
                           console.log('?? DEBUG: activeRun?.assignees:', activeRun?.assignees);
                           console.log('?? DEBUG: availableUsersForAssignment:', availableUsersForAssignment.map(u => ({ id: u.id, name: u.name, email: u.email })));
 
-                          const filteredUsers = (activeRun?.assignees && activeRun.assignees.length > 0 ?
+                          const filteredUsers = (activeRun?.assignees && activeRun!.assignees!.length > 0 ?
                             // Filter availableUsersForAssignment to only show run assignees
                             availableUsersForAssignment.filter(user =>
-                              activeRun.assignees?.some(assigneeId =>
+                              activeRun!.assignees!.some(assigneeId =>
                                 assigneeId === user.id || assigneeId === user.name || assigneeId === user.email
                               )
                             ) :
@@ -3291,7 +3037,7 @@ export default function TestExecutionPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => analyzeFailureWithAI(selectedTest, executionData.notes)}
+                          onClick={() => analyzeFailureWithAI(selectedTest!, executionData.notes)}
                           disabled={aiLoading}
                           className="text-red-700 hover:text-red-800"
                         >
@@ -3334,7 +3080,7 @@ export default function TestExecutionPage() {
             </div>
           )}
         </div>
-
+        </div>
 
         {/* AI Analysis Modal */}
         {showAiAnalysis && aiAnalysis && (
@@ -3400,9 +3146,9 @@ export default function TestExecutionPage() {
                       </div>
 
                       <div className="grid grid-cols-1 gap-3 max-h-64 overflow-y-auto mb-4">
-                        {aiAnalysis.relatedTestCases.map((testCase: any) => (
+                        {aiAnalysis.relatedTestCases.map((testCase: any, index: number) => (
                           <div
-                            key={testCase.id}
+                            key={`${testCase.id}-related-${index}`}
                             className={`p-3 border rounded-lg transition-all cursor-pointer ${
                               selectedRelatedTests.includes(testCase.id)
                                 ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200'

@@ -11,7 +11,7 @@ import { PreloadedTemplates } from '@/components/template/PreloadedTemplates'
 import { Button } from '@/components/ui/Button'
 import { TemplateField } from '@/types'
 import { generateId } from '@/lib/utils'
-import { Save, Eye, EyeOff, Settings, ArrowLeft } from 'lucide-react'
+import { Save, Eye, EyeOff, Settings, ArrowLeft, HelpCircle, Lightbulb, X } from 'lucide-react'
 import { withAuth } from '@/components/auth/withAuth'
 
 // Load custom template data
@@ -98,10 +98,16 @@ const loadCustomTemplate = () => {
 
 function TemplateEditor() {
   const [showTemplateSelection, setShowTemplateSelection] = useState(true)
+  const [showWizard, setShowWizard] = useState(false)
+  const [wizardStep, setWizardStep] = useState(1)
   const [fields, setFields] = useState<TemplateField[]>([])
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
   const [previewMode, setPreviewMode] = useState(false)
   const [templateName, setTemplateName] = useState('New Template')
+  const [showGuidance, setShowGuidance] = useState(true)
+  const [selectedFields, setSelectedFields] = useState<string[]>([
+    'testCaseId', 'module', 'title', 'steps', 'expectedResult', 'priority', 'status'
+  ])
 
   const selectedField = fields.find(field => field.id === selectedFieldId) || null
 
@@ -181,15 +187,174 @@ function TemplateEditor() {
       setTemplateName('Your Custom QA Template')
       setShowTemplateSelection(false)
     } else {
-      // Handle other templates
-      setShowTemplateSelection(false)
+      // Check if it's a custom template from localStorage
+      const customTemplates = JSON.parse(localStorage.getItem('customTemplates') || '[]')
+      const customTemplate = customTemplates.find((t: any) => t.id === templateId)
+
+      if (customTemplate) {
+        setFields(customTemplate.fields)
+        setTemplateName(customTemplate.name)
+        setShowTemplateSelection(false)
+      } else {
+        // Handle other built-in templates
+        setShowTemplateSelection(false)
+      }
     }
   }
 
   const handleCreateNew = () => {
-    setFields([])
-    setTemplateName('New Template')
+    setShowWizard(true)
+    setWizardStep(1)
     setShowTemplateSelection(false)
+  }
+
+  const handleCreateFromWizard = () => {
+    // Build fields from selected checkboxes
+    const availableFields = {
+      testCaseId: {
+        id: generateId(),
+        type: 'text' as const,
+        label: 'Test Case ID',
+        placeholder: 'TC-0001',
+        required: true,
+        width: 100,
+        order: 0
+      },
+      module: {
+        id: generateId(),
+        type: 'select' as const,
+        label: 'Module',
+        required: true,
+        options: ['Authentication', 'User Management', 'Dashboard', 'Reports', 'Settings', 'API'],
+        width: 100,
+        order: 1
+      },
+      title: {
+        id: generateId(),
+        type: 'text' as const,
+        label: 'Test Case Title',
+        placeholder: 'Enter test case title',
+        required: true,
+        maxLength: 200,
+        width: 100,
+        order: 2
+      },
+      preconditions: {
+        id: generateId(),
+        type: 'textarea' as const,
+        label: 'Preconditions',
+        placeholder: 'Enter preconditions',
+        required: false,
+        width: 100,
+        order: 3
+      },
+      steps: {
+        id: generateId(),
+        type: 'textarea' as const,
+        label: 'Test Steps',
+        placeholder: 'Step 1: ...\nStep 2: ...',
+        required: true,
+        width: 100,
+        order: 4
+      },
+      testData: {
+        id: generateId(),
+        type: 'text' as const,
+        label: 'Test Data',
+        placeholder: 'Enter test data',
+        required: false,
+        width: 100,
+        order: 5
+      },
+      expectedResult: {
+        id: generateId(),
+        type: 'textarea' as const,
+        label: 'Expected Result',
+        placeholder: 'Enter expected result',
+        required: true,
+        width: 100,
+        order: 6
+      },
+      priority: {
+        id: generateId(),
+        type: 'select' as const,
+        label: 'Priority',
+        required: true,
+        options: ['Critical', 'High', 'Medium', 'Low'],
+        defaultValue: 'Medium',
+        width: 100,
+        order: 7
+      },
+      status: {
+        id: generateId(),
+        type: 'select' as const,
+        label: 'Status',
+        required: false,
+        options: ['Not Run', 'Pass', 'Fail', 'Blocked', 'Skip'],
+        defaultValue: 'Not Run',
+        width: 100,
+        order: 8
+      },
+      assignee: {
+        id: generateId(),
+        type: 'text' as const,
+        label: 'Assigned To',
+        placeholder: 'QA Engineer name',
+        required: false,
+        width: 100,
+        order: 9
+      },
+      remarks: {
+        id: generateId(),
+        type: 'textarea' as const,
+        label: 'Remarks',
+        placeholder: 'Additional notes',
+        required: false,
+        maxLength: 1000,
+        width: 100,
+        order: 10
+      }
+    }
+
+    const newFields = selectedFields
+      .map(fieldKey => availableFields[fieldKey as keyof typeof availableFields])
+      .filter(Boolean)
+      .sort((a, b) => a.order - b.order)
+
+    // Save template directly from wizard
+    const newTemplate = {
+      id: generateId(),
+      name: templateName,
+      description: `Custom template with ${newFields.length} fields`,
+      fields: newFields,
+      category: 'Custom',
+      isDefault: false,
+      createdAt: new Date().toISOString(),
+    }
+
+    try {
+      // Get existing templates from localStorage
+      const existingTemplates = JSON.parse(localStorage.getItem('customTemplates') || '[]')
+
+      // Add new template
+      existingTemplates.push(newTemplate)
+
+      // Save back to localStorage
+      localStorage.setItem('customTemplates', JSON.stringify(existingTemplates))
+
+      alert(`Template "${templateName}" created successfully!`)
+
+      // Reset and go back to template selection
+      setShowWizard(false)
+      setShowTemplateSelection(true)
+      setFields([])
+      setTemplateName('New Template')
+      setSelectedFields(['testCaseId', 'module', 'title', 'steps', 'expectedResult', 'priority', 'status'])
+      setWizardStep(1)
+    } catch (error) {
+      console.error('Error saving template:', error)
+      alert('Failed to save template.')
+    }
   }
 
   const handleBackToTemplates = () => {
@@ -198,32 +363,35 @@ function TemplateEditor() {
   }
 
   const handleSaveAsDraft = async () => {
-    // This is a temporary solution to provide visual feedback.
-    // In a real app, this would be handled by a proper state management solution.
     const newTemplate = {
       id: generateId(),
       name: templateName,
-      description: 'A new draft template.',
-      fieldCount: fields.length,
-      category: 'Draft',
+      description: `Custom template with ${fields.length} fields`,
+      fields: fields,
+      category: 'Custom',
       isDefault: false,
+      createdAt: new Date().toISOString(),
     };
 
     try {
-      // Disabled file operations for now
-      // const preloadedTemplatesContent = await default_api.read_file('C:\\Users\\winnie.ngiew\\Desktop\\Claude\\TestCaseWriter\\src\\components\\template\\PreloadedTemplates.tsx');
-      // const preloadedTemplatesString = preloadedTemplatesContent.read_file_response.output;
+      // Get existing templates from localStorage
+      const existingTemplates = JSON.parse(localStorage.getItem('customTemplates') || '[]')
 
-      // const newTemplatesString = `const preloadedTemplates: PreloadedTemplate[] = [\n  {\n    id: '${newTemplate.id}',\n    name: '${newTemplate.name}',\n    description: '${newTemplate.description}',\n    fieldCount: ${newTemplate.fieldCount},\n    category: '${newTemplate.category}',\n    isDefault: ${newTemplate.isDefault}\n  },`;
+      // Add new template
+      existingTemplates.push(newTemplate)
 
-      // const updatedContent = preloadedTemplatesString.replace('const preloadedTemplates: PreloadedTemplate[] = [', newTemplatesString);
+      // Save back to localStorage
+      localStorage.setItem('customTemplates', JSON.stringify(existingTemplates))
 
-      // await default_api.write_file(updatedContent, 'C:\\Users\\winnie.ngiew\\Desktop\\Claude\\TestCaseWriter\\src\\components\\template\\PreloadedTemplates.tsx');
+      alert(`Template "${templateName}" saved successfully!`);
 
-      alert('Template saved as a draft!');
+      // Go back to template selection
+      setShowTemplateSelection(true)
+      setFields([])
+      setTemplateName('New Template')
     } catch (error) {
-      console.error('Error saving draft:', error);
-      alert('Failed to save draft.');
+      console.error('Error saving template:', error);
+      alert('Failed to save template.');
     }
   };
 
@@ -249,7 +417,15 @@ function TemplateEditor() {
       >
         Back
       </Button>
-      
+
+      <Button
+        variant="ghost"
+        onClick={() => setShowGuidance(!showGuidance)}
+        icon={HelpCircle}
+      >
+        {showGuidance ? 'Hide Guide' : 'Show Guide'}
+      </Button>
+
       <Button
         variant="secondary"
         onClick={() => setPreviewMode(!previewMode)}
@@ -257,7 +433,7 @@ function TemplateEditor() {
       >
         {previewMode ? 'Edit Mode' : 'Preview'}
       </Button>
-      
+
       <Button
         variant="primary"
         onClick={handleSaveAsDraft}
@@ -270,15 +446,160 @@ function TemplateEditor() {
 
   if (showTemplateSelection) {
     return (
-      <Layout 
+      <Layout
         breadcrumbs={breadcrumbs}
         title="Templates"
         actions={actions}
       >
-        <PreloadedTemplates 
+        <PreloadedTemplates
           onLoadTemplate={handleLoadTemplate}
           onCreateNew={handleCreateNew}
         />
+      </Layout>
+    )
+  }
+
+  if (showWizard) {
+    return (
+      <Layout
+        breadcrumbs={[
+          { label: 'Templates', href: '/templates', onClick: () => { setShowWizard(false); setShowTemplateSelection(true) } },
+          { label: 'Create Template Wizard' }
+        ]}
+        title="Create Template - Simple Wizard"
+        actions={null}
+      >
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* Progress Steps */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center space-x-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${wizardStep >= 1 ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-600'}`}>1</div>
+                <span className={wizardStep >= 1 ? 'text-gray-900 font-medium' : 'text-gray-500'}>Choose Fields</span>
+              </div>
+              <div className="flex-1 h-1 mx-4 bg-gray-200">
+                <div className={`h-full ${wizardStep >= 2 ? 'bg-primary-600' : 'bg-gray-200'}`} style={{ width: wizardStep >= 2 ? '100%' : '0%' }}></div>
+              </div>
+              <div className="flex items-center space-x-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${wizardStep >= 2 ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-600'}`}>2</div>
+                <span className={wizardStep >= 2 ? 'text-gray-900 font-medium' : 'text-gray-500'}>Name & Save</span>
+              </div>
+            </div>
+
+            {/* Step 1: Choose Fields */}
+            {wizardStep === 1 && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Select Fields for Your Template</h3>
+                  <p className="text-sm text-gray-600">Choose which fields you want in your test case template. Essential fields are pre-selected.</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {[
+                      { id: 'testCaseId', label: 'Test Case ID', recommended: true },
+                      { id: 'module', label: 'Module/Component', recommended: true },
+                      { id: 'title', label: 'Test Case Title', recommended: true },
+                      { id: 'preconditions', label: 'Preconditions', recommended: false },
+                      { id: 'steps', label: 'Test Steps', recommended: true },
+                      { id: 'testData', label: 'Test Data', recommended: false },
+                      { id: 'expectedResult', label: 'Expected Result', recommended: true },
+                      { id: 'priority', label: 'Priority', recommended: true },
+                      { id: 'status', label: 'Status', recommended: true },
+                      { id: 'assignee', label: 'Assigned To', recommended: false },
+                      { id: 'remarks', label: 'Remarks/Notes', recommended: false }
+                    ].map(field => (
+                      <label key={field.id} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedFields.includes(field.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedFields([...selectedFields, field.id])
+                            } else {
+                              setSelectedFields(selectedFields.filter(f => f !== field.id))
+                            }
+                          }}
+                          className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                        />
+                        <span className="flex-1 text-sm text-gray-700">{field.label}</span>
+                        {field.recommended && (
+                          <span className="text-xs bg-primary-100 text-primary-700 px-2 py-1 rounded">Recommended</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-between pt-4">
+                  <Button variant="secondary" onClick={() => { setShowWizard(false); setShowTemplateSelection(true) }}>
+                    Cancel
+                  </Button>
+                  <Button variant="primary" onClick={() => setWizardStep(2)} disabled={selectedFields.length === 0}>
+                    Next: Name Template
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Name & Save */}
+            {wizardStep === 2 && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Name Your Template</h3>
+                  <p className="text-sm text-gray-600">Give your template a descriptive name.</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Template Name</label>
+                  <input
+                    type="text"
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    placeholder="e.g., Standard Test Case Template"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Template Preview</h4>
+                  <p className="text-sm text-gray-600 mb-3">Your template will include {selectedFields.length} fields:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedFields.map(fieldId => {
+                      const fieldNames: Record<string, string> = {
+                        testCaseId: 'Test Case ID',
+                        module: 'Module',
+                        title: 'Title',
+                        preconditions: 'Preconditions',
+                        steps: 'Test Steps',
+                        testData: 'Test Data',
+                        expectedResult: 'Expected Result',
+                        priority: 'Priority',
+                        status: 'Status',
+                        assignee: 'Assigned To',
+                        remarks: 'Remarks'
+                      }
+                      return (
+                        <span key={fieldId} className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm">
+                          {fieldNames[fieldId]}
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex justify-between pt-4">
+                  <Button variant="secondary" onClick={() => setWizardStep(1)}>
+                    Back
+                  </Button>
+                  <Button variant="primary" onClick={handleCreateFromWizard} disabled={!templateName.trim()}>
+                    Create Template
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </Layout>
     )
   }
@@ -313,6 +634,47 @@ function TemplateEditor() {
               </div>
             </div>
           </div>
+
+          {/* Quick Start Guidance */}
+          {showGuidance && fields.length === 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start space-x-3 flex-1">
+                  <Lightbulb className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-blue-900 mb-2">
+                      Quick Start Guide
+                    </h3>
+                    <div className="space-y-3 text-sm text-blue-800">
+                      <div className="flex items-start space-x-2">
+                        <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 text-xs font-bold">1</span>
+                        <p><strong>Drag fields from the left panel</strong> to build your template (e.g., Test Case ID, Title, Steps)</p>
+                      </div>
+                      <div className="flex items-start space-x-2">
+                        <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 text-xs font-bold">2</span>
+                        <p><strong>Click on a field</strong> to customize it in the right panel (change label, make required, etc.)</p>
+                      </div>
+                      <div className="flex items-start space-x-2">
+                        <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 text-xs font-bold">3</span>
+                        <p><strong>Preview your template</strong> using the Preview button, then save when ready</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-blue-200">
+                      <p className="text-sm text-blue-700">
+                        <strong>💡 Tip:</strong> Start with a pre-built template from the Templates page, then customize it to your needs!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowGuidance(false)}
+                  className="text-blue-600 hover:text-blue-800 ml-4"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Editor Layout */}
           <div className="grid grid-cols-12 gap-6 h-[calc(100vh-400px)]">

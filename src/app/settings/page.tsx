@@ -30,9 +30,11 @@ import {
   CheckCheck,
   AlertTriangle,
   Download,
-  Clock
+  Clock,
+  Wrench
 } from 'lucide-react'
 import { withAuth } from '@/components/auth/withAuth'
+import { TestCaseIdFixer } from '@/components/admin/TestCaseIdFixer'
 
 function Settings() {
   const [activeTab, setActiveTab] = useState('ai') // Start with AI tab
@@ -85,7 +87,7 @@ function Settings() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.slice(1) // Remove the # symbol
-      if (hash && ['ai', 'profile', 'notifications', 'security', 'api', 'integrations'].includes(hash)) {
+      if (hash && ['ai', 'profile', 'notifications', 'security', 'api', 'integrations', 'admin'].includes(hash)) {
         setActiveTab(hash)
       }
     }
@@ -243,7 +245,8 @@ function Settings() {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'api', label: 'API Management', icon: Key },
-    { id: 'integrations', label: 'Integrations', icon: Database }
+    { id: 'integrations', label: 'Integrations', icon: Database },
+    { id: 'admin', label: 'Admin Tools', icon: Wrench }
   ]
 
   const renderTabContent = () => {
@@ -1484,6 +1487,13 @@ function Settings() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+        )
+
+      case 'admin':
+        return (
+          <div className="space-y-6">
+            <TestCaseIdFixer />
           </div>
         )
 

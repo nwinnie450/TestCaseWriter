@@ -47,6 +47,30 @@ interface PreloadedTemplatesProps {
 }
 
 export function PreloadedTemplates({ onLoadTemplate, onCreateNew }: PreloadedTemplatesProps) {
+  const [customTemplates, setCustomTemplates] = React.useState<PreloadedTemplate[]>([])
+
+  React.useEffect(() => {
+    // Load custom templates from localStorage
+    const stored = localStorage.getItem('customTemplates')
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored)
+        setCustomTemplates(parsed.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          description: t.description,
+          fieldCount: t.fields?.length || 0,
+          category: t.category || 'Custom',
+          isDefault: false
+        })))
+      } catch (error) {
+        console.error('Error loading custom templates:', error)
+      }
+    }
+  }, [])
+
+  const allTemplates = [...preloadedTemplates, ...customTemplates]
+
   return (
     <div className="space-y-6">
       <div className="text-center py-8">
@@ -54,9 +78,9 @@ export function PreloadedTemplates({ onLoadTemplate, onCreateNew }: PreloadedTem
         <p className="text-gray-600 mb-8">
           Start with a pre-built template or create your own from scratch
         </p>
-        
-        <Button 
-          variant="primary" 
+
+        <Button
+          variant="primary"
           onClick={onCreateNew}
           className="mb-8"
         >
@@ -65,7 +89,7 @@ export function PreloadedTemplates({ onLoadTemplate, onCreateNew }: PreloadedTem
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {preloadedTemplates.map((template) => (
+        {allTemplates.map((template) => (
           <Card key={template.id} className="hover:shadow-lg transition-shadow">
             <div className="card-header">
               <div className="flex items-start justify-between">

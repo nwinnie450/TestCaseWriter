@@ -144,16 +144,48 @@ export function RunCreateWizard({
   }, [testCases, searchTerm, filterStatus, filterPriority, filterProject])
 
   const loadTestCases = async () => {
-    console.log('🔄 loadTestCases called - making API request to /api/test-cases');
+    console.log('🔄 loadTestCases called - trying API first, then localStorage fallback');
     try {
+      // Try API first
       const response = await fetch('/api/test-cases')
       console.log('🔄 API response status:', response.status, response.ok);
-      if (!response.ok) {
-        throw new Error('Failed to fetch test cases')
+      
+      let allTestCases: any[] = []
+      
+      if (response.ok) {
+        allTestCases = await response.json()
+        console.log('📊 Raw API response:', allTestCases.length, 'test cases')
+      } else {
+        console.log('⚠️ API not available, falling back to localStorage')
+        throw new Error('API not available')
       }
 
-      const allTestCases = await response.json()
-      console.log('📊 Raw API response:', allTestCases.length, 'test cases')
+      // If API returned empty array, try localStorage fallback
+      if (allTestCases.length === 0) {
+        console.log('📊 API returned empty array, trying localStorage fallback')
+        const { getAllStoredTestCases } = await import('@/lib/test-case-storage')
+        const storedTestCases = getAllStoredTestCases()
+        console.log('📊 localStorage test cases:', storedTestCases.length)
+        
+        if (storedTestCases.length > 0) {
+          allTestCases = storedTestCases.map(tc => ({
+            id: tc.id,
+            title: tc.data?.title || tc.testCase || tc.id,
+            currentStatus: tc.status || 'active',
+            priority: tc.priority || 'medium',
+            category: tc.data?.module || tc.module || 'General',
+            tags: tc.tags || [],
+            projectId: tc.projectId || 'default',
+            description: tc.data?.description || '',
+            steps: tc.testSteps || [],
+            expectedResult: tc.data?.expectedResult || '',
+            createdDate: tc.createdAt,
+            lastModified: tc.updatedAt
+          }))
+          console.log('📊 Converted localStorage test cases:', allTestCases.length)
+        }
+      }
+
       let filtered = allTestCases
 
       // No automatic project filtering - users can filter manually using the dropdown
@@ -179,6 +211,9 @@ export function RunCreateWizard({
         category: tc.category,
         tags: tc.tags || [],
         projectId: tc.projectId || 'default',
+        templateId: tc.templateId || 'ai-generated',
+        createdBy: tc.createdBy || 'system',
+        version: tc.version || 1,
         data: {
           testCase: tc.title,
           module: tc.category,
@@ -194,7 +229,53 @@ export function RunCreateWizard({
       console.log('📋 Sample test case:', transformedTestCases[0])
       setTestCases(transformedTestCases)
     } catch (error) {
-      console.error('❌ Failed to load test cases:', error)
+      console.error('❌ Failed to load test cases from API, trying localStorage fallback:', error)
+      
+      // Fallback to localStorage
+      try {
+        const { getAllStoredTestCases } = await import('@/lib/test-case-storage')
+        const storedTestCases = getAllStoredTestCases()
+        console.log('📊 localStorage fallback - found test cases:', storedTestCases.length)
+        
+        const transformedTestCases = storedTestCases.map(tc => ({
+          id: tc.id,
+          title: tc.data?.title || tc.testCase || tc.id,
+          testCase: tc.data?.title || tc.testCase || tc.id,
+          status: tc.status || 'active',
+          currentStatus: tc.status || 'active',
+          priority: tc.priority || 'medium',
+          category: tc.data?.module || tc.module || 'General',
+          tags: tc.tags || [],
+          projectId: tc.projectId || 'default',
+          templateId: tc.templateId || 'ai-generated',
+          createdBy: tc.createdBy || 'system',
+          version: tc.version || 1,
+          data: {
+            testCase: tc.data?.title || tc.testCase || tc.id,
+            module: tc.data?.module || tc.module || 'General',
+            description: tc.data?.description || '',
+            steps: tc.testSteps || [],
+            expectedResult: tc.data?.expectedResult || ''
+          },
+          createdAt: tc.createdAt || new Date(),
+          updatedAt: tc.updatedAt || new Date()
+        }))
+
+        // Extract available projects from localStorage test cases
+        const projects = new Set<string>()
+        transformedTestCases.forEach((tc: any) => {
+          const category = tc.category || 'Uncategorized'
+          projects.add(category)
+        })
+        setAvailableProjects(Array.from(projects).sort())
+        console.log('📊 Available projects from localStorage:', Array.from(projects))
+
+        console.log('✅ Transformed localStorage test cases:', transformedTestCases.length)
+        setTestCases(transformedTestCases)
+      } catch (fallbackError) {
+        console.error('❌ Failed to load test cases from localStorage:', fallbackError)
+        setTestCases([])
+      }
     }
   }
 
@@ -335,10 +416,14 @@ export function RunCreateWizard({
 
     setIsCreating(true)
     try {
+      // Get the full test case data for selected test cases
+      const selectedTestCaseData = testCases.filter(tc => selectedTestCases.has(tc.id))
+
       const createRequest: CreateRunRequest = {
         name: runName,
         projectId: selectedProjectId || 'default',
         selectedTestCaseIds: Array.from(selectedTestCases),
+        testCaseSnapshots: selectedTestCaseData, // Include full test case data
         assignees,
         environments,
         build: build || undefined,

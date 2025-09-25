@@ -1,6 +1,27 @@
-import { TestCase } from '@/types'
+import { TestCase } from '@/types/index'
 import * as XLSX from 'xlsx'
 import { FEAI94_PRESET, extractFieldValue, normalizeValue, parseStepsFromText } from './presets/feai94-preset'
+
+// Generate unique import ID: TC_IMPORT_{RUNNING_NUMBER}
+// Checks existing test cases to ensure no duplicates across multiple imports
+function generateImportId(existingTestCases: TestCase[] = []): string {
+  // Find the highest import number from existing test cases
+  let maxImportNumber = 0
+
+  existingTestCases.forEach(tc => {
+    const match = tc.id.match(/^TC_IMPORT_(\d+)$/)
+    if (match) {
+      const num = parseInt(match[1], 10)
+      if (num > maxImportNumber) {
+        maxImportNumber = num
+      }
+    }
+  })
+
+  // Generate next sequential number
+  const nextNumber = maxImportNumber + 1
+  return `TC_IMPORT_${String(nextNumber).padStart(3, '0')}`
+}
 
 export interface ImportResult {
   success: boolean
@@ -151,9 +172,8 @@ export function mapRowToFEAI94TestCase(rowData: any, options: ImportOptions = {}
   try {
     console.log('🎯 FEAI-94 Mapper - Processing row:', Object.keys(rowData))
 
-    // Extract values using FEAI-94 preset mappings
-    const id = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.id) ||
-               `TC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    // Always generate new unique ID to avoid duplicates from Excel
+    const id = generateImportId()
 
     const title = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.title) || 'Imported Test Case'
     const module = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.module)
@@ -165,14 +185,17 @@ export function mapRowToFEAI94TestCase(rowData: any, options: ImportOptions = {}
 
     // Priority and status extraction
     const priorityValue = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.priority)
-    const statusValue = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.status)
+    const statusValue = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.test_result)
 
     // Map and normalize priority
     const priority = normalizeValue(priorityValue, 'medium', ['critical', 'high', 'medium', 'low'])
     const status = normalizeValue(statusValue, 'Not Run', ['Passed', 'Failed', 'Blocked', 'Skipped', 'Not Run'])
 
     // Parse test steps
-    const testSteps = stepsText ? parseStepsFromText(stepsText) : []
+    const testSteps = stepsText ? parseStepsFromText(stepsText).map(step => ({
+      ...step,
+      expectedResult: step.expectedResult || ''
+    })) : []
 
     console.log('🎯 FEAI-94 Mapper - Extracted values:', {
       id,
@@ -188,9 +211,6 @@ export function mapRowToFEAI94TestCase(rowData: any, options: ImportOptions = {}
       id,
       templateId: 'feai94-template',
       projectId: options.defaultProject || 'default',
-      title,
-      description: stepsText || title,
-      category: module || 'General',
       priority: priority as any,
       status: status as any,
       tags: [module, priority].filter(Boolean),
@@ -337,12 +357,9 @@ export function mapCSVToTestCase(headers: string[], row: string[], options: Impo
     const finalSteps = testStepDescription ? parseSteps(testStepDescription) : []
 
     const testCase: TestCase = {
-      id: testCaseId || `imported_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: generateImportId(), // Always generate unique ID
       templateId: 'imported-template',
       projectId: options.defaultProject || 'default',
-      title: testCaseTitle || 'Imported Test Case',
-      description: finalDescription,
-      category: module || 'General',
       priority: 'medium' as any,
       status: parseStatus(testResult || '') as any,
       tags: Array.from(new Set(allTags)),
@@ -491,12 +508,9 @@ function createTestCaseFromVerticalData(data: any, options: ImportOptions): Test
   const steps = data.description ? parseStepsFromVertical(data.description) : []
 
   return {
-    id: data.id || `imported_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    id: generateImportId(), // Always generate unique ID
     templateId: 'vertical-template',
     projectId: options.defaultProject || 'default',
-    title: data.title || 'Imported Test Case',
-    description: data.description || '',
-    category: data.module || 'General',
     priority: (data.priority || 'medium') as any,
     status: (parseStatusFromVertical(data.status) || 'Not Run') as any,
     tags: [data.module, data.priority].filter(Boolean),
@@ -577,7 +591,7 @@ export function detectDuplicates(testCases: TestCase[], options: ImportOptions =
   }
 
   // Process signatures to identify duplicates
-  for (const [signature, cases] of caseSignatures) {
+  for (const [signature, cases] of Array.from(caseSignatures.entries())) {
     if (cases.length > 1) {
       // Found duplicates
       const duplicateGroup: DuplicateGroup = {
@@ -621,10 +635,10 @@ export function detectDuplicates(testCases: TestCase[], options: ImportOptions =
 function generateExactSignature(testCase: TestCase): string {
   const normalizeText = (text: string) => text.toLowerCase().trim().replace(/\s+/g, ' ')
 
-  const title = normalizeText(testCase.title || testCase.testCase || '')
-  const category = normalizeText(testCase.category || testCase.module || '')
+  const title = normalizeText(testCase.data?.title || testCase.testCase || '')
+  const category = normalizeText(testCase.data?.category || testCase.module || '')
   const steps = (testCase.testSteps || testCase.data?.steps || [])
-    .map(step => normalizeText(typeof step === 'string' ? step : step.description || ''))
+    .map((step: any) => normalizeText(typeof step === 'string' ? step : step.description || ''))
     .join('|')
 
   return `${title}:${category}:${steps}`
@@ -632,14 +646,14 @@ function generateExactSignature(testCase: TestCase): string {
 
 // Generate title-based signature
 function generateTitleSignature(testCase: TestCase): string {
-  const title = (testCase.title || testCase.testCase || '').toLowerCase().trim().replace(/\s+/g, ' ')
-  const category = (testCase.category || testCase.module || '').toLowerCase().trim()
+  const title = (testCase.data?.title || testCase.testCase || '').toLowerCase().trim().replace(/\s+/g, ' ')
+  const category = (testCase.data?.category || testCase.module || '').toLowerCase().trim()
   return `${title}:${category}`
 }
 
 // Generate content-based signature
 function generateContentSignature(testCase: TestCase): string {
-  const description = (testCase.description || '').toLowerCase().trim().replace(/\s+/g, ' ')
+  const description = (testCase.data?.description || '').toLowerCase().trim().replace(/\s+/g, ' ')
   const expectedResult = (testCase.testResult || testCase.data?.expectedResult || '').toLowerCase().trim()
   return `${description}:${expectedResult}`.substring(0, 200) // Limit length
 }
@@ -657,9 +671,9 @@ function selectBestCase(cases: TestCase[]): TestCase {
 function calculateCompletenessScore(testCase: TestCase): number {
   let score = 0
 
-  if (testCase.title || testCase.testCase) score += 10
-  if (testCase.description) score += 5
-  if (testCase.category || testCase.module) score += 3
+  if (testCase.data?.title || testCase.testCase) score += 10
+  if (testCase.data?.description) score += 5
+  if (testCase.data?.category || testCase.module) score += 3
   if (testCase.priority && testCase.priority !== 'medium') score += 2
   if (testCase.testSteps?.length || testCase.data?.steps?.length) {
     score += Math.min((testCase.testSteps?.length || testCase.data?.steps?.length || 0) * 2, 10)
@@ -708,16 +722,16 @@ function findSimilarCases(testCases: TestCase[]): SimilarGroup[] {
 
 // Calculate similarity between two test cases
 function calculateSimilarity(case1: TestCase, case2: TestCase): number {
-  const title1 = (case1.title || case1.testCase || '').toLowerCase()
-  const title2 = (case2.title || case2.testCase || '').toLowerCase()
+  const title1 = (case1.data?.title || case1.testCase || '').toLowerCase()
+  const title2 = (case2.data?.title || case2.testCase || '').toLowerCase()
 
   const titleSimilarity = levenshteinSimilarity(title1, title2)
 
-  const steps1 = (case1.testSteps || case1.data?.steps || []).map(s =>
+  const steps1 = (case1.testSteps || case1.data?.steps || []).map((s: any) =>
     typeof s === 'string' ? s : s.description || ''
   ).join(' ').toLowerCase()
 
-  const steps2 = (case2.testSteps || case2.data?.steps || []).map(s =>
+  const steps2 = (case2.testSteps || case2.data?.steps || []).map((s: any) =>
     typeof s === 'string' ? s : s.description || ''
   ).join(' ').toLowerCase()
 
@@ -786,8 +800,8 @@ function identifyDifferences(cases: TestCase[]): string[] {
     const currentCase = cases[i]
 
     // Check title differences
-    const title1 = firstCase.title || firstCase.testCase || ''
-    const title2 = currentCase.title || currentCase.testCase || ''
+    const title1 = firstCase.data?.title || firstCase.testCase || ''
+    const title2 = currentCase.data?.title || currentCase.testCase || ''
     if (title1 !== title2) {
       differences.push(`Title variation: "${title1}" vs "${title2}"`)
     }
@@ -798,8 +812,8 @@ function identifyDifferences(cases: TestCase[]): string[] {
     }
 
     // Check category differences
-    const cat1 = firstCase.category || firstCase.module || ''
-    const cat2 = currentCase.category || currentCase.module || ''
+    const cat1 = firstCase.data?.category || firstCase.module || ''
+    const cat2 = currentCase.data?.category || currentCase.module || ''
     if (cat1 !== cat2) {
       differences.push(`Category: "${cat1}" vs "${cat2}"`)
     }
@@ -1015,7 +1029,7 @@ export function generateAuditCSV(auditReport: ImportAuditReport, duplicateDetect
   csvRows.push('Group,Duplicate Type,Cases Count,Keep Case ID,Keep Case Title')
   duplicateDetection.exactDuplicates.forEach((group, index) => {
     const keepCase = group.keepCase
-    csvRows.push(`${index + 1},"${group.duplicateType}",${group.cases.length},"${keepCase.id}","${(keepCase.title || keepCase.testCase || '').replace(/"/g, '""')}"`)
+    csvRows.push(`${index + 1},"${group.duplicateType}",${group.cases.length},"${keepCase.id}","${(keepCase.data?.title || keepCase.testCase || '').replace(/"/g, '""')}"`)
   })
   csvRows.push('')
 
@@ -1436,7 +1450,7 @@ export async function importTestCasesFromJSON(
         const stepsArray = parseStepsFromJSON(rawTestCase.steps)
 
         const testCase: TestCase = {
-          id: rawTestCase.id || `imported_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: generateImportId(), // Always generate unique ID
           templateId: 'imported-template',
           projectId: options.defaultProject || 'default',
           data: {
@@ -1452,9 +1466,6 @@ export async function importTestCasesFromJSON(
             testData: rawTestCase.testData || rawTestCase.data || '',
             remarks: rawTestCase.remarks || rawTestCase.notes || ''
           },
-          title: rawTestCase.title || rawTestCase.name || `Imported Test Case ${i + 1}`,
-          description: rawTestCase.description || rawTestCase.desc || '',
-          category: rawTestCase.category || rawTestCase.module || 'General',
           priority: parsePriority(rawTestCase.priority) as any,
           status: parseStatus(rawTestCase.status) as any,
           tags: Array.isArray(rawTestCase.tags) ? rawTestCase.tags : parseTags(rawTestCase.tags || ''),

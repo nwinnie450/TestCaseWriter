@@ -64,6 +64,20 @@ export class AIProviderError extends Error {
   }
 }
 
+// Generate unique test case ID with module prefix: TC-{MODULE}-{NUMBER}
+function generateTestCaseId(module: string, index: number): string {
+  // Convert module to uppercase and remove special characters
+  const modulePrefix = module
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .substring(0, 10) || 'GEN' // Max 10 chars, fallback to 'GEN'
+
+  // Pad number to 3 digits
+  const number = String(index).padStart(3, '0')
+
+  return `TC-${modulePrefix}-${number}`
+}
+
 export const AI_PROVIDERS: Record<string, AIProvider> = {
   openai: {
     id: 'openai',
@@ -283,7 +297,7 @@ class OpenAIProvider implements BaseAIProvider {
         testCases = testCases.slice(0, config.maxTestCases)
       }
       
-      const formattedTestCases = this.formatTestCases(testCases)
+      const formattedTestCases = await this.formatTestCases(testCases)
 
       return {
         testCases: formattedTestCases,
@@ -380,40 +394,57 @@ class OpenAIProvider implements BaseAIProvider {
     }
   }
 
-  private getNextSequentialId(): string {
-    const nextNumber = this.getNextIdNumber();
+  private async getNextSequentialId(): Promise<string> {
+    const nextNumber = await this.getNextIdNumber();
     return `TC-${String(nextNumber).padStart(3, '0')}`;
   }
 
-  private getNextIdNumber(): number {
-    // Get existing test cases from localStorage to find the highest ID number
+  private async getNextIdNumber(): Promise<number> {
+    let maxNumber = 0;
+
+    // Check database first (most reliable source)
     try {
-      const existingTestCases = localStorage.getItem('testCaseWriterLibrary');
-      if (!existingTestCases) {
-        return 1;
-      }
-      
-      const testCases = JSON.parse(existingTestCases);
-      let maxNumber = 0;
-      
-      // Find the highest TC number in existing test cases
-      testCases.forEach((tc: any) => {
-        if (tc.id && tc.id.startsWith('TC-')) {
-          const match = tc.id.match(/^TC-(\d+)$/);
-          if (match) {
-            const number = parseInt(match[1], 10);
-            if (number > maxNumber) {
-              maxNumber = number;
+      const response = await fetch('/api/test-cases');
+      if (response.ok) {
+        const testCases = await response.json();
+        testCases.forEach((tc: any) => {
+          if (tc.id && tc.id.startsWith('TC-')) {
+            const match = tc.id.match(/^TC-(\d+)$/);
+            if (match) {
+              const number = parseInt(match[1], 10);
+              if (number > maxNumber) {
+                maxNumber = number;
+              }
             }
           }
-        }
-      });
-      
-      return maxNumber + 1;
+        });
+      }
     } catch (error) {
-      console.warn('Error reading existing test cases for ID generation:', error);
-      return 1;
+      console.warn('Error fetching test cases from database:', error);
     }
+
+    // Also check localStorage as fallback and for any pending test cases
+    try {
+      const existingTestCases = localStorage.getItem('testCaseWriterLibrary');
+      if (existingTestCases) {
+        const testCases = JSON.parse(existingTestCases);
+        testCases.forEach((tc: any) => {
+          if (tc.id && tc.id.startsWith('TC-')) {
+            const match = tc.id.match(/^TC-(\d+)$/);
+            if (match) {
+              const number = parseInt(match[1], 10);
+              if (number > maxNumber) {
+                maxNumber = number;
+              }
+            }
+          }
+        });
+      }
+    } catch (error) {
+      console.warn('Error reading existing test cases from localStorage:', error);
+    }
+
+    return maxNumber + 1;
   }
 
   private extractPartialTestCases(content: string): TestCase[] {
@@ -465,12 +496,12 @@ class OpenAIProvider implements BaseAIProvider {
     return results
   }
 
-  private formatTestCases(testCases: TestCase[]): TestCase[] {
+  private async formatTestCases(testCases: TestCase[]): Promise<TestCase[]> {
     // Generate sequential IDs for the batch starting from the next available number
-    let nextIdNumber = this.getNextIdNumber();
+    let nextIdNumber = await this.getNextIdNumber();
     
     return testCases.map((tc, index) => ({
-      id: `TC-${String(nextIdNumber + index).padStart(3, '0')}`, // Force sequential IDs
+      id: generateTestCaseId(tc.module || 'General', nextIdNumber + index),
       templateId: tc.templateId || 'ai-generated',
       projectId: tc.projectId || 'default',
       module: tc.module || 'General',
@@ -567,7 +598,7 @@ class GeminiProvider implements BaseAIProvider {
         testCases = testCases.slice(0, config.maxTestCases)
       }
       
-      const formattedTestCases = this.formatTestCases(testCases)
+      const formattedTestCases = await this.formatTestCases(testCases)
 
       return {
         testCases: formattedTestCases,
@@ -603,12 +634,12 @@ class GeminiProvider implements BaseAIProvider {
     }
   }
 
-  private formatTestCases(testCases: TestCase[]): TestCase[] {
+  private async formatTestCases(testCases: TestCase[]): Promise<TestCase[]> {
     // Generate sequential IDs for the batch starting from the next available number
-    let nextIdNumber = this.getNextIdNumber();
+    let nextIdNumber = await this.getNextIdNumber();
     
     return testCases.map((tc, index) => ({
-      id: `TC-${String(nextIdNumber + index).padStart(3, '0')}`, // Force sequential IDs
+      id: generateTestCaseId(tc.module || 'General', nextIdNumber + index),
       templateId: tc.templateId || 'ai-generated',
       projectId: tc.projectId || 'default',
       module: tc.module || 'General',
@@ -706,7 +737,7 @@ class ClaudeProvider implements BaseAIProvider {
         testCases = testCases.slice(0, config.maxTestCases)
       }
       
-      const formattedTestCases = this.formatTestCases(testCases)
+      const formattedTestCases = await this.formatTestCases(testCases)
 
       return {
         testCases: formattedTestCases,
@@ -740,12 +771,12 @@ class ClaudeProvider implements BaseAIProvider {
     }
   }
 
-  private formatTestCases(testCases: TestCase[]): TestCase[] {
+  private async formatTestCases(testCases: TestCase[]): Promise<TestCase[]> {
     // Generate sequential IDs for the batch starting from the next available number
-    let nextIdNumber = this.getNextIdNumber();
+    let nextIdNumber = await this.getNextIdNumber();
     
     return testCases.map((tc, index) => ({
-      id: `TC-${String(nextIdNumber + index).padStart(3, '0')}`, // Force sequential IDs
+      id: generateTestCaseId(tc.module || 'General', nextIdNumber + index),
       templateId: tc.templateId || 'ai-generated',
       projectId: tc.projectId || 'default',
       module: tc.module || 'General',
@@ -849,7 +880,7 @@ class GrokProvider implements BaseAIProvider {
         testCases = testCases.slice(0, config.maxTestCases)
       }
       
-      const formattedTestCases = this.formatTestCases(testCases)
+      const formattedTestCases = await this.formatTestCases(testCases)
 
       return {
         testCases: formattedTestCases,
@@ -902,12 +933,12 @@ class GrokProvider implements BaseAIProvider {
     }
   }
 
-  private formatTestCases(testCases: TestCase[]): TestCase[] {
+  private async formatTestCases(testCases: TestCase[]): Promise<TestCase[]> {
     // Generate sequential IDs for the batch starting from the next available number
-    let nextIdNumber = this.getNextIdNumber();
+    let nextIdNumber = await this.getNextIdNumber();
     
     return testCases.map((tc, index) => ({
-      id: `TC-${String(nextIdNumber + index).padStart(3, '0')}`, // Force sequential IDs
+      id: generateTestCaseId(tc.module || 'General', nextIdNumber + index),
       templateId: tc.templateId || 'ai-generated',
       projectId: tc.projectId || 'default',
       module: tc.module || 'General',

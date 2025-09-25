@@ -3,6 +3,7 @@ export interface CreateRunRequest {
   name: string
   projectId: string
   selectedTestCaseIds?: string[]
+  testCaseSnapshots?: any[] // Full test case data for localStorage cases
   filters?: {
     status?: string
     priority?: string
@@ -128,7 +129,7 @@ export class RunsService {
     if (params?.offset) searchParams.append('offset', params.offset.toString())
 
     const url = `${this.baseUrl}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
-    const response = await fetch(url)
+    const response = await fetch(url, { cache: 'no-store' })
 
     if (!response.ok) {
       const error = await response.json()
@@ -139,7 +140,7 @@ export class RunsService {
   }
 
   static async getRun(runId: string): Promise<{ run: any; stats: any }> {
-    const response = await fetch(`${this.baseUrl}/${runId}`)
+    const response = await fetch(`${this.baseUrl}/${runId}`, { cache: 'no-store' })
 
     if (!response.ok) {
       const error = await response.json()

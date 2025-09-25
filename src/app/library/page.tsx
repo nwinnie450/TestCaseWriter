@@ -62,9 +62,12 @@ export default function TestCaseManagement() {
     testSteps: '',
     expectedResult: '',
     module: '',
+    feature: '',
     testData: '',
     requirements: '',
     tags: '',
+    enhancement: '',
+    ticketId: '',
     complexity: 'Medium'
   })
 
@@ -604,65 +607,72 @@ export default function TestCaseManagement() {
   }
 
   // Manual test case creation
-  const handleCreateTestCase = () => {
+  const handleCreateTestCase = async () => {
     try {
       const testCaseId = `TC_MANUAL_${Date.now().toString(36).toUpperCase()}`
 
       const newTC: TestCase = {
         id: testCaseId,
         templateId: 'default-template',
-        projectId: selectedProjectFilter || 'default',
+        projectId: newTestCase.projectId || selectedProjectFilter || 'default',
         status: 'draft',
+        title: newTestCase.title,
+        description: newTestCase.description,
         testCase: newTestCase.title,
         module: newTestCase.module || 'General',
-        testSteps: newTestCase.testSteps ? newTestCase.testSteps.split('\n').map((step, index) => ({
+        testSteps: newTestCase.testSteps ? newTestCase.testSteps.split('\n').filter(s => s.trim()).map((step, index) => ({
           step: index + 1,
           description: step.trim(),
           expectedResult: '',
           testData: ''
         })) : [],
-        testData: newTestCase.testData || 'N/A',
-        testResult: 'Not Executed',
+        testData: newTestCase.testData || '',
+        testResult: newTestCase.expectedResult,
         qa: 'Manual Creator',
         remarks: '',
-        priority: newTestCase.priority as 'low' | 'medium' | 'high' | 'critical',
-        tags: newTestCase.tags ? newTestCase.tags.split(',').map(tag => tag.trim()) : [],
+        priority: newTestCase.priority.toLowerCase() as 'low' | 'medium' | 'high' | 'critical',
+        tags: newTestCase.tags ? newTestCase.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
         createdAt: new Date(),
         updatedAt: new Date(),
         createdBy: currentUser?.id || 'system',
         version: 1,
         data: {
+          title: newTestCase.title,
+          description: newTestCase.description,
+          preconditions: '',
+          steps: newTestCase.testSteps ? newTestCase.testSteps.split('\n').filter(s => s.trim()).map((step, index) => ({
+            step: index + 1,
+            description: step.trim(),
+            expectedResult: '',
+            testData: ''
+          })) : [],
           expectedResult: newTestCase.expectedResult,
-          testData: newTestCase.testData || 'N/A',
+          testData: newTestCase.testData || '',
           category: newTestCase.category,
+          assignee: currentUser?.name || 'Manual Creator',
+          estimatedTime: '',
           complexity: newTestCase.complexity,
-          requirements: newTestCase.requirements ? newTestCase.requirements.split(',').map(req => req.trim()) : [],
+          requirements: newTestCase.requirements ? newTestCase.requirements.split(',').map(req => req.trim()).filter(Boolean) : [],
+          feature: newTestCase.feature,
+          enhancement: newTestCase.enhancement,
+          ticketId: newTestCase.ticketId,
           isManuallyCreated: true,
           source: 'Manual Creation'
         }
       }
 
-      // Save to localStorage
-      const currentSessionId = `manual-session-${Date.now()}`
-      const existingData = JSON.parse(localStorage.getItem('testCases') || '{}')
+      // Save to localStorage using the correct storage key
+      const { saveGeneratedTestCases } = await import('@/lib/test-case-storage')
 
-      if (!existingData[currentSessionId]) {
-        existingData[currentSessionId] = {
-          testCases: [],
-          metadata: {
-            sessionId: currentSessionId,
-            source: 'Manual Creation',
-            createdAt: new Date().toISOString(),
-            totalTestCases: 0
-          }
-        }
-      }
-
-      existingData[currentSessionId].testCases.push(newTC)
-      existingData[currentSessionId].metadata.totalTestCases = existingData[currentSessionId].testCases.length
-      existingData[currentSessionId].metadata.updatedAt = new Date().toISOString()
-
-      localStorage.setItem('testCases', JSON.stringify(existingData))
+      saveGeneratedTestCases(
+        [newTC],
+        ['Manual Creation'],
+        'manual',
+        selectedProjectFilter || undefined,
+        selectedProjectFilter ? projects.find(p => p.id === selectedProjectFilter)?.name : undefined,
+        undefined, // no session continuation
+        false // don't skip duplicates for manually created test cases
+      )
 
       // Update UI
       setTestCases(prev => [...prev, newTC])
@@ -677,9 +687,13 @@ export default function TestCaseManagement() {
         testSteps: '',
         expectedResult: '',
         module: '',
+        feature: '',
         testData: '',
         requirements: '',
         tags: '',
+        enhancement: '',
+        ticketId: '',
+        projectId: '',
         complexity: 'Medium'
       })
 
@@ -1353,12 +1367,37 @@ export default function TestCaseManagement() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Module/Feature</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
+                    <select
+                      value={newTestCase.projectId}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, projectId: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    >
+                      <option value="">Select Project</option>
+                      {projects.map(project => (
+                        <option key={project.id} value={project.id}>{project.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Module</label>
                     <input
                       type="text"
                       value={newTestCase.module}
                       onChange={(e) => setNewTestCase(prev => ({ ...prev, module: e.target.value }))}
-                      placeholder="e.g., User Authentication, Shopping Cart"
+                      placeholder="e.g., User Management, Payment"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Feature</label>
+                    <input
+                      type="text"
+                      value={newTestCase.feature}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, feature: e.target.value }))}
+                      placeholder="e.g., Login, Checkout Process"
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     />
                   </div>
@@ -1425,6 +1464,28 @@ export default function TestCaseManagement() {
                       value={newTestCase.requirements}
                       onChange={(e) => setNewTestCase(prev => ({ ...prev, requirements: e.target.value }))}
                       placeholder="REQ_AUTH_001, REQ_LOGIN_002 (comma-separated)"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Enhancement/Story</label>
+                    <input
+                      type="text"
+                      value={newTestCase.enhancement}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, enhancement: e.target.value }))}
+                      placeholder="e.g., Add password reset functionality"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Ticket ID</label>
+                    <input
+                      type="text"
+                      value={newTestCase.ticketId}
+                      onChange={(e) => setNewTestCase(prev => ({ ...prev, ticketId: e.target.value }))}
+                      placeholder="e.g., JIRA-1234, TICKET-567"
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     />
                   </div>
