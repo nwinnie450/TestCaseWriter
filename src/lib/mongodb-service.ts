@@ -12,7 +12,9 @@ export class MongoDBService {
   private isConnected: boolean = false
 
   private constructor() {
-    if (!process.env.DATABASE_URL) {
+    // Automatically determine DATABASE_URL based on environment
+    const databaseUrl = this.getDatabaseUrl()
+    if (!databaseUrl) {
       throw new Error('DATABASE_URL environment variable is required')
     }
 
@@ -28,7 +30,24 @@ export class MongoDBService {
       retryReads: true,
     }
 
-    this.client = new MongoClient(process.env.DATABASE_URL, clientOptions)
+    this.client = new MongoClient(databaseUrl, clientOptions)
+  }
+
+  private getDatabaseUrl(): string {
+    // Environment-based database URL selection
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production'
+
+    if (isProduction) {
+      // In production, prioritize PROD_DATABASE_URL, fallback to DATABASE_URL
+      return process.env.PROD_DATABASE_URL ||
+             process.env.DATABASE_URL ||
+             'mongodb+srv://winniengiew:Orion888%21@prod.zq1ynq1.mongodb.net/testcasewriter?retryWrites=true&w=majority&appName=Prod'
+    } else {
+      // In development, prioritize DEV_DATABASE_URL, fallback to DATABASE_URL
+      return process.env.DEV_DATABASE_URL ||
+             process.env.DATABASE_URL ||
+             'mongodb+srv://winniengiew:Orion888%21@cluster0.axqvcva.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
+    }
   }
 
   public static getInstance(): MongoDBService {
