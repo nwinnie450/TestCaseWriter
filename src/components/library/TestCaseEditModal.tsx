@@ -17,23 +17,54 @@ interface TestCaseEditModalProps {
   isOpen: boolean
   onClose: () => void
   onSave: (updatedTestCase: TestCase) => void
+  projects?: Array<{id: string, name: string}>
 }
 
-export function TestCaseEditModal({ 
-  testCase, 
-  isOpen, 
-  onClose, 
-  onSave 
+export function TestCaseEditModal({
+  testCase,
+  isOpen,
+  onClose,
+  onSave,
+  projects = []
 }: TestCaseEditModalProps) {
   const [editedTestCase, setEditedTestCase] = useState<TestCase | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
+  const [runUsageInfo, setRunUsageInfo] = useState<{
+    testCasesInRuns: { [testCaseId: string]: Array<{ runId: string, runName: string, runStatus: string }> },
+    canModify: { [testCaseId: string]: boolean },
+    canDelete: { [testCaseId: string]: boolean }
+  } | null>(null)
+  const [isCheckingRuns, setIsCheckingRuns] = useState(false)
 
   useEffect(() => {
     if (testCase) {
       setEditedTestCase({ ...testCase })
       setHasChanges(false)
+      checkRunUsage(testCase.id)
     }
   }, [testCase])
+
+  const checkRunUsage = async (testCaseId: string) => {
+    setIsCheckingRuns(true)
+    try {
+      const response = await fetch('/api/test-cases/check-run-usage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ testCaseIds: [testCaseId] }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setRunUsageInfo(data)
+      }
+    } catch (error) {
+      console.error('Failed to check run usage:', error)
+    } finally {
+      setIsCheckingRuns(false)
+    }
+  }
 
   if (!isOpen || !editedTestCase) {
     return null
@@ -41,6 +72,21 @@ export function TestCaseEditModal({
 
   const handleSave = () => {
     if (editedTestCase) {
+      // Check if test case is in any active runs
+      const testCaseId = editedTestCase.id
+      const runsInUse = runUsageInfo?.testCasesInRuns[testCaseId] || []
+
+      if (runsInUse.length > 0) {
+        const runNames = runsInUse.map(run => `"${run.runName}" (${run.runStatus})`).join(', ')
+        const shouldProceed = confirm(
+          `⚠️ Warning: This test case is currently part of the following execution run(s):\n\n${runNames}\n\nModifying this test case may affect ongoing test execution. Do you want to proceed?`
+        )
+
+        if (!shouldProceed) {
+          return
+        }
+      }
+
       const updatedTestCase = {
         ...editedTestCase,
         updatedAt: new Date(),
@@ -85,9 +131,7 @@ export function TestCaseEditModal({
     if (editedTestCase) {
       const newStep: TestStep = {
         step: (editedTestCase.testSteps?.length || 0) + 1,
-        description: '',
-        testData: '',
-        expectedResult: ''
+        description: ''
       }
       const updatedSteps = [...(editedTestCase.testSteps || []), newStep]
       updateField('testSteps', updatedSteps)
@@ -135,6 +179,25 @@ export function TestCaseEditModal({
                 {hasChanges && <AlertCircle className="h-4 w-4 text-orange-500 ml-2" title="Unsaved changes" />}
               </h3>
               <p className="text-sm text-gray-500">{editedTestCase.id}</p>
+
+              {/* Run Usage Alert */}
+              {runUsageInfo?.testCasesInRuns[editedTestCase.id]?.length > 0 && (
+                <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
+                  <div className="flex items-center">
+                    <AlertCircle className="h-4 w-4 text-orange-600 mr-2" />
+                    <span className="text-sm text-orange-800 font-medium">
+                      In Use by Execution Runs
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-orange-700">
+                    This test case is currently part of: {
+                      runUsageInfo.testCasesInRuns[editedTestCase.id]
+                        .map(run => `${run.runName} (${run.runStatus})`)
+                        .join(', ')
+                    }
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="flex items-center space-x-2">
@@ -193,8 +256,8 @@ export function TestCaseEditModal({
                     </label>
                     <select
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={editedTestCase.priority || 'medium'}
-                      onChange={(e) => updateField('priority', e.target.value)}
+                      value={editedTestCase.priority?.toLowerCase() || 'medium'}
+                      onChange={(e) => updateField('priority', e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1))}
                     >
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
@@ -254,30 +317,69 @@ export function TestCaseEditModal({
                   </div>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Project
+                  </label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={editedTestCase.projectId || ''}
+                    onChange={(e) => {
+                      updateField('projectId', e.target.value)
+                      updateDataField('projectId', e.target.value)
+                    }}
+                  >
+                    <option value="">Select Project</option>
+                    {projects.map(project => (
+                      <option key={project.id} value={project.id}>{project.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Ticket
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={editedTestCase.enhancement || editedTestCase.ticketId || ''}
+                    onChange={(e) => {
+                      // Store the value in both fields for backward compatibility
+                      updateField('enhancement', e.target.value)
+                      updateField('ticketId', e.target.value)
+                      updateDataField('enhancement', e.target.value)
+                      updateDataField('ticketId', e.target.value)
+                    }}
+                    placeholder="e.g., JIRA-123, Performance improvement, Feature request"
+                  />
+                </div>
+
+                {/* Overall Test Data and Expected Result */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Enhancement
+                      Test Data
                     </label>
-                    <input
-                      type="text"
+                    <textarea
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={editedTestCase.enhancement || ''}
-                      onChange={(e) => updateField('enhancement', e.target.value)}
-                      placeholder="e.g., Performance improvement"
+                      rows={3}
+                      value={editedTestCase.data?.testData || ''}
+                      onChange={(e) => updateDataField('testData', e.target.value)}
+                      placeholder="Enter overall test data for this test case..."
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Ticket ID
+                      Expected Result
                     </label>
-                    <input
-                      type="text"
+                    <textarea
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={editedTestCase.ticketId || ''}
-                      onChange={(e) => updateField('ticketId', e.target.value)}
-                      placeholder="e.g., JIRA-123"
+                      rows={3}
+                      value={editedTestCase.data?.expectedResult || ''}
+                      onChange={(e) => updateDataField('expectedResult', e.target.value)}
+                      placeholder="Describe the overall expected outcome..."
                     />
                   </div>
                 </div>
@@ -328,45 +430,17 @@ export function TestCaseEditModal({
                         </Button>
                       </div>
                       
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Action/Description *
-                          </label>
-                          <textarea
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                            rows={2}
-                            value={step.description}
-                            onChange={(e) => updateTestStep(index, 'description', e.target.value)}
-                            placeholder="Describe what action to perform"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Test Data
-                          </label>
-                          <input
-                            type="text"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                            value={step.testData || ''}
-                            onChange={(e) => updateTestStep(index, 'testData', e.target.value)}
-                            placeholder="Enter test data (e.g., username, values to enter)"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Expected Result *
-                          </label>
-                          <textarea
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                            rows={2}
-                            value={step.expectedResult}
-                            onChange={(e) => updateTestStep(index, 'expectedResult', e.target.value)}
-                            placeholder="Describe the expected outcome"
-                          />
-                        </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Action/Description *
+                        </label>
+                        <textarea
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          rows={3}
+                          value={step.description}
+                          onChange={(e) => updateTestStep(index, 'description', e.target.value)}
+                          placeholder="Describe what action to perform"
+                        />
                       </div>
                     </div>
                   )) || (

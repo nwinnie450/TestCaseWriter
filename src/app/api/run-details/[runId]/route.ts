@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { ObjectId } from 'mongodb'
+import { mongodb } from '@/lib/mongodb-service'
 
 const emptyArray: any[] = []
 
@@ -22,21 +23,48 @@ export async function GET(
   { params }: { params: { runId: string } }
 ) {
   try {
-    const run = await prisma.run.findUnique({
-      where: { id: params.runId },
-      include: {
-        runCases: {
-          include: {
-            runSteps: {
-              orderBy: { idx: 'asc' }
-            },
-            evidence: true,
-            defects: true
-          },
-          orderBy: { createdAt: 'asc' }
-        }
+    // Find run by ID (support both string ID and ObjectId)
+    let run
+    if (ObjectId.isValid(params.runId)) {
+      run = await mongodb.findOne('runs', { _id: new ObjectId(params.runId) })
+    } else {
+      run = await mongodb.findOne('runs', { id: params.runId })
+    }
+
+    if (run) {
+      // Get run cases for this run
+      const runCases = await mongodb.findMany('run_cases',
+        { runId: run._id },
+        { sort: { createdAt: 1 } }
+      )
+
+      // Get run steps for each case
+      const runCasesWithSteps = await Promise.all(
+        runCases.map(async (runCase: any) => {
+          const runSteps = await mongodb.findMany('run_steps',
+            { runCaseId: runCase._id },
+            { sort: { idx: 1 } }
+          )
+          return {
+            ...runCase,
+            id: runCase._id?.toString() || runCase.id,
+            runSteps: runSteps.map((step: any) => ({
+              ...step,
+              id: step._id?.toString() || step.id
+            })),
+            evidence: [], // TODO: Implement evidence collection
+            defects: []   // TODO: Implement defects collection
+          }
+        })
+      )
+
+      run = {
+        ...run,
+        id: run._id?.toString() || run.id,
+        _id: undefined,
+        runCases: runCasesWithSteps
       }
-    })
+    }
 
     if (!run) {
       return NextResponse.json({ error: 'Run not found' }, { status: 404 })

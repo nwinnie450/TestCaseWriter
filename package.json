@@ -16,10 +16,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "format": "prettier --write src/",
-    "db:seed": "tsx prisma/seed.ts"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "db:seed": "echo 'Prisma removed - no longer needed'"
   },
   "keywords": [
     "test-case-management",
@@ -37,7 +34,6 @@
     "@dnd-kit/utilities": "^3.2.1",
     "@headlessui/react": "^1.7.17",
     "@heroicons/react": "^2.0.18",
-    "@prisma/client": "^6.16.2",
     "@tanstack/react-table": "^8.10.7",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/nodemailer": "^7.0.1",
@@ -62,7 +58,6 @@
     "nodemailer": "^7.0.6",
     "openai": "^4.104.0",
     "pdfjs-dist": "^5.4.54",
-    "prisma": "^6.16.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",

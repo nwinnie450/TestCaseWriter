@@ -79,31 +79,20 @@ const statusColors = {
 const columnHelper = createColumnHelper<TestCase>()
 
 // Completely isolated ActionButtons component
-function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActions }: {
+function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActions, isDropdownOpen, onToggleDropdown }: {
   testCase: TestCase,
   onEdit?: (testCase: TestCase) => void,
   onView?: (testCase: TestCase) => void,
   onVersionHistory?: (testCase: TestCase) => void,
-  customActions?: CustomAction[]
+  customActions?: CustomAction[],
+  isDropdownOpen: boolean,
+  onToggleDropdown: () => void
 }) {
-  const [showDropdown, setShowDropdown] = React.useState(false)
   const currentUser = getCurrentUser()
   
-  React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element
-      if (showDropdown && !target.closest('.relative')) {
-        setShowDropdown(false)
-      }
-    }
-    
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showDropdown])
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    console.log('🔵 Edit test case:', testCase.id)
     
     // Directly call the onEdit handler to open the edit modal
     if (onEdit) {
@@ -114,7 +103,6 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActio
   const handleView = (e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    console.log('🟢 View test case details:', testCase.id)
     
     // Call the onView handler to open the detail modal
     if (onView) {
@@ -126,7 +114,6 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActio
   }
 
   const handleCopyId = (e: React.MouseEvent) => {
-    console.log('🟡 Copy ID clicked for:', testCase.id)
     e.stopPropagation()
     e.preventDefault()
     navigator.clipboard.writeText(testCase.id).then(() => {
@@ -136,67 +123,63 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActio
     })
   }
 
-  const handleDuplicate = (e: React.MouseEvent) => {
+  const handleDuplicate = async (e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    
+
     try {
-      // Create a duplicate of the test case with a new ID
-      const timestamp = Date.now()
-      const randomSuffix = Math.random().toString(36).substring(2, 5)
-      const duplicateTestCase = {
-        ...testCase,
-        id: `${testCase.id}-COPY-${timestamp}-${randomSuffix}`,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        status: 'draft' as const,
-        // Update the title/name to indicate it's a copy
-        testCase: testCase.testCase ? `${testCase.testCase} (Copy)` : 'Test Case (Copy)',
-        data: {
-          ...testCase.data,
-          title: testCase.data?.title ? `${testCase.data.title} (Copy)` : 'Test Case (Copy)'
-        }
+      // Create a duplicate with proper ID format
+      const modulePrefix = (testCase.module || testCase.category || 'general').replace(/\s+/g, '').toLowerCase()
+      const runningNumber = Date.now().toString().slice(-6)
+      const duplicateId = `tc_${modulePrefix}_${runningNumber}`
+      const duplicateTitle = testCase.data?.title ? `${testCase.data.title} (Copy)` :
+                             testCase.testCase ? `${testCase.testCase} (Copy)` : 'Test Case (Copy)'
+
+      // Prepare the API payload for MongoDB
+      const apiPayload = {
+        id: duplicateId,
+        title: duplicateTitle,
+        description: testCase.data?.description || testCase.description || '',
+        steps: testCase.testSteps?.map((step, index) => ({
+          id: `step_${index + 1}`,
+          step: step.description || step.step || `Step ${index + 1}`,
+          expected: step.expectedResult || step.expected || 'Expected result'
+        })) || [{ id: 'step_1', step: 'Step 1', expected: 'Expected result' }],
+        priority: (testCase.priority || 'medium').toLowerCase(),
+        type: 'manual',
+        tags: testCase.tags || [],
+        projectId: testCase.projectId || null,
+        enhancement: testCase.data?.enhancement || '',
+        ticketId: testCase.data?.ticketId || '',
+        testData: testCase.testData || testCase.data?.testData || '',
+        module: testCase.module || testCase.data?.module || '',
+        feature: testCase.data?.feature || '',
+        requirements: testCase.data?.requirements || ''
       }
-      
-      // Get existing test cases from localStorage
-      const stored = localStorage.getItem('testCaseWriter_generatedTestCases')
-      if (stored) {
-        const sessions = JSON.parse(stored)
-        if (sessions && sessions.length > 0) {
-          // Add to the most recent session
-          sessions[0].testCases.push(duplicateTestCase)
-          sessions[0].totalCount = sessions[0].testCases.length
-          localStorage.setItem('testCaseWriter_generatedTestCases', JSON.stringify(sessions))
-          
-          alert(`✅ Test case "${testCase.data?.title || testCase.testCase}" has been duplicated successfully!`)
-          
-          // Refresh the page to show the new test case
-          window.location.reload()
-        } else {
-          // Create a new session with just this test case
-          const { saveGeneratedTestCases } = require('@/lib/test-case-storage')
-          const result = saveGeneratedTestCases([duplicateTestCase], [], 'manual-duplicate')
-          if (result.saved > 0) {
-            alert(`✅ Test case duplicated and saved as a new session!`)
-          } else {
-            alert(`ℹ️ Test case was not duplicated - it already exists!`)
-          }
-          window.location.reload()
-        }
-      } else {
-        // No existing sessions, create a new one
-        const { saveGeneratedTestCases } = require('@/lib/test-case-storage')
-        const result = saveGeneratedTestCases([duplicateTestCase], [], 'manual-duplicate')
-        if (result.saved > 0) {
-          alert(`✅ Test case duplicated and saved!`)
-        } else {
-          alert(`ℹ️ Test case was not duplicated - it already exists!`)
-        }
+
+
+      // Save directly to MongoDB via API
+      const response = await fetch('/api/test-cases', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(apiPayload)
+      })
+
+      if (response.ok) {
+        alert(`✅ Test case "${duplicateTitle}" has been duplicated successfully!`)
+
+        // Refresh the page to show the new test case
         window.location.reload()
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to duplicate test case')
       }
+
     } catch (error) {
-      console.error('Error duplicating test case:', error)
-      alert('❌ Error duplicating test case. Please try again.')
+      console.error('❌ Error duplicating test case:', error)
+      alert(`❌ Error duplicating test case: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -232,32 +215,79 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActio
     alert(`✅ Test case "${testCase.data?.title || testCase.testCase}" exported as CSV!`)
   }
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    
+
     const testCaseTitle = testCase.data?.title || testCase.testCase || testCase.id
-    
+
+    // Check if test case is in any active execution runs
+    try {
+      const response = await fetch('/api/test-cases/check-run-usage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ testCaseIds: [testCase.id] }),
+      })
+
+      if (response.ok) {
+        const runUsageInfo = await response.json()
+        const runsInUse = runUsageInfo.testCasesInRuns[testCase.id] || []
+        const canDelete = runUsageInfo.canDelete[testCase.id]
+
+        // Check if test case is in active runs (cannot delete)
+        if (runsInUse.length > 0 && !canDelete) {
+          const activeRuns = runsInUse.filter((run: any) => run.runStatus === 'active')
+          const runNames = activeRuns.map((run: any) => `"${run.runName}"`).join(', ')
+          alert(
+            `🚫 Cannot Delete Test Case\n\nThis test case is currently part of active execution run(s): ${runNames}\n\nTest cases cannot be deleted while they are part of active execution runs. Please complete or cancel the execution runs first.`
+          )
+          return
+        }
+
+        // Warn if test case is in draft runs (can delete but with warning)
+        if (runsInUse.length > 0) {
+          const runNames = runsInUse.map((run: any) => `"${run.runName}" (${run.runStatus})`).join(', ')
+          const shouldProceed = confirm(
+            `⚠️ Warning: This test case is currently part of the following execution run(s):\n\n${runNames}\n\nDeleting this test case will remove it from these runs. Are you sure you want to proceed?`
+          )
+
+          if (!shouldProceed) {
+            return
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check run usage:', error)
+      // Continue with deletion if check fails (non-critical)
+    }
+
     if (confirm(`⚠️ Are you sure you want to delete test case "${testCaseTitle}"?\n\nThis action cannot be undone.`)) {
       try {
-        // Import and use the delete function
-        const { deleteTestCasesByIds } = require('@/lib/test-case-storage')
-        deleteTestCasesByIds([testCase.id])
-        
-        alert(`✅ Test case "${testCaseTitle}" has been deleted successfully!`)
-        
-        // Refresh the page to update the list
-        window.location.reload()
+        // Delete via API
+        const response = await fetch(`/api/test-cases?id=${testCase.id}`, {
+          method: 'DELETE'
+        })
+
+        if (response.ok) {
+          alert(`✅ Test case "${testCaseTitle}" has been deleted successfully!`)
+          // Refresh the page to update the list
+          window.location.reload()
+        } else {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to delete test case')
+        }
       } catch (error) {
         console.error('Error deleting test case:', error)
-        alert('❌ Error deleting test case. Please try again.')
+        alert(`❌ Error deleting test case: ${error instanceof Error ? error.message : 'Please try again.'}`)
       }
     }
   }
 
   return (
     <div 
-      className="flex items-center gap-2" 
+      className="flex items-center gap-1" 
       onClick={(e) => e.stopPropagation()}
       style={{ 
         position: 'relative', 
@@ -267,22 +297,22 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActio
     >
       {hasPermission(currentUser, 'canEditTestCases') && (
         <button 
-          className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-100 rounded-md border border-gray-200 hover:border-blue-300 bg-white shadow-sm transition-all duration-200"
+          className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-100 rounded border border-gray-200 hover:border-blue-300 bg-white shadow-sm transition-all duration-200 flex items-center justify-center"
           onMouseDown={handleEdit}
           title="Edit test case"
           type="button"
         >
-          <Edit className="h-4 w-4" />
+          <Edit className="h-3 w-3" />
         </button>
       )}
       
       <button
-        className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-100 rounded-md border border-gray-200 hover:border-green-300 bg-white shadow-sm transition-all duration-200"
+        className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-100 rounded border border-gray-200 hover:border-green-300 bg-white shadow-sm transition-all duration-200 flex items-center justify-center"
         onMouseDown={handleView}
         title="View test case"
         type="button"
       >
-        <Eye className="h-4 w-4" />
+        <Eye className="h-3 w-3" />
       </button>
 
       {/* Custom Actions */}
@@ -294,7 +324,7 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActio
         return (
           <button
             key={index}
-            className={`p-2 rounded-md border bg-white shadow-sm transition-all duration-200 ${
+            className={`p-1 rounded border bg-white shadow-sm transition-all duration-200 flex items-center justify-center ${
               action.variant === 'primary' ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-100 border-blue-200 hover:border-blue-300' :
               action.variant === 'danger' ? 'text-red-600 hover:text-red-700 hover:bg-red-100 border-red-200 hover:border-red-300' :
               'text-gray-600 hover:text-gray-700 hover:bg-gray-100 border-gray-200 hover:border-gray-300'
@@ -307,34 +337,46 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActio
             title={action.label}
             type="button"
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="h-3 w-3" />
           </button>
         )
       })}
 
       <div className="relative">
-        <button 
-          className="p-2 text-gray-600 hover:text-orange-600 hover:bg-orange-100 rounded-md border border-gray-200 hover:border-orange-300 bg-white shadow-sm transition-all duration-200"
+        <button
+          className={`p-2 rounded border shadow-sm transition-all duration-200 flex items-center justify-center cursor-pointer ${
+            isDropdownOpen
+              ? 'text-white bg-orange-600 border-orange-600'
+              : 'text-gray-600 hover:text-orange-600 hover:bg-orange-100 border-gray-200 hover:border-orange-300 bg-white'
+          }`}
+          style={{
+            minWidth: '32px',
+            minHeight: '32px',
+            position: 'relative',
+            zIndex: 1000
+          }}
           title="More options"
           type="button"
           onClick={(e) => {
             e.stopPropagation()
             e.preventDefault()
-            console.log('🟡 More options button clicked, current state:', showDropdown)
-            setShowDropdown(!showDropdown)
+            onToggleDropdown()
           }}
         >
-          <MoreHorizontal className="h-4 w-4" />
+          <MoreHorizontal className="h-3 w-3" />
         </button>
         
-        {showDropdown && (
-          <div className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200">
+        {isDropdownOpen && (
+          <div
+            className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg border border-gray-200"
+            data-dropdown-menu
+            style={{ zIndex: 9999 }}
+          >
             <div className="py-1">
               <button
                 className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
                 onClick={(e) => {
-                  console.log('🟡 Copy ID menu item clicked')
-                  setShowDropdown(false)
+                  onToggleDropdown()
                   handleCopyId(e)
                 }}
               >
@@ -346,8 +388,7 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActio
                 <button
                   className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
                   onClick={(e) => {
-                    console.log('🟡 Duplicate menu item clicked')
-                    setShowDropdown(false)
+                    onToggleDropdown()
                     handleDuplicate(e)
                   }}
                 >
@@ -359,8 +400,7 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActio
               <button
                 className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
                 onClick={(e) => {
-                  console.log('🟡 Version History menu item clicked')
-                  setShowDropdown(false)
+                  onToggleDropdown()
                   if (onVersionHistory) {
                     onVersionHistory(testCase)
                   }
@@ -377,8 +417,7 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActio
                 <button
                   className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
                   onClick={(e) => {
-                    console.log('🟡 Export menu item clicked')
-                    setShowDropdown(false)
+                    onToggleDropdown()
                     handleExportSingle(e)
                   }}
                 >
@@ -394,8 +433,7 @@ function ActionButtons({ testCase, onEdit, onView, onVersionHistory, customActio
                   <button
                     className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50 cursor-pointer"
                     onClick={(e) => {
-                      console.log('🟡 Delete menu item clicked')
-                      setShowDropdown(false)
+                      onToggleDropdown()
                       handleDelete(e)
                     }}
                   >
@@ -448,39 +486,26 @@ export function DataGrid({
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [showFilters, setShowFilters] = useState(false)
   const [showColumns, setShowColumns] = useState(false)
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
 
-  // Debug logging for expandedRows changes
+  // Click outside handler for dropdowns - optimized for immediate response
   useEffect(() => {
-    console.log('🔵 DataGrid - expandedRows state changed:', Array.from(expandedRows))
-  }, [expandedRows])
+    if (!openDropdownId) return
 
-  // Debug logging for data changes
-  useEffect(() => {
-    console.log('🔵 DataGrid - data changed:', {
-      length: data.length,
-      ids: data.map(tc => tc.id).slice(0, 5),
-      hasTestSteps: data.filter(tc => tc.testSteps && tc.testSteps.length > 0).length
-    })
-    
-    // Log actual data structure for first few test cases
-    if (data.length > 0) {
-      console.log('🔵 DataGrid - First test case full structure:', data[0])
-      console.log('🔵 DataGrid - Sample data structures:', data.slice(0, 3).map(tc => ({
-        id: tc.id,
-        enhancement: tc.enhancement,
-        ticketId: tc.ticketId,
-        tags: tc.tags,
-        projectId: tc.projectId,
-        data: tc.data ? {
-          enhancement: tc.data.enhancement,
-          ticketId: tc.data.ticketId,
-          tags: tc.data.tags,
-          projectId: tc.data.projectId
-        } : null,
-        allKeys: Object.keys(tc)
-      })))
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element
+      // Immediately close if clicking outside dropdown areas
+      if (!target.closest('.action-cell') && !target.closest('[data-dropdown-menu]')) {
+        setOpenDropdownId(null)
+      }
     }
-  }, [data])
+
+    // Add listener immediately and use capture phase for faster response
+    document.addEventListener('mousedown', handleClickOutside, { capture: true })
+    return () => document.removeEventListener('mousedown', handleClickOutside, { capture: true })
+  }, [openDropdownId])
+
+
 
 
   const columns = useMemo(() => [
@@ -506,15 +531,20 @@ export function DataGrid({
       size: 50
     }),
     columnHelper.accessor('id', {
-      header: 'Test case ID',
+      header: 'Test Case ID',
       cell: (info) => (
-        <span className="font-mono text-sm text-primary-600">
-          {info.getValue()}
-        </span>
+        <div className="max-w-[100px]">
+          <span
+            className="font-mono text-xs text-primary-600 break-all leading-tight block"
+            title={`Test Case ID: ${info.getValue()}`}
+          >
+            {info.getValue()}
+          </span>
+        </div>
       ),
-      size: 120
+      size: 100
     }),
-    columnHelper.accessor((row) => row.data?.title || row.testCase || 'Test Case', {
+    columnHelper.accessor((row) => row.title || row.data?.title || row.testCase || 'Test Case', {
       id: 'title',
       header: 'Test Case Details',
       cell: (info) => {
@@ -527,7 +557,6 @@ export function DataGrid({
             testCase={testCase}
             forceExpanded={isExpanded}
             onToggle={(id, expanded) => {
-              console.log('🔵 ExpandableRow onToggle:', id, expanded)
               setExpandedRows(prev => {
                 const newExpanded = new Set(prev)
                 if (expanded) {
@@ -535,7 +564,6 @@ export function DataGrid({
                 } else {
                   newExpanded.delete(id)
                 }
-                console.log('🔵 New expanded state:', Array.from(newExpanded))
                 return newExpanded
               })
             }}
@@ -544,20 +572,50 @@ export function DataGrid({
       },
       size: 500
     }),
+
+    // Expected Result Column (placed right after Test Case Details)
+    columnHelper.accessor((row) => row.expectedResult || row.testResult || row.data?.expectedResult || '', {
+      id: 'expectedResult',
+      header: 'Expected Result',
+      cell: (info) => {
+        const expectedResult = info.getValue()
+        if (!expectedResult) {
+          return <span className="text-xs text-gray-400">-</span>
+        }
+
+        const truncated = expectedResult.length > 120 ?
+          expectedResult.substring(0, 120) + '...' :
+          expectedResult
+
+        return (
+          <div
+            className="text-xs text-gray-700 max-w-sm"
+            title={expectedResult}
+          >
+            {truncated}
+          </div>
+        )
+      },
+      filterFn: (row, columnId, value) => {
+        const testCase = row.original
+        const expectedResult = testCase.expectedResult || testCase.testResult || testCase.data?.expectedResult || ''
+        return expectedResult.toLowerCase().includes(value.toLowerCase())
+      },
+      size: 250
+    }),
+
     // 1. Project Column
-    columnHelper.accessor((row) => row.data?.projectId || row.projectId, {
+    columnHelper.accessor((row) => {
+      const projectId = row.projectId || row.data?.projectId
+      return projectId && projects[projectId] ? projects[projectId] : ''
+    }, {
       id: 'projectId',
       header: 'Project',
       cell: (info) => {
-        const projectId = info.getValue()
-        const projectName = projectId ? projects[projectId] : null
+        const projectName = info.getValue()
         return projectName ? (
           <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
             {projectName}
-          </span>
-        ) : projectId ? (
-          <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
-            {projectId}
           </span>
         ) : (
           <span className="text-xs text-gray-400">-</span>
@@ -565,16 +623,15 @@ export function DataGrid({
       },
       filterFn: (row, columnId, value) => {
         const testCase = row.original
-        const projectId = testCase.data?.projectId || testCase.projectId
-        const matches = projectId === value
-        console.log('🔍 Project filter check:', { testCaseId: testCase.id, projectId, filterValue: value, matches })
-        return matches
+        const projectId = testCase.projectId || testCase.data?.projectId
+        const projectName = projectId && projects[projectId] ? projects[projectId] : ''
+        return projectName.toLowerCase().includes(value.toLowerCase())
       },
       size: 120
     }),
 
     // 2. Module Column
-    columnHelper.accessor((row) => row.data?.module || row.module || 'General', {
+    columnHelper.accessor((row) => row.module || row.category || row.data?.module || 'General', {
       id: 'module',
       header: 'Module',
       cell: (info) => {
@@ -587,45 +644,45 @@ export function DataGrid({
       },
       filterFn: (row, columnId, value) => {
         const testCase = row.original
-        const module = testCase.data?.module || testCase.module || 'General'
+        const module = testCase.module || testCase.category || testCase.data?.module || 'General'
         const matches = module.toLowerCase().includes(value.toLowerCase())
-        console.log('🔍 Module filter check:', { testCaseId: testCase.id, module, filterValue: value, matches })
         return matches
       },
       size: 120
     }),
 
     // 3. Feature Column
-    columnHelper.accessor((row) => row.data?.feature || row.feature || row.module || 'General', {
+    columnHelper.accessor((row) => row.feature || row.data?.feature || '', {
       id: 'feature',
       header: 'Feature',
       cell: (info) => {
         const feature = info.getValue()
-        return (
+        return feature ? (
           <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
             {feature}
           </span>
+        ) : (
+          <span className="text-xs text-gray-400">-</span>
         )
       },
       filterFn: (row, columnId, value) => {
         const testCase = row.original
-        const feature = testCase.data?.feature || testCase.feature || testCase.module || 'General'
+        const feature = testCase.feature || testCase.data?.feature || ''
         const matches = feature.toLowerCase().includes(value.toLowerCase())
-        console.log('🔍 Feature filter check:', { testCaseId: testCase.id, feature, filterValue: value, matches })
         return matches
       },
       size: 120
     }),
 
-    // 4. Enhancement Column
-    columnHelper.accessor((row) => row.data?.enhancement || row.enhancement, {
+    // 4. Enhancement/Ticket Column
+    columnHelper.accessor((row) => row.enhancement || row.ticketId || row.data?.enhancement || row.data?.ticketId, {
       id: 'enhancement',
-      header: 'Enhancement',
+      header: 'Enhancement/Ticket',
       cell: (info) => {
-        const enhancement = info.getValue()
-        return enhancement ? (
+        const value = info.getValue()
+        return value ? (
           <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
-            {enhancement}
+            {value}
           </span>
         ) : (
           <span className="text-xs text-gray-400">-</span>
@@ -633,49 +690,45 @@ export function DataGrid({
       },
       filterFn: (row, columnId, value) => {
         const testCase = row.original
-        const enhancement = testCase.data?.enhancement || testCase.enhancement || ''
-        const matches = enhancement.toLowerCase().includes(value.toLowerCase())
-        console.log('🔍 Enhancement filter check:', { testCaseId: testCase.id, enhancement, filterValue: value, matches })
+        const enhancement = testCase.enhancement || testCase.data?.enhancement || ''
+        const ticket = testCase.ticketId || testCase.data?.ticketId || ''
+        const matches = enhancement.toLowerCase().includes(value.toLowerCase()) ||
+                       ticket.toLowerCase().includes(value.toLowerCase())
         return matches
       },
-      size: 120
+      size: 140
     }),
 
-    // 5. Ticket Column
-    columnHelper.accessor((row) => row.data?.ticketId || row.ticketId, {
-      id: 'ticketId',
-      header: 'Ticket',
-      cell: (info) => {
-        const ticketId = info.getValue()
-        return ticketId ? (
-          <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-orange-100 text-orange-800">
-            {ticketId}
-          </span>
-        ) : (
-          <span className="text-xs text-gray-400">-</span>
-        )
-      },
-      filterFn: (row, columnId, value) => {
-        const testCase = row.original
-        const ticketId = testCase.data?.ticketId || testCase.ticketId || ''
-        const matches = ticketId.toLowerCase().includes(value.toLowerCase())
-        console.log('🔍 Ticket filter check:', { testCaseId: testCase.id, ticketId, filterValue: value, matches })
-        return matches
-      },
-      size: 100
-    }),
-
-    // 6. Tags Column
-    columnHelper.accessor((row) => row.data?.tags || row.tags, {
+    // 5. Tags Column
+    columnHelper.accessor((row) => {
+      const allTags = row.tags || row.data?.tags || []
+      // Filter out default tags (module, priority, etc.) to show only meaningful tags
+      const meaningfulTags = allTags.filter((tag: string) =>
+        tag &&
+        tag !== row.module &&
+        tag !== row.priority &&
+        tag !== row.category &&
+        tag !== 'medium' &&
+        tag !== 'high' &&
+        tag !== 'low' &&
+        tag !== 'critical' &&
+        tag !== 'Department' // Filter out module names
+      )
+      return meaningfulTags
+    }, {
       id: 'tags',
       header: 'Tags',
       cell: (info) => {
         const tags = info.getValue() || []
-        
+
+        if (tags.length === 0) {
+          return <span className="text-xs text-gray-400">-</span>
+        }
+
         return (
           <div className="flex flex-wrap gap-1">
             {tags.slice(0, 2).map((tag: string, index: number) => (
-              <span 
+              <span
                 key={index}
                 className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700"
               >
@@ -692,18 +745,18 @@ export function DataGrid({
       },
       filterFn: (row, columnId, value) => {
         const testCase = row.original
-        const tags = testCase.data?.tags || testCase.tags || []
+        const tags = testCase.tags || testCase.data?.tags || []
         const tagString = tags.join(' ').toLowerCase()
         const matches = tagString.includes(value.toLowerCase())
-        console.log('🔍 Tags filter check:', { testCaseId: testCase.id, tags, filterValue: value, matches })
         return matches
       },
       enableSorting: false,
       size: 200
     }),
 
-    // 7. Status Column
-    columnHelper.accessor('status', {
+    // 6. Status Column
+    columnHelper.accessor((row) => row.status || row.currentStatus || row.data?.status || 'draft', {
+      id: 'status',
       header: 'Status',
       cell: (info) => (
         <span className={cn(
@@ -715,15 +768,15 @@ export function DataGrid({
       ),
       filterFn: (row, columnId, value) => {
         const testCase = row.original
-        const status = testCase.status || testCase.data?.status || 'draft'
-        console.log('🔍 Status filter check:', { testCaseId: testCase.id, status, filterValue: value, matches: status.toLowerCase() === value.toLowerCase() })
+        const status = testCase.status || testCase.currentStatus || testCase.data?.status || 'draft'
         return status.toLowerCase() === value.toLowerCase()
       },
       size: 100
     }),
 
-    // 8. Priority Column
-    columnHelper.accessor('priority', {
+    // 7. Priority Column
+    columnHelper.accessor((row) => row.priority || row.data?.priority || 'medium', {
+      id: 'priority',
       header: 'Priority',
       cell: (info) => (
         <span className={cn(
@@ -736,41 +789,58 @@ export function DataGrid({
       filterFn: (row, columnId, value) => {
         const testCase = row.original
         const priority = testCase.priority || testCase.data?.priority || 'medium'
-        console.log('🔍 Priority filter check:', { testCaseId: testCase.id, priority, filterValue: value, matches: priority.toLowerCase() === value.toLowerCase() })
         return priority.toLowerCase() === value.toLowerCase()
       },
       size: 100
     }),
-    columnHelper.accessor((row) => row.version || 1, {
-      id: 'version',
-      header: 'Version',
+
+    // 8. Author Column (Last Modified By / Created By)
+    columnHelper.accessor((row) => row.lastModifiedBy || row.createdByName || row.createdBy || 'Unknown', {
+      id: 'author',
+      header: 'Author',
       cell: (info) => {
-        const version = info.getValue()
+        const testCase = info.row.original
+        const createdBy = testCase.createdByName || testCase.createdBy || 'Unknown'
+        const updatedBy = testCase.lastModifiedBy || testCase.updatedBy || createdBy
+        const createdAt = testCase.createdAt ? new Date(testCase.createdAt).toLocaleDateString() : ''
+        const updatedAt = testCase.updatedAt ? new Date(testCase.updatedAt).toLocaleDateString() : ''
+
+        // Get initials from name
+        const getInitials = (name: string) => {
+          if (!name || name === 'Unknown') return '??'
+          if (name === 'dev-user') return 'DEV'
+          return name.split(' ').map(n => n.charAt(0).toUpperCase()).join('').substring(0, 2)
+        }
+
+        const primaryUser = updatedBy !== createdBy ? updatedBy : createdBy
+        const primaryDate = updatedBy !== createdBy ? updatedAt : createdAt
+        const primaryInitials = getInitials(primaryUser)
+        const isUpdated = updatedBy !== createdBy
+
         return (
-          <div className="flex items-center space-x-2">
-            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
-              v{version}
-            </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                e.preventDefault()
-                if (onVersionHistory) {
-                  onVersionHistory(info.row.original)
-                }
-              }}
-              className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-              title="View version history - See all changes and updates made to this test case over time"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
+          <div
+            className="flex items-center justify-center"
+            title={`${isUpdated ? 'Last modified by' : 'Created by'}: ${primaryUser} (${primaryDate})${isUpdated ? `\nOriginally created by: ${createdBy} (${createdAt})` : ''}`}
+          >
+            <div className={`w-7 h-7 rounded-full text-xs font-medium flex items-center justify-center ${
+              isUpdated
+                ? 'bg-green-100 text-green-700 border-2 border-green-300'
+                : 'bg-blue-100 text-blue-700'
+            }`}>
+              {primaryInitials}
+            </div>
           </div>
         )
       },
-      size: 100
+      enableSorting: true,
+      sortingFn: (rowA, rowB) => {
+        const aUser = rowA.original.lastModifiedBy || rowA.original.createdByName || rowA.original.createdBy || ''
+        const bUser = rowB.original.lastModifiedBy || rowB.original.createdByName || rowB.original.createdBy || ''
+        return aUser.localeCompare(bUser)
+      },
+      size: 60
     }),
+
     columnHelper.accessor('updatedAt', {
       header: 'Last Modified',
       cell: (info) => (
@@ -784,20 +854,40 @@ export function DataGrid({
       id: 'actions',
       header: 'Actions',
       cell: ({ row }) => {
+        const version = row.original.version || 1
         return (
-          <div className="action-cell" data-testid={`actions-${row.original.id}`}>
+          <div className="action-cell relative" data-testid={`actions-${row.original.id}`}>
+            {version > 1 && (
+              <div className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-medium z-10">
+                {version}
+              </div>
+            )}
             <ActionButtons
               testCase={row.original}
               onEdit={onEdit}
               onView={onView}
               onVersionHistory={onVersionHistory}
               customActions={customActions}
+              isDropdownOpen={openDropdownId === row.original.id}
+              onToggleDropdown={() => {
+                // Always close current dropdown if one is open
+                if (openDropdownId && openDropdownId !== row.original.id) {
+                  // Close the currently open dropdown and open the new one
+                  setOpenDropdownId(row.original.id)
+                } else if (openDropdownId === row.original.id) {
+                  // Close the current dropdown if it's the same one
+                  setOpenDropdownId(null)
+                } else {
+                  // Open the dropdown if none is open
+                  setOpenDropdownId(row.original.id)
+                }
+              }}
             />
           </div>
         )
       },
       enableSorting: false,
-      size: 140
+      size: 120
     })
   ], [onEdit, onView, customActions])
 
@@ -853,18 +943,6 @@ export function DataGrid({
       
       const matches = searchableText.includes(searchTerm)
       
-      // Only log when searching to reduce console spam
-      if (searchTerm.length > 2) {
-        console.log('🔍 Global search for "' + searchTerm + '":', {
-          testCaseId: testCase.id,
-          found: matches,
-          sampleText: searchableText.substring(0, 300) + '...',
-          enhancement: testCase.enhancement || testCase.data?.enhancement || 'none',
-          ticketId: testCase.ticketId || testCase.data?.ticketId || 'none',
-          tags: testCase.tags || testCase.data?.tags || 'none',
-          projectId: testCase.projectId || testCase.data?.projectId || 'none'
-        })
-      }
       
       return matches
     },
@@ -882,19 +960,6 @@ export function DataGrid({
       .filter(row => row.getIsSelected())
       .map(row => row.original.id)
     
-    // Debug logging to help identify the issue
-    console.log('🔍 DataGrid Selection Debug:', {
-      totalRows: data.length,
-      selectedRowsCount: selectedRows.length,
-      rowSelectionState: rowSelection,
-      selectedIds: ids,
-      selectedRows: selectedRows.map(row => ({
-        id: row.original.id,
-        isSelected: row.getIsSelected(),
-        selectionKey: row.id
-      }))
-    })
-    
     return ids
   }, [selectedRows, data.length, rowSelection])
 
@@ -907,51 +972,10 @@ export function DataGrid({
     // Ensure rowSelection state is consistent with actual selections
     const currentSelection = Object.keys(rowSelection).filter(key => rowSelection[key])
     if (currentSelection.length !== selectedIds.length) {
-      console.log('🔄 Fixing selection state mismatch:', {
-        rowSelectionKeys: currentSelection,
-        selectedIds: selectedIds,
-        mismatch: Math.abs(currentSelection.length - selectedIds.length)
-      })
-      
       // Reset selection state if there's a mismatch
       setRowSelection({})
     }
   }, [rowSelection, selectedIds])
-
-  // Additional safety check for selection consistency
-  React.useEffect(() => {
-    // Log selection changes for debugging
-    console.log('🔍 DataGrid - Selection state changed:', {
-      rowSelectionKeys: Object.keys(rowSelection).filter(key => rowSelection[key]),
-      selectedIds: selectedIds,
-      totalRows: data.length,
-      isConsistent: Object.keys(rowSelection).filter(key => rowSelection[key]).length === selectedIds.length
-    })
-  }, [rowSelection, selectedIds, data.length])
-
-  // Debug logging for data and state
-  React.useEffect(() => {
-    console.log('🔍 DataGrid - Data received:', { 
-      dataLength: data.length,
-      expandedRowsCount: expandedRows.size,
-      firstTestCase: data[0] ? {
-        id: data[0].id,
-        hasTestSteps: !!data[0].testSteps,
-        testStepsCount: data[0].testSteps?.length || 0
-      } : null
-    })
-    
-    if (data.length > 0) {
-      console.log('🔍 DataGrid - Test case data structure:', data.slice(0, 2).map(tc => ({
-        id: tc.id,
-        rootTags: tc.tags,
-        dataTags: tc.data?.tags,
-        dataKeys: tc.data ? Object.keys(tc.data) : [],
-        hasRootTags: tc.tags && tc.tags.length > 0,
-        hasDataTags: tc.data?.tags && tc.data.tags.length > 0
-      })))
-    }
-  }, [data, expandedRows])
 
   
   return (
@@ -966,22 +990,13 @@ export function DataGrid({
               value={globalFilter}
               onChange={(e) => {
                 const searchValue = e.target.value
-                console.log('🔍 Search input changed:', searchValue)
                 
                 // Clear column filters when doing global search to avoid conflicts
                 if (searchValue.trim() && columnFilters.length > 0) {
-                  console.log('🔍 Clearing column filters for global search')
                   setColumnFilters([])
                 }
                 
                 setGlobalFilter(searchValue)
-                console.log('🔍 Global filter set to:', searchValue)
-                console.log('🔍 Current column filters:', columnFilters)
-                
-                setTimeout(() => {
-                  console.log('🔍 Table filter state after update:', table.getState().globalFilter)
-                  console.log('🔍 Filtered rows count after update:', table.getFilteredRowModel().rows.length)
-                }, 100)
               }}
               className="pl-10 pr-10 w-80"
             />
@@ -989,7 +1004,6 @@ export function DataGrid({
               <button
                 onClick={() => {
                   setGlobalFilter('')
-                  console.log('🔍 Search cleared')
                 }}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 hover:text-gray-600"
                 title="Clear search"
@@ -1003,7 +1017,6 @@ export function DataGrid({
             variant="secondary" 
             size="sm"
             onClick={() => {
-              console.log('🔍 Filters button clicked!')
               setShowFilters(!showFilters)
             }}
             className={showFilters ? 'bg-blue-100 text-blue-700' : ''}
@@ -1016,7 +1029,6 @@ export function DataGrid({
             variant="secondary" 
             size="sm"
             onClick={() => {
-              console.log('🔧 Columns button clicked!')
               setShowColumns(!showColumns)
             }}
             className={showColumns ? 'bg-blue-100 text-blue-700' : ''}
@@ -1078,7 +1090,6 @@ export function DataGrid({
               <select 
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 onChange={(e) => {
-                  console.log('🔍 Project filter changed:', e.target.value)
                   if (e.target.value) {
                     setColumnFilters([...columnFilters.filter(f => f.id !== 'projectId'), { id: 'projectId', value: e.target.value }])
                   } else {
@@ -1099,7 +1110,6 @@ export function DataGrid({
               <select 
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 onChange={(e) => {
-                  console.log('🔍 Module filter changed:', e.target.value)
                   if (e.target.value) {
                     setColumnFilters([...columnFilters.filter(f => f.id !== 'module'), { id: 'module', value: e.target.value }])
                   } else {
@@ -1108,7 +1118,7 @@ export function DataGrid({
                 }}
               >
                 <option value="">All Modules</option>
-                {Array.from(new Set(data.map(tc => tc.data?.module || tc.module).filter(Boolean))).map(module => (
+                {Array.from(new Set(data.map(tc => tc.module || tc.category || tc.data?.module).filter(Boolean))).map(module => (
                   <option key={module} value={module}>{module}</option>
                 ))}
               </select>
@@ -1120,7 +1130,6 @@ export function DataGrid({
               <select 
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 onChange={(e) => {
-                  console.log('🔍 Feature filter changed:', e.target.value)
                   if (e.target.value) {
                     setColumnFilters([...columnFilters.filter(f => f.id !== 'feature'), { id: 'feature', value: e.target.value }])
                   } else {
@@ -1129,21 +1138,20 @@ export function DataGrid({
                 }}
               >
                 <option value="">All Features</option>
-                {Array.from(new Set(data.map(tc => tc.feature || tc.data?.module || tc.module).filter(Boolean))).map(feature => (
+                {Array.from(new Set(data.map(tc => tc.feature || tc.data?.feature || tc.module).filter(Boolean))).map(feature => (
                   <option key={feature} value={feature}>{feature}</option>
                 ))}
               </select>
             </div>
 
-            {/* 4. Enhancement Filter */}
+            {/* 4. Enhancement/Ticket Filter */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Enhancement</label>
-              <input 
+              <label className="block text-sm font-medium text-gray-700 mb-1">Enhancement/Ticket</label>
+              <input
                 type="text"
-                placeholder="Filter by enhancement..."
+                placeholder="Filter by enhancement or ticket..."
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 onChange={(e) => {
-                  console.log('🔍 Enhancement filter changed:', e.target.value)
                   if (e.target.value) {
                     setColumnFilters([...columnFilters.filter(f => f.id !== 'enhancement'), { id: 'enhancement', value: e.target.value }])
                   } else {
@@ -1153,25 +1161,7 @@ export function DataGrid({
               />
             </div>
 
-            {/* 5. Ticket Filter */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ticket ID</label>
-              <input 
-                type="text"
-                placeholder="Filter by ticket ID..."
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                onChange={(e) => {
-                  console.log('🔍 Ticket filter changed:', e.target.value)
-                  if (e.target.value) {
-                    setColumnFilters([...columnFilters.filter(f => f.id !== 'ticketId'), { id: 'ticketId', value: e.target.value }])
-                  } else {
-                    setColumnFilters(columnFilters.filter(f => f.id !== 'ticketId'))
-                  }
-                }}
-              />
-            </div>
-
-            {/* 6. Tag Filter */}
+            {/* 5. Tag Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
               <input 
@@ -1179,7 +1169,6 @@ export function DataGrid({
                 placeholder="Filter by tags (comma-separated)..."
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 onChange={(e) => {
-                  console.log('🔍 Tags filter changed:', e.target.value)
                   if (e.target.value) {
                     setColumnFilters([...columnFilters.filter(f => f.id !== 'tags'), { id: 'tags', value: e.target.value }])
                   } else {
@@ -1189,13 +1178,12 @@ export function DataGrid({
               />
             </div>
 
-            {/* 7. Status Filter */}
+            {/* 6. Status Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select 
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 onChange={(e) => {
-                  console.log('🔍 Status filter changed:', e.target.value)
                   if (e.target.value) {
                     setColumnFilters([...columnFilters.filter(f => f.id !== 'status'), { id: 'status', value: e.target.value }])
                   } else {
@@ -1211,13 +1199,12 @@ export function DataGrid({
               </select>
             </div>
 
-            {/* 8. Priority Filter */}
+            {/* 7. Priority Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-              <select 
+              <select
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 onChange={(e) => {
-                  console.log('🔍 Priority filter changed:', e.target.value)
                   if (e.target.value) {
                     setColumnFilters([...columnFilters.filter(f => f.id !== 'priority'), { id: 'priority', value: e.target.value }])
                   } else {
@@ -1232,12 +1219,28 @@ export function DataGrid({
                 <option value="critical">Critical</option>
               </select>
             </div>
+
+            {/* 8. Expected Result Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Expected Result</label>
+              <input
+                type="text"
+                placeholder="Filter by expected result..."
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setColumnFilters([...columnFilters.filter(f => f.id !== 'expectedResult'), { id: 'expectedResult', value: e.target.value }])
+                  } else {
+                    setColumnFilters(columnFilters.filter(f => f.id !== 'expectedResult'))
+                  }
+                }}
+              />
+            </div>
           </div>
           <div className="mt-3 flex space-x-2">
             <button
               onClick={() => {
                 setColumnFilters([])
-                console.log('🔍 All filters cleared')
               }}
               className="text-sm text-gray-600 hover:text-gray-800 underline"
             >
@@ -1263,7 +1266,6 @@ export function DataGrid({
                       type="checkbox"
                       checked={isVisible}
                       onChange={() => {
-                        console.log('🔧 Column visibility changed:', columnId, !isVisible)
                         column.toggleVisibility()
                       }}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -1282,7 +1284,6 @@ export function DataGrid({
             <button
               onClick={() => {
                 table.toggleAllColumnsVisible(true)
-                console.log('🔧 All columns shown')
               }}
               className="text-sm text-blue-600 hover:text-blue-800 underline"
             >
@@ -1291,7 +1292,6 @@ export function DataGrid({
             <button
               onClick={() => {
                 table.toggleAllColumnsVisible(false)
-                console.log('🔧 All columns hidden')
               }}
               className="text-sm text-gray-600 hover:text-gray-800 underline"
             >

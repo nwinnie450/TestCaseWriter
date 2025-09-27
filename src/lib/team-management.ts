@@ -39,33 +39,72 @@ const TEAMS_STORAGE_KEY = 'testCaseWriter_qaTeams'
 const TEAM_MEMBERS_STORAGE_KEY = 'testCaseWriter_teamMembers'
 
 // Team Management Functions
-export function getAllTeams(): QATeam[] {
+export async function getAllTeams(): Promise<QATeam[]> {
   try {
-    const stored = localStorage.getItem(TEAMS_STORAGE_KEY)
-    return stored ? JSON.parse(stored) : []
-  } catch {
+    const response = await fetch('/api/teams-direct')
+    if (response.ok) {
+      const teams = await response.json()
+      // Convert database format to QATeam format
+      return teams.map((team: any) => ({
+        id: team.id,
+        name: team.name,
+        description: team.description || '',
+        leadId: undefined, // TODO: Implement team leads
+        leadName: undefined,
+        memberIds: team.members?.map((m: any) => m.userId) || [],
+        createdAt: new Date(team.createdAt),
+        updatedAt: new Date(team.updatedAt)
+      }))
+    } else {
+      console.error('Failed to fetch teams from API')
+      return []
+    }
+  } catch (error) {
+    console.error('Error fetching teams:', error)
     return []
   }
 }
 
-export function createTeam(teamData: Omit<QATeam, 'id' | 'createdAt' | 'updatedAt'>): QATeam {
-  const teams = getAllTeams()
+export async function createTeam(teamData: Omit<QATeam, 'id' | 'createdAt' | 'updatedAt'>): Promise<QATeam | null> {
+  try {
+    const response = await fetch('/api/teams-direct', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: teamData.name,
+        description: teamData.description,
+        color: '#3B82F6', // Default blue color
+        createdBy: 'user' // TODO: Get current user
+      })
+    })
 
-  const newTeam: QATeam = {
-    ...teamData,
-    id: `team_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    if (response.ok) {
+      const team = await response.json()
+      return {
+        id: team.id,
+        name: team.name,
+        description: team.description || '',
+        leadId: undefined,
+        leadName: undefined,
+        memberIds: [],
+        createdAt: new Date(team.createdAt),
+        updatedAt: new Date(team.updatedAt)
+      }
+    } else {
+      const error = await response.json()
+      console.error('Failed to create team:', error)
+      return null
+    }
+  } catch (error) {
+    console.error('Error creating team:', error)
+    return null
   }
-
-  teams.push(newTeam)
-  localStorage.setItem(TEAMS_STORAGE_KEY, JSON.stringify(teams))
-
-  return newTeam
 }
 
-export function updateTeam(teamId: string, updates: Partial<Omit<QATeam, 'id' | 'createdAt'>>): QATeam | null {
-  const teams = getAllTeams()
+export async function updateTeam(teamId: string, updates: Partial<Omit<QATeam, 'id' | 'createdAt'>>): Promise<QATeam | null> {
+  const teams = await getAllTeams()
   const teamIndex = teams.findIndex(t => t.id === teamId)
 
   if (teamIndex === -1) return null
@@ -80,26 +119,33 @@ export function updateTeam(teamId: string, updates: Partial<Omit<QATeam, 'id' | 
   return teams[teamIndex]
 }
 
-export function deleteTeam(teamId: string): boolean {
-  const teams = getAllTeams()
-  const filteredTeams = teams.filter(t => t.id !== teamId)
+export async function deleteTeam(teamId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/teams-direct?id=${teamId}`, {
+      method: 'DELETE'
+    })
 
-  if (filteredTeams.length === teams.length) return false
-
-  // Also remove all team members
-  removeAllMembersFromTeam(teamId)
-
-  localStorage.setItem(TEAMS_STORAGE_KEY, JSON.stringify(filteredTeams))
-  return true
+    if (response.ok) {
+      console.log('Team deleted successfully from database')
+      return true
+    } else {
+      const error = await response.json()
+      console.error('Failed to delete team:', error)
+      return false
+    }
+  } catch (error) {
+    console.error('Error deleting team:', error)
+    return false
+  }
 }
 
-export function getTeamById(teamId: string): QATeam | null {
-  const teams = getAllTeams()
+export async function getTeamById(teamId: string): Promise<QATeam | null> {
+  const teams = await getAllTeams()
   return teams.find(t => t.id === teamId) || null
 }
 
-export function getTeamsByLead(leadId: string): QATeam[] {
-  const teams = getAllTeams()
+export async function getTeamsByLead(leadId: string): Promise<QATeam[]> {
+  const teams = await getAllTeams()
   return teams.filter(t => t.leadId === leadId)
 }
 
@@ -113,7 +159,7 @@ export function getAllTeamMembers(): TeamMember[] {
   }
 }
 
-export function addMemberToTeam(teamId: string, userId: string, assignedBy: string): boolean {
+export async function addMemberToTeam(teamId: string, userId: string, assignedBy: string): Promise<boolean> {
   const members = getAllTeamMembers()
 
   // Check if user is already in this team
@@ -132,7 +178,7 @@ export function addMemberToTeam(teamId: string, userId: string, assignedBy: stri
   localStorage.setItem(TEAM_MEMBERS_STORAGE_KEY, JSON.stringify(members))
 
   // Update team member count
-  const teams = getAllTeams()
+  const teams = await getAllTeams()
   const team = teams.find(t => t.id === teamId)
   if (team) {
     team.memberIds = getTeamMemberIds(teamId)
@@ -143,7 +189,7 @@ export function addMemberToTeam(teamId: string, userId: string, assignedBy: stri
   return true
 }
 
-export function removeMemberFromTeam(teamId: string, userId: string): boolean {
+export async function removeMemberFromTeam(teamId: string, userId: string): Promise<boolean> {
   const members = getAllTeamMembers()
   const filteredMembers = members.filter(m => !(m.teamId === teamId && m.userId === userId))
 
@@ -152,7 +198,7 @@ export function removeMemberFromTeam(teamId: string, userId: string): boolean {
   localStorage.setItem(TEAM_MEMBERS_STORAGE_KEY, JSON.stringify(filteredMembers))
 
   // Update team member count
-  const teams = getAllTeams()
+  const teams = await getAllTeams()
   const team = teams.find(t => t.id === teamId)
   if (team) {
     team.memberIds = getTeamMemberIds(teamId)
@@ -174,16 +220,16 @@ export function getTeamMemberIds(teamId: string): string[] {
   return members.filter(m => m.teamId === teamId).map(m => m.userId)
 }
 
-export function getUserTeams(userId: string): QATeam[] {
+export async function getUserTeams(userId: string): Promise<QATeam[]> {
   const members = getAllTeamMembers()
   const userTeamIds = members.filter(m => m.userId === userId).map(m => m.teamId)
 
-  const teams = getAllTeams()
+  const teams = await getAllTeams()
   return teams.filter(t => userTeamIds.includes(t.id) || t.leadId === userId)
 }
 
-export function isTeamLead(userId: string, teamId?: string): boolean {
-  const teams = getAllTeams()
+export async function isTeamLead(userId: string, teamId?: string): Promise<boolean> {
+  const teams = await getAllTeams()
 
   if (teamId) {
     const team = teams.find(t => t.id === teamId)
@@ -194,8 +240,8 @@ export function isTeamLead(userId: string, teamId?: string): boolean {
   return teams.some(t => t.leadId === userId)
 }
 
-export function assignTeamLead(teamId: string, leadId: string, leadName: string): boolean {
-  const teams = getAllTeams()
+export async function assignTeamLead(teamId: string, leadId: string, leadName: string): Promise<boolean> {
+  const teams = await getAllTeams()
   const team = teams.find(t => t.id === teamId)
 
   if (!team) return false
@@ -209,8 +255,8 @@ export function assignTeamLead(teamId: string, leadId: string, leadName: string)
 }
 
 // Initialize default teams if none exist
-export function initializeDefaultTeams(): void {
-  const existingTeams = getAllTeams()
+export async function initializeDefaultTeams(): Promise<void> {
+  const existingTeams = await getAllTeams()
 
   if (existingTeams.length === 0) {
     const defaultTeams = Object.values(QA_TEAM_TYPES).map(teamType => ({
@@ -221,14 +267,16 @@ export function initializeDefaultTeams(): void {
       leadName: undefined
     }))
 
-    defaultTeams.forEach(teamData => createTeam(teamData))
+    for (const teamData of defaultTeams) {
+      await createTeam(teamData)
+    }
     console.log('Default QA teams initialized')
   }
 }
 
 // Get teams available for assignment (teams without a lead or led by current user)
-export function getAssignableTeams(currentUserId: string, isAdmin: boolean): QATeam[] {
-  const teams = getAllTeams()
+export async function getAssignableTeams(currentUserId: string, isAdmin: boolean): Promise<QATeam[]> {
+  const teams = await getAllTeams()
 
   if (isAdmin) {
     return teams // Admins can assign to any team
@@ -239,8 +287,8 @@ export function getAssignableTeams(currentUserId: string, isAdmin: boolean): QAT
 }
 
 // Get team statistics
-export function getTeamStats(teamId: string) {
-  const team = getTeamById(teamId)
+export async function getTeamStats(teamId: string) {
+  const team = await getTeamById(teamId)
   if (!team) return null
 
   const memberIds = getTeamMemberIds(teamId)

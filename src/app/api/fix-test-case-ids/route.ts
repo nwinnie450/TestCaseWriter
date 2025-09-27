@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+// import { prisma } from '@/lib/prisma'; // TODO: Convert to MongoDB
 
 export async function POST(request: NextRequest) {
   try {
     console.log('🔧 Starting test case ID fix process...');
 
+    // TODO: Convert this endpoint to use MongoDB
+    return NextResponse.json({
+      success: false,
+      error: 'This endpoint needs to be converted to MongoDB',
+      message: 'Prisma has been removed, this endpoint needs MongoDB implementation'
+    }, { status: 501 });
+
     // Get all test cases from database, ordered by creation date
-    const testCases = await prisma.testCase.findMany({
-      orderBy: { createdAt: 'asc' }
-    });
+    // const testCases = await prisma.testCase.findMany({
+    //   orderBy: { createdAt: 'asc' }
+    // });
 
     console.log(`📊 Found ${testCases.length} test cases in database`);
 
@@ -134,11 +141,18 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    // TODO: Convert this endpoint to use MongoDB
+    return NextResponse.json({
+      success: false,
+      error: 'This endpoint needs to be converted to MongoDB',
+      message: 'Prisma has been removed, this endpoint needs MongoDB implementation'
+    }, { status: 501 });
+
     // Analyze current test case IDs without making changes
-    const testCases = await prisma.testCase.findMany({
-      select: { id: true, createdAt: true },
-      orderBy: { createdAt: 'asc' }
-    });
+    // const testCases = await prisma.testCase.findMany({
+    //   select: { id: true, createdAt: true },
+    //   orderBy: { createdAt: 'asc' }
+    // });
 
     // Group by ID to find duplicates
     const idGroups = new Map<string, any[]>();

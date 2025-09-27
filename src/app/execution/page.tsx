@@ -101,6 +101,139 @@ interface PrioritizedTestCase extends TestCase {
   };
 }
 
+// User Filter Dropdown Component with Search
+interface UserFilterDropdownProps {
+  users: Array<{
+    id: string;
+    name: string;
+    email: string;
+    username: string;
+    role: string;
+  }>;
+  selectedUsers: string[];
+  onSelectionChange: (selected: string[]) => void;
+  roles: Record<string, { name: string }>;
+}
+
+const UserFilterDropdown: React.FC<UserFilterDropdownProps> = ({
+  users,
+  selectedUsers,
+  onSelectionChange,
+  roles
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Filter users based on search query
+  const filteredUsers = users.filter(user =>
+    user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    user.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Handle user selection toggle
+  const toggleUserSelection = (userName: string) => {
+    if (selectedUsers.includes(userName)) {
+      onSelectionChange(selectedUsers.filter(u => u !== userName));
+    } else {
+      onSelectionChange([...selectedUsers, userName]);
+    }
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Clear all selections
+  const clearAll = () => {
+    onSelectionChange([]);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="px-2 py-1 border border-gray-300 rounded text-sm min-w-32 text-left bg-white hover:bg-gray-50 flex items-center justify-between"
+      >
+        <span className="truncate">
+          {selectedUsers.length === 0
+            ? 'All Users'
+            : selectedUsers.length === 1
+              ? selectedUsers[0]
+              : `${selectedUsers.length} users selected`
+          }
+        </span>
+        <ChevronDown className={`w-4 h-4 transform transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-50 max-h-64 overflow-hidden">
+          {/* Search input */}
+          <div className="p-2 border-b border-gray-200">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-7 pr-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          {/* Clear all button */}
+          {selectedUsers.length > 0 && (
+            <div className="p-2 border-b border-gray-200">
+              <button
+                onClick={clearAll}
+                className="text-xs text-red-600 hover:text-red-800 underline"
+              >
+                Clear all ({selectedUsers.length})
+              </button>
+            </div>
+          )}
+
+          {/* User list */}
+          <div className="max-h-40 overflow-y-auto">
+            {filteredUsers.length === 0 ? (
+              <div className="p-2 text-xs text-gray-500 text-center">
+                {users.length === 0 ? 'Loading users...' : 'No users found'}
+              </div>
+            ) : (
+              filteredUsers.map(user => (
+                <button
+                  key={user.id || user.name}
+                  onClick={() => toggleUserSelection(user.name)}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center justify-between text-xs"
+                >
+                  <div className="flex-1">
+                    <div className="font-medium">{user.name}</div>
+                    <div className="text-gray-500">{roles[user.role]?.name || user.role}</div>
+                  </div>
+                  {selectedUsers.includes(user.name) && (
+                    <CheckSquare className="w-3 h-3 text-blue-600" />
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface ExecutionData {
   status: 'Pass' | 'Fail' | 'Blocked' | 'Skip';
   tester: string;
@@ -112,10 +245,22 @@ interface ExecutionData {
 }
 
 export default function TestExecutionPage() {
-  console.log('?? TestExecutionPage component loaded with debugging');
 
   const router = useRouter();
-  const [testCases, setTestCases] = useState<PrioritizedTestCase[]>([]);
+  const [testCases, setTestCasesState] = useState<PrioritizedTestCase[]>([]);
+
+  // Safe wrapper to ensure testCases is always an array
+  const setTestCases = (data: PrioritizedTestCase[] | ((prev: PrioritizedTestCase[]) => PrioritizedTestCase[])) => {
+    if (typeof data === 'function') {
+      setTestCasesState(data);
+    } else {
+      setTestCasesState(Array.isArray(data) ? data : []);
+    }
+  };
+  const [statusUpdateInProgress, setStatusUpdateInProgress] = useState<string | null>(null);
+  const [lastStatusUpdate, setLastStatusUpdate] = useState<Date | null>(null);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [refreshCountdown, setRefreshCountdown] = useState(0);
   const [aiPrioritizationEnabled, setAiPrioritizationEnabled] = useState(false);
   const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
   const [prioritizationAnalysis, setPrioritizationAnalysis] = useState<any>(null);
@@ -227,10 +372,17 @@ export default function TestExecutionPage() {
   // Run filtering state for test leads
   const [runFilter, setRunFilter] = useState({
     status: 'all', // all, active, paused, completed
-    tester: 'all', // all, my-runs, or specific tester
+    tester: [] as string[], // array of selected user IDs/names, empty means show all runs
     project: 'all',
     timeframe: 'all' // all, today, this-week, this-month
   });
+
+  // Initialize user filter with current user when component mounts
+  useEffect(() => {
+    if (currentUser && runFilter.tester.length === 0) {
+      setRunFilter(prev => ({ ...prev, tester: [currentUser] }));
+    }
+  }, [currentUser]);
 
   // Multi-run execution system
   interface ExecutionRun {
@@ -324,12 +476,8 @@ export default function TestExecutionPage() {
 
 
   const switchToRun = (runId: string) => {
-    console.log('?? switchToRun called with runId:', runId);
     const run = executionRuns.find(r => r.id === runId);
-    console.log('?? Found run:', run);
     if (run) {
-      console.log('?? Setting activeRunId to:', runId);
-      console.log('?? Run has test cases:', run.testCases?.length || 0);
       setActiveRunId(runId);
       // setSelectedTest(run.currentTest); // Commented out - function not defined
       // setExecutionData(prev => ({ // Commented out - function not defined
@@ -337,7 +485,6 @@ export default function TestExecutionPage() {
       //   tester: run.tester,
       //   environment: run.environment
       // }));
-      console.log('?? switchToRun completed, should trigger useEffect now');
     }
   };
 
@@ -488,7 +635,6 @@ export default function TestExecutionPage() {
   }, []);
 
   const loadActiveRunTestCases = useCallback(async (runId: string) => {
-    console.log('?? DEBUG: loadActiveRunTestCases invoked for runId:', runId);
     if (!runId) {
       return;
     }
@@ -500,16 +646,11 @@ export default function TestExecutionPage() {
       let runStats: any = null;
 
       try {
-        console.log('?? DEBUG: Fetching run details for runId:', runId);
         const response = await fetch(`/api/run-details/${runId}`, { cache: 'no-store' });
-        console.log('?? DEBUG: Run details API response status:', response.status, response.ok);
         if (response.ok) {
           const directData = await response.json();
-          console.log('?? DEBUG: Run details API response data:', directData);
           runPayload = directData?.run ?? null;
           runStats = directData?.stats ?? null;
-          console.log('?? DEBUG: Extracted runPayload:', runPayload);
-          console.log('?? DEBUG: Extracted runStats:', runStats);
         } else {
           console.warn('Direct fetch for run details returned non-OK status:', response.status);
         }
@@ -524,18 +665,12 @@ export default function TestExecutionPage() {
       }
 
       if (activeRunIdRef.current !== runId) {
-        console.log('?? DEBUG: Stale run test case response ignored for runId:', runId);
         return;
       }
 
-      console.log('?? DEBUG: runPayload exists:', !!runPayload);
-      console.log('?? DEBUG: runPayload.runCases exists:', !!runPayload?.runCases);
-      console.log('?? DEBUG: runPayload.runCases length:', runPayload?.runCases?.length);
 
       if (runPayload?.runCases && runPayload.runCases.length > 0) {
         const runTestCases = runPayload.runCases.map(normalizeRunCase);
-        console.log('?? DEBUG: Active run test cases set from payload:', runTestCases.length);
-        console.log('?? DEBUG: First test case:', runTestCases[0]);
 
         setActiveRunTestCases(runTestCases);
 
@@ -562,16 +697,13 @@ export default function TestExecutionPage() {
           };
         }));
       } else {
-        console.log('?? DEBUG: No runCases returned for runId:', runId);
         
         // Fallback: Try to get test cases from the run object itself
         const currentRun = executionRuns.find(run => run.id === runId);
         if (currentRun?.testCases && currentRun.testCases.length > 0) {
-          console.log('?? DEBUG: Using fallback test cases from run object:', currentRun.testCases.length);
           const fallbackTestCases = currentRun.testCases.map(normalizeRunCase);
           setActiveRunTestCases(fallbackTestCases);
         } else {
-          console.log('?? DEBUG: No test cases found in run object either');
         setActiveRunTestCases([]);
         }
       }
@@ -588,9 +720,7 @@ export default function TestExecutionPage() {
   }, [normalizeRunCase]);
 
   useEffect(() => {
-    console.log('?? useEffect triggered for activeRunId change:', activeRunId);
     if (!activeRunId) {
-      console.log('?? DEBUG: Clearing active run context because activeRunId is null');
       activeRunIdRef.current = null;
       setActiveRunTestCases([]);
       setLoadingActiveRunTestCases(false);
@@ -635,7 +765,6 @@ export default function TestExecutionPage() {
 
       // Use localStorage directly instead of API call
       const users = getAllUsers()
-      console.log('?? Loading users for assignment:', users.length, 'users found')
 
       // Transform users to match the expected format
       const userList = users.map(user => ({
@@ -757,11 +886,26 @@ export default function TestExecutionPage() {
         return false;
       }
 
-      // Tester filter
-      if (runFilter.tester !== 'all') {
-        if (runFilter.tester === 'my-runs' && run.tester !== currentUser) {
-          return false;
-        } else if (runFilter.tester !== 'my-runs' && run.tester !== runFilter.tester) {
+      // User filter (applies for all users, multiselect)
+      if (runFilter.tester.length > 0) {
+        // Check if any of the selected users are assigned to this run
+        const hasMatchingAssignee = run.assignees &&
+          run.assignees.some(assignee =>
+            runFilter.tester.some(selectedUser =>
+              assignee === selectedUser || // exact match
+              assignee.includes(selectedUser) || // partial match (for email/name variations)
+              selectedUser.includes(assignee)
+            )
+          );
+
+        // Also check if the run tester matches any selected user
+        const hasMatchingTester = runFilter.tester.some(selectedUser =>
+          run.tester === selectedUser ||
+          run.tester.includes(selectedUser) ||
+          selectedUser.includes(run.tester)
+        );
+
+        if (!hasMatchingAssignee && !hasMatchingTester) {
           return false;
         }
       }
@@ -828,12 +972,10 @@ export default function TestExecutionPage() {
   const loadExecutionRuns = async () => {
     try {
       const result = await RunsService.getRuns({ limit: 50 });
-      console.log('?? DEBUG: API result from getRuns:', result);
 
       if (result.runs && result.runs.length > 0) {
       // Transform API runs to ExecutionRun format
       const transformedRuns: ExecutionRun[] = result.runs.map(run => {
-        console.log('?? DEBUG: Processing run:', run.id, 'stats:', run.stats);
         const environment = Array.isArray(run.environments) && run.environments.length > 0
           ? run.environments[0]
           : 'SIT';
@@ -848,7 +990,6 @@ export default function TestExecutionPage() {
         const completedTests = (run.stats?.passedCases || 0) + (run.stats?.failedCases || 0) + (run.stats?.blockedCases || 0);
         const totalTests = run.stats?.totalCases || 0;
 
-        console.log(`?? DEBUG: Run ${run.id} - completedTests: ${completedTests}, totalTests: ${totalTests}`);
 
         return {
           id: run.id,
@@ -875,7 +1016,6 @@ export default function TestExecutionPage() {
         }
         }
       } else {
-        console.log('?? DEBUG: No runs in database, trying localStorage fallback');
         // Fallback to localStorage for dev environment
         await loadExecutionRunsFromLocalStorage();
       }
@@ -889,13 +1029,11 @@ export default function TestExecutionPage() {
   // Load execution runs from localStorage (dev environment fallback)
   const loadExecutionRunsFromLocalStorage = async () => {
     try {
-      console.log('?? DEBUG: Loading execution runs from localStorage...');
       
       // Check if there are any stored execution runs in localStorage
       const storedRuns = localStorage.getItem('testCaseWriter_executionRuns');
       if (storedRuns) {
         const parsedRuns = JSON.parse(storedRuns);
-        console.log('?? DEBUG: Found stored execution runs:', parsedRuns.length);
         
         const transformedRuns: ExecutionRun[] = parsedRuns.map((run: any) => ({
           id: run.id,
@@ -921,7 +1059,6 @@ export default function TestExecutionPage() {
           }
         }
       } else {
-        console.log('?? DEBUG: No execution runs found in localStorage either');
         setExecutionRuns([]);
       }
     } catch (error) {
@@ -960,10 +1097,53 @@ export default function TestExecutionPage() {
     }
   }, [notification.show]);
 
+  // Auto-refresh mechanism for real-time status updates
+  useEffect(() => {
+    if (!autoRefreshEnabled) return;
+
+    const refreshInterval = setInterval(() => {
+      // Refresh test cases
+      loadTestCases();
+
+      // Refresh active run test cases if there's an active run
+      if (activeRunId) {
+        loadActiveRunTestCases(activeRunId);
+      }
+
+      // Refresh execution runs
+      loadExecutionRuns();
+
+      setLastStatusUpdate(new Date());
+    }, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(refreshInterval);
+  }, [autoRefreshEnabled, activeRunId]);
+
+  // Countdown timer for auto-refresh
+  useEffect(() => {
+    if (!autoRefreshEnabled) {
+      setRefreshCountdown(0);
+      return;
+    }
+
+    const countdownInterval = setInterval(() => {
+      setRefreshCountdown(prev => {
+        if (prev <= 1) {
+          return 30; // Reset to 30 seconds
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // Initialize countdown
+    setRefreshCountdown(30);
+
+    return () => clearInterval(countdownInterval);
+  }, [autoRefreshEnabled]);
+
   // Load users when a test is selected for execution
   useEffect(() => {
     if (selectedTest) {
-      console.log('?? Test selected, loading users for assignment...');
       loadUsersForAssignment();
     }
   }, [selectedTest]);
@@ -1026,9 +1206,9 @@ export default function TestExecutionPage() {
         testCasesToBlock: relatedTests.slice(0, 3).map(tc => tc.id)
       },
       suggestedActions: [
-        '?? Review related test cases for similar issues',
-        '?? Update test documentation',
-        '?? Re-run after fix verification'
+        '🔍 Review related test cases for similar issues',
+        '📝 Update test documentation',
+        '🔄 Re-run after fix verification'
       ],
       rootCauseAnalysis: `Potential issue in ${testCase.category} component. Consider checking related functionality.`
     };
@@ -1655,27 +1835,37 @@ export default function TestExecutionPage() {
 
   const loadTestCases = async () => {
     try {
-      // Try to fetch from API first
+      // Try to fetch from API first - prioritize MongoDB over localStorage
       const response = await fetch('/api/test-cases');
       if (response.ok) {
-        const testCases = await response.json();
-        console.log('📊 API test cases loaded:', testCases.length);
-        if (testCases.length > 0) {
+        const apiData = await response.json();
+        console.log('📊 API response from MongoDB:', apiData);
+
+        // Ensure we always have an array
+        const testCases = Array.isArray(apiData) ? apiData : [];
+        console.log('📊 API test cases loaded from MongoDB:', testCases.length);
+
+        // Always use MongoDB data, even if empty - this is the source of truth
         setTestCases(testCases);
-        return;
-        } else {
-          console.log('📊 API returned empty array, trying localStorage fallback');
+
+        if (testCases.length === 0) {
+          console.log('📊 MongoDB has no test cases - showing empty state');
         }
+        return;
+      } else {
+        console.warn('API request failed with status:', response.status);
+        throw new Error(`API request failed: ${response.status}`);
       }
     } catch (error) {
-      console.warn('API not available, trying localStorage fallback:', error);
+      console.warn('MongoDB API not available, trying localStorage fallback:', error);
     }
 
-    // Try localStorage fallback
+    // Try localStorage fallback (only when MongoDB API is completely unavailable)
     try {
+      console.log('⚠️ MongoDB API failed, falling back to localStorage');
       const { getAllStoredTestCases } = await import('@/lib/test-case-storage');
       const storedTestCases = getAllStoredTestCases();
-      console.log('📊 localStorage test cases found:', storedTestCases.length);
+      console.log('📊 localStorage fallback test cases found:', storedTestCases.length);
       
       if (storedTestCases.length > 0) {
         // Transform localStorage test cases to match the expected format
@@ -1781,9 +1971,24 @@ export default function TestExecutionPage() {
             });
 
             if (updateResponse.ok) {
+              // Set status update indicator
+              setStatusUpdateInProgress(selectedTest.id);
+
+              // Immediately update the UI state for better UX
+              setActiveRunTestCases(prev => prev.map(tc =>
+                tc.id === selectedTest.id
+                  ? { ...tc, currentStatus: executionData.status, lastExecution: { date: new Date().toISOString(), tester: executionData.tester, status: executionData.status, notes: executionData.notes } }
+                  : tc
+              ));
+
               // Reload the active run test cases to reflect the update
               await loadActiveRunTestCases(activeRunId);
-              showNotification('success', `Test ${selectedTest!.id} executed with status: ${executionData.status}`);
+
+              // Mark status update as complete
+              setStatusUpdateInProgress(null);
+              setLastStatusUpdate(new Date());
+
+              showNotification('success', `✅ Test ${selectedTest!.id} executed with status: ${executionData.status}`);
             } else {
               throw new Error('Failed to update run case');
             }
@@ -1809,8 +2014,23 @@ export default function TestExecutionPage() {
           });
 
           if (response.ok) {
+            // Set status update indicator
+            setStatusUpdateInProgress(selectedTest.id);
+
+            // Immediately update the UI state for better UX
+            setTestCases(prev => prev.map(tc =>
+              tc.id === selectedTest.id
+                ? { ...tc, currentStatus: executionData.status, lastExecution: { date: new Date().toISOString(), tester: executionData.tester, status: executionData.status, notes: executionData.notes } }
+                : tc
+            ));
+
             await loadTestCases();
-            showNotification('success', `Test ${selectedTest!.id} executed successfully with status: ${executionData.status}`);
+
+            // Mark status update as complete
+            setStatusUpdateInProgress(null);
+            setLastStatusUpdate(new Date());
+
+            showNotification('success', `✅ Test ${selectedTest!.id} executed successfully with status: ${executionData.status}`);
           } else {
             throw new Error('API call failed');
           }
@@ -1834,13 +2054,14 @@ export default function TestExecutionPage() {
           });
 
           setTestCases(updatedTestCases);
-          showNotification('info', `Test ${selectedTest!.id} executed locally with status: ${executionData.status}`);
+          setLastStatusUpdate(new Date());
+          showNotification('info', `💾 Test ${selectedTest!.id} executed locally with status: ${executionData.status}`);
         }
       }
       
       // Trigger AI analysis for failures
       if (executionData.status === 'Fail' && executionData.notes.trim()) {
-        showNotification('info', '?? AI is analyzing this failure for related test cases...');
+        showNotification('info', '🤖 AI is analyzing this failure for related test cases...');
         setTimeout(() => {
           analyzeFailureWithAI(selectedTest, executionData.notes);
         }, 1000);
@@ -1857,7 +2078,7 @@ export default function TestExecutionPage() {
           showNotification('info', `Moving to next test: ${updatedRun.currentTest.title}`);
         } else {
           setSelectedTest(null);
-          showNotification('success', `?? Run "${activeRun.name}" completed! All ${activeRun.totalTests} tests finished.`);
+          showNotification('success', `✅ Run "${activeRun.name}" completed! All ${activeRun.totalTests} tests finished.`);
         }
       } else {
         setSelectedTest(null);
@@ -1911,7 +2132,7 @@ export default function TestExecutionPage() {
     }
   };
 
-  const filteredTestCases = testCases
+  const filteredTestCases = (Array.isArray(testCases) ? testCases : [])
     .filter(tc => {
       // Text search
       const searchMatch = searchQuery === '' ||
@@ -1992,14 +2213,6 @@ export default function TestExecutionPage() {
     : filteredTestCases;
 
   // Debug logging for test case display
-  console.log('?? === DISPLAY TEST CASES CALCULATION ===');
-  console.log('?? DEBUG: activeRunId:', activeRunId);
-  console.log('?? DEBUG: runScopedTestCases.length:', runScopedTestCases.length);
-  console.log('?? DEBUG: filteredTestCases.length:', filteredTestCases.length);
-  console.log('?? DEBUG: displayTestCases.length:', displayTestCases.length);
-  console.log('?? DEBUG: Will use:', activeRunId && runScopedTestCases.length > 0 ? 'runScopedTestCases' : 'filteredTestCases');
-  console.log('?? DEBUG: displayTestCases sample:', displayTestCases.slice(0, 3).map(tc => ({ id: tc.id, title: tc.title, currentStatus: tc.currentStatus })));
-  console.log('?? ==========================================');
 
   return (
     <Layout 
@@ -2154,6 +2367,28 @@ export default function TestExecutionPage() {
                   <Download className="w-4 h-4 mr-1" />
                   Import
                 </Button>
+                {/* Real-time Status Controls */}
+                <div className="flex items-center space-x-2 border-l pl-2 ml-2">
+                  <Button
+                    variant={autoRefreshEnabled ? "success" : "ghost"}
+                    size="sm"
+                    onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+                    className="flex items-center space-x-1"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${autoRefreshEnabled ? 'animate-spin' : ''}`} />
+                    <span className="text-xs">Auto</span>
+                  </Button>
+                  {autoRefreshEnabled && refreshCountdown > 0 && (
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                      {refreshCountdown}s
+                    </span>
+                  )}
+                  {lastStatusUpdate && (
+                    <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                      ✅ Updated {new Date(lastStatusUpdate).toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -2244,7 +2479,7 @@ export default function TestExecutionPage() {
                   {userRole.name}
                 </Badge>
 
-                {/* User & Role Switcher */}
+                {/* User Switcher */}
                 <div className="flex items-center space-x-4">
                   <div className="flex items-center space-x-2 text-xs">
                     <span className="text-gray-500">User:</span>
@@ -2261,22 +2496,9 @@ export default function TestExecutionPage() {
                     >
                       {availableUsers.map(user => (
                         <option key={user.name} value={user.name}>
-                          {user.name} {user.isDefault ? '(Default Admin)' : ''}
+                          {user.name} {user.isDefault ? '(Default Admin)' : ''} - {roles[user.role]?.name || user.role}
                         </option>
                       ))}
-                    </select>
-                  </div>
-
-                  <div className="flex items-center space-x-2 text-xs">
-                    <span className="text-gray-500">Role:</span>
-                    <select
-                      value={currentUserRole}
-                      onChange={(e) => setCurrentUserRole(e.target.value)}
-                      className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="qa">QA Tester</option>
-                      <option value="lead">Lead (QA Manager)</option>
-                      <option value="super-admin">Super Admin</option>
                     </select>
                   </div>
                 </div>
@@ -2343,19 +2565,13 @@ export default function TestExecutionPage() {
                   <option value="completed">Completed</option>
                 </select>
 
-                <select
-                  value={runFilter.tester}
-                  onChange={(e) => setRunFilter(prev => ({ ...prev, tester: e.target.value }))}
-                  className="px-2 py-1 border border-gray-300 rounded text-sm"
-                >
-                  <option value="all">All Testers</option>
-                  <option value="my-runs">My Runs</option>
-                  {availableUsers.filter(user => !user.name.includes('Current User')).map(user => (
-                    <option key={user.name} value={user.name}>
-                      {user.name} - {roles[user.role]?.name}
-                    </option>
-                  ))}
-                </select>
+                {/* User filter (multiselect for all users) */}
+                <UserFilterDropdown
+                  users={availableUsersForAssignment}
+                  selectedUsers={runFilter.tester}
+                  onSelectionChange={(selected) => setRunFilter(prev => ({ ...prev, tester: selected }))}
+                  roles={roles}
+                />
 
                 <select
                   value={runFilter.timeframe}
@@ -2383,20 +2599,12 @@ export default function TestExecutionPage() {
                 <select
                   value={activeRunId || ''}
                   onChange={(e) => {
-                    console.log('?? Dropdown onChange triggered with value:', e.target.value);
-                    console.log('?? Event target:', e.target);
-                    console.log('?? Event currentTarget:', e.currentTarget);
                     switchToRun(e.target.value);
                   }}
-                  onFocus={() => console.log('?? Dropdown focused')}
-                  onBlur={() => console.log('?? Dropdown blurred')}
-                  onClick={() => console.log('?? Dropdown clicked')}
                   className="flex-1 max-w-md px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white"
                 >
                   <option value="">Select an execution run...</option>
                   {(() => {
-                    console.log('?? filteredRuns for dropdown:', filteredRuns.length, 'runs');
-                    console.log('?? filteredRuns data:', filteredRuns.map(r => ({ id: r.id, name: r.name })));
                     return filteredRuns.map((run) => (
                       <option key={run.id} value={run.id}>
                         {run.name} ({run.completedTests}/{run.totalTests}) - {run.status} - {run.tester} ({getUserRole(run.tester)?.name || 'Unknown'})
@@ -2443,7 +2651,12 @@ export default function TestExecutionPage() {
                     <div className="text-xs text-gray-500">
                       Assignees: {activeRun.assignees && activeRun.assignees.length > 0 ?
                         activeRun.assignees.map(userId => {
-                          const user = availableUsers.find(u => u.name === userId || u.email === userId)
+                          // First try to find in availableUsersForAssignment (dynamic users)
+                          let user = availableUsersForAssignment.find(u => u.id === userId || u.name === userId || u.email === userId)
+                          // Fallback to availableUsers (static users)
+                          if (!user) {
+                            user = availableUsers.find(u => u.name === userId || u.email === userId)
+                          }
                           return user ? user.name : userId
                         }).join(', ') :
                         'None assigned'
@@ -2756,11 +2969,21 @@ export default function TestExecutionPage() {
                   displayTestCases.map((testCase, index) => (
                       <div
                         key={`${testCase.id}-${index}`}
-                        className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
+                        className={`p-4 hover:bg-gray-50 transition-all duration-300 cursor-pointer relative ${
                           selectedTest?.id === testCase.id ? 'bg-blue-50 border-r-4 border-blue-500' : ''
+                        } ${
+                          statusUpdateInProgress === testCase.id ? 'animate-pulse bg-green-50' : ''
                         }`}
                         onClick={() => setSelectedTest(testCase)}
                       >
+                        {statusUpdateInProgress === testCase.id && (
+                          <div className="absolute top-2 right-2">
+                            <div className="flex items-center gap-1 text-xs text-green-600">
+                              <div className="w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
+                              <span>Updating...</span>
+                            </div>
+                          </div>
+                        )}
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-3 mb-2">
@@ -2775,9 +2998,13 @@ export default function TestExecutionPage() {
                             <h3 className="text-base font-medium text-gray-900 truncate">
                               {testCase.title}
                             </h3>
-                            <Badge className={getStatusColor(testCase.currentStatus)} size="sm">
+                            <Badge className={`${getStatusColor(testCase.currentStatus)} transition-all duration-300`} size="sm">
                               {getStatusIcon(testCase.currentStatus)}
                               <span className="ml-1">{testCase.currentStatus}</span>
+                              {lastStatusUpdate && testCase.lastExecution?.date &&
+                               new Date(testCase.lastExecution.date).getTime() > lastStatusUpdate.getTime() - 5000 && (
+                                <span className="ml-1 text-xs animate-bounce">✨</span>
+                              )}
                             </Badge>
                           </div>
 
@@ -2946,7 +3173,7 @@ export default function TestExecutionPage() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Tester</label>
                       {activeRun?.assignees && activeRun!.assignees!.length > 0 && (
                         <p className="text-xs text-blue-600 mb-2">
-                          ?? Showing run assignees only (inherited from "{activeRun?.name}")
+                          👥 Showing run assignees only (inherited from "{activeRun?.name}")
                         </p>
                       )}
                       <select
@@ -2955,8 +3182,6 @@ export default function TestExecutionPage() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white"
                       >
                         {(() => {
-                          console.log('?? DEBUG: activeRun?.assignees:', activeRun?.assignees);
-                          console.log('?? DEBUG: availableUsersForAssignment:', availableUsersForAssignment.map(u => ({ id: u.id, name: u.name, email: u.email })));
 
                           const filteredUsers = (activeRun?.assignees && activeRun!.assignees!.length > 0 ?
                             // Filter availableUsersForAssignment to only show run assignees
@@ -2969,7 +3194,6 @@ export default function TestExecutionPage() {
                             availableUsersForAssignment
                           );
 
-                          console.log('?? DEBUG: filteredUsers for tester dropdown:', filteredUsers.map(u => ({ id: u.id, name: u.name, email: u.email })));
                           return filteredUsers;
                         })().map((user) => (
                           <option key={user.name} value={user.name}>

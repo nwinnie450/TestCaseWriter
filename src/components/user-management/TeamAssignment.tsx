@@ -69,23 +69,37 @@ export function TeamAssignment({ userId, userName, userRole, onAssignmentChange 
     initializeDefaultTeams()
   }, [])
 
-  const loadTeams = () => {
-    const allTeams = getAllTeams()
+  const loadTeams = async () => {
+    try {
+      const allTeams = await getAllTeams()
 
-    // Filter teams based on user permissions
-    let availableTeams = allTeams
-    if (currentUser?.role === 'lead') {
-      availableTeams = getAssignableTeams(currentUser.id, false)
+      // Filter teams based on user permissions
+      let availableTeams = allTeams
+      if (currentUser?.role === 'lead') {
+        // Leads can only manage teams they lead
+        availableTeams = await getAssignableTeams(currentUser.id, false)
+      } else if (currentUser?.role === 'admin') {
+        // Admins can manage all teams
+        availableTeams = await getAssignableTeams(currentUser.id, true)
+      }
+
+      setTeams(availableTeams)
+    } catch (error) {
+      console.error('Failed to load teams:', error)
+      setTeams([])
     }
-
-    setTeams(availableTeams)
   }
 
-  const loadUserTeams = () => {
-    // Use the proper library function to get user teams
-    const userTeamsData = getUserTeams(userId)
-    const userTeamIds = userTeamsData.map(team => team.id)
-    setUserTeams(userTeamIds)
+  const loadUserTeams = async () => {
+    try {
+      // Use the proper library function to get user teams
+      const userTeamsData = await getUserTeams(userId)
+      const userTeamIds = userTeamsData.map(team => team.id)
+      setUserTeams(userTeamIds)
+    } catch (error) {
+      console.error('Failed to load user teams:', error)
+      setUserTeams([])
+    }
   }
 
   const assignToTeam = async (teamId: string) => {
@@ -95,11 +109,11 @@ export function TeamAssignment({ userId, userName, userRole, onAssignmentChange 
         // Assign as team lead
         const team = teams.find(t => t.id === teamId)
         if (team) {
-          assignTeamLead(teamId, userId, userName)
+          await assignTeamLead(teamId, userId, userName)
         }
       } else {
         // Assign as team member
-        addMemberToTeam(teamId, userId, currentUser?.id || 'admin')
+        await addMemberToTeam(teamId, userId, currentUser?.id || 'admin')
       }
 
       loadUserTeams()
@@ -115,14 +129,14 @@ export function TeamAssignment({ userId, userName, userRole, onAssignmentChange 
     try {
       if (userRole === 'lead') {
         // Remove as team lead
-        const teams = getAllTeams()
+        const teams = await getAllTeams()
         const team = teams.find(t => t.id === teamId)
         if (team) {
-          assignTeamLead(teamId, '', '')
+          await assignTeamLead(teamId, '', '')
         }
       } else {
         // Remove as team member
-        removeMemberFromTeam(teamId, userId)
+        await removeMemberFromTeam(teamId, userId)
       }
 
       loadUserTeams()
@@ -337,16 +351,25 @@ export function UserTeamsSummary({
   const [userTeams, setUserTeams] = useState<{team: QATeam, isLead: boolean}[]>([])
 
   useEffect(() => {
-    // Use the proper library function
-    const teams = getUserTeams(userId)
-    const userTeamData: {team: QATeam, isLead: boolean}[] = []
+    const loadUserTeams = async () => {
+      try {
+        // Use the proper library function
+        const teams = await getUserTeams(userId)
+        const userTeamData: {team: QATeam, isLead: boolean}[] = []
 
-    teams.forEach(team => {
-      const isLead = team.leadId === userId
-      userTeamData.push({ team, isLead })
-    })
+        teams.forEach(team => {
+          const isLead = team.leadId === userId
+          userTeamData.push({ team, isLead })
+        })
 
-    setUserTeams(userTeamData)
+        setUserTeams(userTeamData)
+      } catch (error) {
+        console.error('Failed to load user teams:', error)
+        setUserTeams([])
+      }
+    }
+
+    loadUserTeams()
   }, [userId])
 
   if (userTeams.length === 0) {

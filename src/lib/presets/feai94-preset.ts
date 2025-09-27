@@ -5,32 +5,43 @@ export const FEAI94_PRESET = {
 
   // Exact column name mappings from your Excel file
   columnMappings: {
-    // Core test case fields
-    id: ['Test Case ID', 'TestCase ID', 'ID'],
-    module: ['Module', 'Section', 'Component'],
-    title: ['Test Case', 'TestCase', 'Title', 'Test Case Title'],
-    steps_description: ['Test Step Description', '*Test Steps', 'Steps', 'Test Steps Description'],
-    test_data: ['Test Data', 'TestData', 'Data'],
-    expected_result: ['Expected Result', 'Expected', 'Result'],
+    // Core test case fields - exact matches from FEAI-94-short.xlsx
+    id: ['Test Case ID', 'ID', 'Test_Case_ID'],
+    module: ['Module', 'Component', 'Category'],
+    title: ['Test Case', 'Test Case Title', 'Title'],
+    description: ['Test Case Description', 'Description', 'Summary', 'Test Description'],
+    steps_description: ['Test Step Description', 'Steps', 'Test Steps Description', 'Step Description'],
+    test_data: ['Test Data', 'Data', 'Input Data'],
+    expected_result: ['Expected Result', 'Expected', 'Result', 'Overall Expected Result'],
+    step_expected_results: ['Step Expected Results', 'Individual Expected Results', 'Step Results'],
 
-    // QA specific fields
-    test_result: ['Test Result', 'Status', 'Result Status'],
-    qa_owner: ['QA', 'QA Owner', 'Tester', 'Owner'],
-    remarks: ['Remarks', 'Comments', 'Notes'],
+    // QA specific fields - exact matches
+    test_result: ['Test Result', 'Result', 'Status', 'Execution Status'],
+    qa_owner: ['QA', 'QA Owner', 'Assigned To', 'Owner'],
+    remarks: ['Remarks', 'Notes', 'Comments'],
 
-    // Flags
+    // Flags - exact matches
     regression: ['Regression? Yes/No', 'Regression', 'Is Regression'],
-    automation_enabled: ['Automation Yes/No', 'Automation', 'Auto'],
-    priority: ['Priority', 'Prio'],
+    automation_enabled: ['Automation Yes/No', 'Automation', 'Is Automation'],
+    priority: ['Priority', 'Prio', 'Level'],
 
-    // Automation fields
-    automation_id: ['Automation ID', 'Auto ID'],
-    automation_preset: ['Automation Preset Data', 'Auto Preset'],
-    automation_loop: ['Automation Loop Data', 'Auto Loop'],
-    automation_note: ['Automation Note', 'Auto Note'],
+    // Automation fields - exact matches
+    automation_id: ['Automation ID', 'Auto ID', 'Automation_ID'],
+    automation_preset: ['Automation Preset Data', 'Preset Data', 'Automation Preset'],
+    automation_loop: ['Automation Loop Data', 'Loop Data', 'Automation Loop'],
+    automation_note: ['Automation Note', 'Auto Note', 'Automation_Note'],
 
-    // Additional step info
-    step_count: ['*Test Steps', 'Step Count', 'Steps Count']
+    // Additional step info - exact match with asterisk
+    step_count: ['*Test Steps', 'Step Count', 'Number of Steps'],
+
+    // Additional common fields
+    project: ['Project', 'Project ID', 'Project Name'],
+    feature: ['Feature', 'Feature Name'],
+    enhancement: ['Enhancement', 'Enhancement ID'],
+    ticket: ['Ticket', 'Ticket ID', 'JIRA ID'],
+    tags: ['Tags', 'Labels'],
+    complexity: ['Complexity', 'Difficulty'],
+    estimate: ['Estimate', 'Estimated Time', 'Duration']
   },
 
   // Value normalizers for consistent data
@@ -69,18 +80,22 @@ export const FEAI94_PRESET = {
     },
 
     status: {
-      'PASS': 'Passed',
-      'PASSED': 'Passed',
-      'FAIL': 'Failed',
-      'FAILED': 'Failed',
-      'BLOCK': 'Blocked',
-      'BLOCKED': 'Blocked',
-      'SKIP': 'Skipped',
-      'SKIPPED': 'Skipped',
-      'PENDING': 'Pending',
-      'NOT RUN': 'Not Run',
-      'NOT_RUN': 'Not Run',
-      '': 'Not Run'
+      'PASS': 'active',
+      'PASSED': 'active',
+      'FAIL': 'review',
+      'FAILED': 'review',
+      'BLOCK': 'review',
+      'BLOCKED': 'review',
+      'SKIP': 'draft',
+      'SKIPPED': 'draft',
+      'PENDING': 'draft',
+      'NOT RUN': 'draft',
+      'NOT_RUN': 'draft',
+      'DRAFT': 'draft',
+      'ACTIVE': 'active',
+      'REVIEW': 'review',
+      'DEPRECATED': 'deprecated',
+      '': 'draft'
     }
   },
 
@@ -94,7 +109,7 @@ export const FEAI94_PRESET = {
     default_action: 'Execute test case'
   },
 
-  // Export format (for round-trip compatibility)
+  // Export format (for round-trip compatibility) - exact FEAI-94 column names
   exportMapping: {
     'Test Case ID': 'id',
     'Module': 'module',
@@ -176,7 +191,11 @@ export function normalizeValue(value: string, normalizerOrDefault: Record<string
   return value;
 }
 
-export function parseStepsFromText(text: string, config = FEAI94_PRESET.stepParsing): Array<{
+export function parseStepsFromText(
+  text: string,
+  stepExpectedResults?: string,
+  config = FEAI94_PRESET.stepParsing
+): Array<{
   step: number;
   description: string;
   expectedResult?: string;
@@ -198,6 +217,12 @@ export function parseStepsFromText(text: string, config = FEAI94_PRESET.stepPars
   const lines = processedText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const steps: Array<{ step: number; description: string; expectedResult?: string; testData?: string; }> = [];
 
+  // Parse individual expected results if provided
+  let expectedResults: string[] = [];
+  if (stepExpectedResults && typeof stepExpectedResults === 'string') {
+    expectedResults = stepExpectedResults.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  }
+
   for (let i = 0; i < lines.length && steps.length < config.max_steps; i++) {
     const line = lines[i];
 
@@ -205,16 +230,37 @@ export function parseStepsFromText(text: string, config = FEAI94_PRESET.stepPars
       continue;
     }
 
-    // Remove step prefixes (1., -, •, *, etc.)
-    const cleanedLine = line.replace(config.step_prefixes, '').trim();
+    // FEAI-94 specific: Handle numbered steps like "1) Login as Super Admin"
+    const cleanedLine = line
+      .replace(/^\d+\)\s*/, '') // Remove "1) ", "2) ", etc.
+      .replace(/^\d+\.\s*/, '') // Remove "1. ", "2. ", etc.
+      .replace(/^\d+\s+/, '') // Remove "1 ", "2 ", etc.
+      .replace(/^[\-\•\*]\s*/, '') // Remove bullet points
+      .trim();
 
     if (cleanedLine.length >= config.min_step_length) {
-      steps.push({
-        step: steps.length + 1,
-        description: cleanedLine,
-        expectedResult: '',
-        testData: ''
-      });
+      // Check if line contains step and expected result in one line (e.g., "Login | User is logged in")
+      const stepParts = cleanedLine.split(/\s*[\|\-\→\:]\s*Expected\s*:\s*/i);
+      if (stepParts.length > 1) {
+        // Step has inline expected result
+        steps.push({
+          step: steps.length + 1,
+          description: stepParts[0].trim(),
+          expectedResult: stepParts[1].trim(),
+          testData: ''
+        });
+      } else {
+        // Use individual expected result if available
+        const stepIndex = steps.length;
+        const stepExpected = expectedResults[stepIndex] || '';
+
+        steps.push({
+          step: steps.length + 1,
+          description: cleanedLine,
+          expectedResult: stepExpected,
+          testData: ''
+        });
+      }
     }
   }
 

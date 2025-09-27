@@ -107,7 +107,7 @@ export default function UserManagement() {
   // Load users and teams
   useEffect(() => {
     loadUsers()
-    loadTeams()
+    loadTeams() // This is now async but we don't need to await it here
     initializeDefaultTeams()
 
     // Auto-login admin if no user is currently logged in
@@ -249,15 +249,28 @@ export default function UserManagement() {
     }
   }
 
-  const loadTeams = () => {
-    const allTeams = getAllTeams()
-    setTeams(allTeams)
+  const loadTeams = async () => {
+    try {
+      const allTeams = await getAllTeams()
+      setTeams(allTeams)
+    } catch (error) {
+      console.error('Failed to load teams:', error)
+      setTeams([]) // Ensure teams is always an array
+    }
   }
 
-  const loadUsers = () => {
+  const loadUsers = async () => {
     setLoading(true)
-    const allUsers = AuthService.getAllUsers()
-    setUsers(allUsers)
+    try {
+      // Load users from MongoDB via API
+      const allUsers = await AuthService.getAllUsersFromDB()
+      setUsers(allUsers)
+    } catch (error) {
+      console.error('Failed to load users:', error)
+      // Fallback to localStorage
+      const fallbackUsers = AuthService.getAllUsers()
+      setUsers(fallbackUsers)
+    }
     setLoading(false)
   }
 
@@ -547,7 +560,7 @@ export default function UserManagement() {
               className="px-3 py-2 border border-gray-300 rounded-md text-sm"
             >
               <option value="all">All Teams</option>
-              {teams.map(team => (
+              {(teams || []).map(team => (
                 <option key={team.id} value={team.id}>{team.name}</option>
               ))}
             </select>
@@ -612,7 +625,11 @@ export default function UserManagement() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <UserTeamsSummary userId={user.id} maxDisplay={2} />
+                      {user.role === 'super-admin' ? (
+                        <span className="text-xs text-purple-600 font-medium">All teams access</span>
+                      ) : (
+                        <UserTeamsSummary userId={user.id} maxDisplay={2} />
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
@@ -629,6 +646,11 @@ export default function UserManagement() {
                             userRole={user.role}
                             onAssignmentChange={loadTeams}
                           />
+                        )}
+                        {(user.role === 'super-admin') && (
+                          <div className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium border border-purple-200">
+                            Can manage all teams
+                          </div>
                         )}
                         <Button
                           variant="secondary"
@@ -687,10 +709,25 @@ export default function UserManagement() {
           }}
           onSave={async (userData) => {
             if (editingUser) {
-              // Update user - implement update logic
-              console.log('Update user:', userData)
-              // For now, just update local state
-              setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...userData } : u))
+              // Update user using AuthService
+              try {
+                const success = await AuthService.updateUser(editingUser.id, {
+                  email: userData.email || '',
+                  name: userData.name || '',
+                  username: userData.username || undefined,
+                  role: userData.role || 'user'
+                })
+
+                if (success) {
+                  alert('User updated successfully!')
+                  loadUsers() // Reload users list
+                } else {
+                  alert('Failed to update user')
+                }
+              } catch (error) {
+                console.error('Failed to update user:', error)
+                alert('Failed to update user: ' + (error as Error).message)
+              }
             } else {
               // Create new user
               try {
@@ -1143,6 +1180,7 @@ function UserModal({ user, isOpen, onClose, onSave }: UserModalProps) {
     sendEmail: true
   })
   const [showPassword, setShowPassword] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Generate random password function
   const generateRandomPassword = () => {
@@ -1174,7 +1212,15 @@ function UserModal({ user, isOpen, onClose, onSave }: UserModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    await onSave(formData)
+
+    if (isSubmitting) return // Prevent multiple submissions
+
+    setIsSubmitting(true)
+    try {
+      await onSave(formData)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   if (!isOpen) return null
@@ -1304,8 +1350,18 @@ function UserModal({ user, isOpen, onClose, onSave }: UserModalProps) {
             <Button variant="secondary" size="md" onClick={onClose} className="flex-1">
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="md" className="flex-1">
-              {user ? 'Update User' : 'Create User'}
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              className="flex-1"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                user ? 'Updating...' : 'Creating...'
+              ) : (
+                user ? 'Update User' : 'Create User'
+              )}
             </Button>
           </div>
         </form>

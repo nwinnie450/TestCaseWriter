@@ -5,6 +5,20 @@ import { generateFingerprint, generateLooseFingerprint, areExactDuplicates } fro
 import { calculateCaseSimilarity, findSimilarCases, getRecommendedAction } from './dedupe/similarity'
 import { mergeTestCases, isSafeMerge } from './dedupe/merge'
 
+// Import MongoDB service only on server side
+let mongodb: any = null
+let TestCaseDocument: any = null
+
+if (typeof window === 'undefined') {
+  try {
+    const mongoModule = require('./mongodb-service')
+    mongodb = mongoModule.mongodb
+    TestCaseDocument = mongoModule.TestCaseDocument
+  } catch (error) {
+    console.warn('MongoDB service not available:', error)
+  }
+}
+
 const STORAGE_KEY = 'testCaseWriter_generatedTestCases'
 
 export interface TestCaseSession {
@@ -706,11 +720,11 @@ export function cleanupDuplicateTestCaseIds(): void {
   try {
     const sessions = getStoredTestCaseSessions()
     let hasDuplicates = false
-    
+
     // Check for duplicate IDs across all sessions
     const allIds = new Set<string>()
     const duplicateIds = new Set<string>()
-    
+
     sessions.forEach(session => {
       session.testCases.forEach(tc => {
         if (allIds.has(tc.id)) {
@@ -721,7 +735,7 @@ export function cleanupDuplicateTestCaseIds(): void {
         }
       })
     })
-    
+
     if (hasDuplicates) {
 
       // Regenerate IDs for test cases with duplicates
@@ -732,20 +746,313 @@ export function cleanupDuplicateTestCaseIds(): void {
             const timestamp = Date.now()
             const randomSuffix = Math.random().toString(36).substring(2, 5)
             const newId = `TC-${timestamp}-${randomSuffix}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
-            
+
             return { ...tc, id: newId }
           }
           return tc
         })
       }))
-      
+
       // Save updated sessions
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSessions))
-      
+
     } else {
-      
+
     }
   } catch (error) {
     console.error('❌ Failed to cleanup duplicate test case IDs:', error)
+  }
+}
+
+// ========== MongoDB-based functions ==========
+
+export async function saveGeneratedTestCasesToMongoDB(
+  testCases: TestCase[],
+  documentNames: string[] = [],
+  model: string = 'gpt-4o',
+  projectId?: string,
+  projectName?: string,
+  continueSessionId?: string,
+  skipDuplicates: boolean = true
+): Promise<SaveResult> {
+  try {
+    let newTestCases: TestCase[] = []
+    let duplicateSignatures: string[] = []
+    let skipped = 0
+
+    if (skipDuplicates) {
+      // Get existing test cases from MongoDB
+      const filter = projectId ? { projectId } : {}
+      const existingTestCases = await mongodb.findMany<TestCaseDocument>('test_cases', filter)
+      const existingSignatures = new Set<string>()
+
+      // Build signature set for existing test cases
+      existingTestCases.forEach(tc => {
+        const signature = getTestCaseSignature(tc as any)
+        existingSignatures.add(signature)
+      })
+
+      // Deduplicate incoming test cases
+      for (const testCase of testCases) {
+        const signature = getTestCaseSignature(testCase)
+
+        if (existingSignatures.has(signature)) {
+          duplicateSignatures.push(signature)
+          skipped++
+        } else {
+          const simhash = buildTestCaseSimhash(testCase)
+          newTestCases.push({
+            ...testCase,
+            projectId: projectId || testCase.projectId || 'default',
+            data: {
+              ...testCase.data,
+              signature,
+              simhash
+            }
+          })
+          existingSignatures.add(signature)
+        }
+      }
+
+      // Auto-bypass duplicate detection if rate is too high
+      const duplicateRate = skipped / testCases.length
+      if (duplicateRate > 0.8 && testCases.length > 10) {
+        console.log('🚨 High duplicate rate detected, importing all test cases')
+        newTestCases = testCases.map(testCase => {
+          const signature = getTestCaseSignature(testCase)
+          const simhash = buildTestCaseSimhash(testCase)
+          return {
+            ...testCase,
+            projectId: projectId || testCase.projectId || 'default',
+            data: { ...testCase.data, signature, simhash }
+          }
+        })
+        skipped = 0
+        duplicateSignatures = []
+      }
+    } else {
+      // Import all test cases without duplicate checking
+      newTestCases = testCases.map(testCase => {
+        const signature = getTestCaseSignature(testCase)
+        const simhash = buildTestCaseSimhash(testCase)
+        return {
+          ...testCase,
+          projectId: projectId || testCase.projectId || 'default',
+          data: { ...testCase.data, signature, simhash }
+        }
+      })
+    }
+
+    // Convert TestCase to TestCaseDocument and save to MongoDB
+    if (newTestCases.length > 0) {
+      const testCaseDocuments: TestCaseDocument[] = newTestCases.map(tc => ({
+        id: tc.id,
+        title: tc.testCase || tc.title || '',
+        description: tc.qa || tc.description || '',
+        steps: Array.isArray(tc.testSteps) ? tc.testSteps : [],
+        priority: tc.priority as 'low' | 'medium' | 'high' | 'critical' || 'medium',
+        type: tc.type || 'manual',
+        tags: Array.isArray(tc.tags) ? tc.tags : [],
+        projectId: tc.projectId || 'default',
+        createdBy: 'system', // TODO: Get from current user
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }))
+
+      await mongodb.insertMany('test_cases', testCaseDocuments)
+    }
+
+    // Also save to localStorage for backward compatibility
+    if (newTestCases.length > 0) {
+      const originalResult = saveGeneratedTestCases(
+        newTestCases, documentNames, model, projectId, projectName, continueSessionId, false
+      )
+    }
+
+    const sessionId = continueSessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    return {
+      sessionId,
+      saved: newTestCases.length,
+      skipped,
+      duplicateSignatures,
+      exactDuplicates: skipped,
+      autoMerged: 0,
+      reviewRequired: 0,
+      mergeConflicts: []
+    }
+  } catch (error) {
+    console.error('❌ Failed to save test cases to MongoDB:', error)
+    // Fallback to localStorage
+    const fallbackResult = saveGeneratedTestCases(
+      testCases, documentNames, model, projectId, projectName, continueSessionId, skipDuplicates
+    )
+    return {
+      ...fallbackResult,
+      exactDuplicates: 0,
+      autoMerged: 0,
+      reviewRequired: 0,
+      mergeConflicts: []
+    }
+  }
+}
+
+export async function getAllStoredTestCasesFromMongoDB(projectId?: string): Promise<TestCase[]> {
+  try {
+    const filter = projectId ? { projectId } : {}
+    const testCaseDocuments = await mongodb.findMany<TestCaseDocument>('test_cases', filter, {
+      sort: { createdAt: -1 }
+    })
+
+    // Transform MongoDB documents back to TestCase format
+    const testCases: TestCase[] = testCaseDocuments.map(doc => ({
+      id: doc.id || doc._id?.toString() || '',
+      testCase: doc.title || '',
+      qa: doc.description || '',
+      testSteps: doc.steps || [],
+      priority: doc.priority || 'medium',
+      type: doc.type || 'manual',
+      tags: doc.tags || [],
+      projectId: doc.projectId || 'default',
+      status: 'active', // Default status
+      createdAt: doc.createdAt || new Date(),
+      updatedAt: doc.updatedAt || new Date(),
+      data: {
+        signature: getTestCaseSignature({
+          testCase: doc.title,
+          qa: doc.description,
+          testSteps: doc.steps
+        } as any)
+      }
+    }))
+
+    console.log('📖 GetAllStoredTestCasesFromMongoDB - Total test cases loaded:', testCases.length)
+    return testCases
+  } catch (error) {
+    console.error('❌ Failed to load test cases from MongoDB:', error)
+    // Fallback to localStorage
+    return getAllStoredTestCases()
+  }
+}
+
+export async function deleteTestCasesByIdsFromMongoDB(testCaseIds: string[]): Promise<void> {
+  try {
+    console.log('🗑️ DeleteTestCasesByIdsFromMongoDB - Input IDs:', testCaseIds)
+
+    // Delete from MongoDB
+    const deletedCount = await mongodb.deleteMany('test_cases', {
+      id: { $in: testCaseIds }
+    })
+
+    console.log(`🗑️ DeleteTestCasesByIdsFromMongoDB - Deleted ${deletedCount} test cases from MongoDB`)
+
+    // Also delete from localStorage for backward compatibility
+    deleteTestCasesByIds(testCaseIds)
+
+    console.log('🗑️ DeleteTestCasesByIdsFromMongoDB - Successfully deleted from both MongoDB and localStorage')
+  } catch (error) {
+    console.error('❌ Failed to delete test cases from MongoDB:', error)
+    // Fallback to localStorage only
+    deleteTestCasesByIds(testCaseIds)
+    throw new Error('Failed to delete test cases from MongoDB')
+  }
+}
+
+export async function getTestCasesByProjectIdFromMongoDB(projectId: string): Promise<TestCase[]> {
+  try {
+    const testCaseDocuments = await mongodb.findMany<TestCaseDocument>('test_cases',
+      { projectId },
+      { sort: { createdAt: -1 } }
+    )
+
+    // Transform MongoDB documents back to TestCase format
+    const testCases: TestCase[] = testCaseDocuments.map(doc => ({
+      id: doc.id || doc._id?.toString() || '',
+      testCase: doc.title || '',
+      qa: doc.description || '',
+      testSteps: doc.steps || [],
+      priority: doc.priority || 'medium',
+      type: doc.type || 'manual',
+      tags: doc.tags || [],
+      projectId: doc.projectId || 'default',
+      status: 'active', // Default status
+      createdAt: doc.createdAt || new Date(),
+      updatedAt: doc.updatedAt || new Date(),
+      data: {
+        signature: getTestCaseSignature({
+          testCase: doc.title,
+          qa: doc.description,
+          testSteps: doc.steps
+        } as any)
+      }
+    }))
+
+    return testCases
+  } catch (error) {
+    console.error('❌ Failed to load project test cases from MongoDB:', error)
+    // Fallback to localStorage
+    return getTestCasesByProjectId(projectId)
+  }
+}
+
+export async function migrateLocalStorageToMongoDB(): Promise<{ success: boolean, migrated: number, errors: number }> {
+  try {
+    console.log('🔄 Starting migration from localStorage to MongoDB...')
+
+    // Get all test cases from localStorage
+    const localStorageTestCases = getAllStoredTestCases()
+    console.log(`📦 Found ${localStorageTestCases.length} test cases in localStorage`)
+
+    let migrated = 0
+    let errors = 0
+
+    if (localStorageTestCases.length === 0) {
+      console.log('✅ No test cases to migrate')
+      return { success: true, migrated: 0, errors: 0 }
+    }
+
+    // Group test cases by project for better organization
+    const testCasesByProject = localStorageTestCases.reduce((groups, tc) => {
+      const projectId = tc.projectId || 'default'
+      if (!groups[projectId]) {
+        groups[projectId] = []
+      }
+      groups[projectId].push(tc)
+      return groups
+    }, {} as Record<string, TestCase[]>)
+
+    // Migrate each project's test cases
+    for (const [projectId, testCases] of Object.entries(testCasesByProject)) {
+      try {
+        console.log(`📁 Migrating ${testCases.length} test cases for project: ${projectId}`)
+
+        const result = await saveGeneratedTestCasesToMongoDB(
+          testCases,
+          [],
+          'migration',
+          projectId,
+          undefined,
+          undefined,
+          false // Don't skip duplicates during migration
+        )
+
+        migrated += result.saved
+        console.log(`✅ Successfully migrated ${result.saved} test cases for project: ${projectId}`)
+      } catch (projectError) {
+        console.error(`❌ Failed to migrate test cases for project ${projectId}:`, projectError)
+        errors += testCases.length
+      }
+    }
+
+    console.log(`🎉 Migration completed: ${migrated} migrated, ${errors} errors`)
+
+    return {
+      success: errors === 0,
+      migrated,
+      errors
+    }
+  } catch (error) {
+    console.error('❌ Failed to migrate localStorage to MongoDB:', error)
+    return { success: false, migrated: 0, errors: -1 }
   }
 }

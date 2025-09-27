@@ -2,14 +2,21 @@ import { TestCase } from '@/types/index'
 import * as XLSX from 'xlsx'
 import { FEAI94_PRESET, extractFieldValue, normalizeValue, parseStepsFromText } from './presets/feai94-preset'
 
-// Generate unique import ID: TC_IMPORT_{RUNNING_NUMBER}
+// Generate unique import ID: TC_IMPORT_{MODULE}_{RUNNING_NUMBER}
 // Checks existing test cases to ensure no duplicates across multiple imports
-function generateImportId(existingTestCases: TestCase[] = []): string {
-  // Find the highest import number from existing test cases
+function generateImportId(existingTestCases: TestCase[] = [], module: string = ''): string {
+  // Clean module name for ID (remove spaces, special chars, make uppercase)
+  const cleanModule = module
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase()
+    .substring(0, 8) || 'GEN' // Use 'GEN' for general if no module
+
+  // Find the highest import number for this module
   let maxImportNumber = 0
+  const pattern = new RegExp(`^TC_IMPORT_${cleanModule}_(\\d+)$`)
 
   existingTestCases.forEach(tc => {
-    const match = tc.id.match(/^TC_IMPORT_(\d+)$/)
+    const match = tc.id.match(pattern)
     if (match) {
       const num = parseInt(match[1], 10)
       if (num > maxImportNumber) {
@@ -18,9 +25,9 @@ function generateImportId(existingTestCases: TestCase[] = []): string {
     }
   })
 
-  // Generate next sequential number
+  // Generate next sequential number for this module
   const nextNumber = maxImportNumber + 1
-  return `TC_IMPORT_${String(nextNumber).padStart(3, '0')}`
+  return `TC_IMPORT_${cleanModule}_${String(nextNumber).padStart(3, '0')}`
 }
 
 export interface ImportResult {
@@ -172,30 +179,49 @@ export function mapRowToFEAI94TestCase(rowData: any, options: ImportOptions = {}
   try {
     console.log('🎯 FEAI-94 Mapper - Processing row:', Object.keys(rowData))
 
-    // Always generate new unique ID to avoid duplicates from Excel
-    const id = generateImportId()
-
     const title = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.title) || 'Imported Test Case'
-    const module = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.module)
+    const description = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.description)
+    const module = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.module) || 'General'
+
+    // Use existing ID if provided, otherwise generate new one with module
+    const existingId = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.id)
+    const id = existingId || generateImportId(options.existingTestCases, module)
     const stepsText = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.steps_description)
     const testData = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.test_data)
     const expectedResult = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.expected_result)
     const qa = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.qa_owner)
     const remarks = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.remarks)
 
+    // Additional fields
+    const project = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.project)
+    const feature = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.feature)
+    const enhancement = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.enhancement)
+    const ticket = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.ticket)
+    const tagsText = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.tags)
+    const complexity = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.complexity)
+
     // Priority and status extraction
     const priorityValue = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.priority)
     const statusValue = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.test_result)
 
     // Map and normalize priority
-    const priority = normalizeValue(priorityValue, 'medium', ['critical', 'high', 'medium', 'low'])
-    const status = normalizeValue(statusValue, 'Not Run', ['Passed', 'Failed', 'Blocked', 'Skipped', 'Not Run'])
+    const priority = normalizeValue(priorityValue, FEAI94_PRESET.normalizers.priority) || 'medium'
+    const status = normalizeValue(statusValue, FEAI94_PRESET.normalizers.status) || 'draft'
 
-    // Parse test steps
-    const testSteps = stepsText ? parseStepsFromText(stepsText).map(step => ({
-      ...step,
-      expectedResult: step.expectedResult || ''
-    })) : []
+    // Parse tags - only use explicit tags, don't add module/priority automatically
+    const tags = tagsText ? tagsText.split(/[,;|]/).map(tag => tag.trim()).filter(Boolean) : []
+
+    // Get individual step expected results if available
+    const stepExpectedResults = extractFieldValue(rowData, FEAI94_PRESET.columnMappings.step_expected_results)
+
+    // Parse test steps - FEAI-94 format: can have individual or overall expected results
+    const parsedSteps = stepsText ? parseStepsFromText(stepsText, stepExpectedResults) : []
+    const testSteps = parsedSteps.map((step) => ({
+      step: step.step,
+      description: step.description,
+      expectedResult: step.expectedResult || '', // Can be empty if using overall expected result
+      testData: step.testData || ''
+    }))
 
     console.log('🎯 FEAI-94 Mapper - Extracted values:', {
       id,
@@ -210,19 +236,32 @@ export function mapRowToFEAI94TestCase(rowData: any, options: ImportOptions = {}
     const testCase: TestCase = {
       id,
       templateId: 'feai94-template',
-      projectId: options.defaultProject || 'default',
+      projectId: project || options.defaultProject || 'default',
       priority: priority as any,
       status: status as any,
-      tags: [module, priority].filter(Boolean),
+      tags,
       createdAt: new Date(),
       updatedAt: new Date(),
       createdBy: 'FEAI-94-importer',
+      lastModifiedBy: 'FEAI-94-importer',
       version: 1,
+
+      // Enhanced fields
+      enhancement: enhancement || '',
+      ticketId: ticket || '',
+      feature: feature || '',
+      module: module || '',
+      testCase: title,
+      testSteps: testSteps,
+      testData: testData || '',
+      testResult: expectedResult || '',
+      qa: qa || '',
+      remarks: remarks || '',
 
       // FEAI-94 specific data structure
       data: {
         title,
-        description: stepsText || title,
+        description: description || '', // Use separate description field or empty if not available
         preconditions: '',
         steps: testSteps,
         expectedResult: expectedResult || '',
@@ -232,9 +271,13 @@ export function mapRowToFEAI94TestCase(rowData: any, options: ImportOptions = {}
         estimatedTime: '',
         testData: testData || '',
         remarks: remarks || '',
+        complexity: complexity || 'Medium',
 
         // FEAI-94 specific fields
         module: module || '',
+        feature: feature || '',
+        enhancement: enhancement || '',
+        ticketId: ticket || '',
         qaOwner: qa || '',
         isRegression: false,
         isAutomation: false,
@@ -242,16 +285,7 @@ export function mapRowToFEAI94TestCase(rowData: any, options: ImportOptions = {}
         automationPreset: '',
         automationLoop: '',
         automationNote: ''
-      },
-
-      // Legacy fields for backward compatibility
-      module: module || '',
-      testCase: title,
-      testSteps: testSteps,
-      testData: testData || '',
-      testResult: expectedResult || '',
-      qa: qa || '',
-      remarks: remarks || ''
+      }
     }
 
     console.log('🎯 FEAI-94 Mapper - Created test case:', testCase.id)

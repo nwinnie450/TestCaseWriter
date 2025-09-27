@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+// import { prisma } from '@/lib/prisma' // TODO: Convert to MongoDB
 import { getCurrentUser } from '@/lib/user-storage'
 import { getCurrentUserFromSession } from '@/lib/auth-session'
+import { mongodb } from '@/lib/mongodb-service'
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { runCaseId: string } }
 ) {
   try {
+    // TODO: Convert this complex endpoint to use MongoDB
+    return NextResponse.json({
+      success: false,
+      error: 'This endpoint needs to be converted to MongoDB',
+      message: 'Prisma has been removed, this endpoint needs MongoDB implementation'
+    }, { status: 501 });
+
+    /*
     const { runCaseId } = params
     const body = await request.json()
 
@@ -95,6 +104,7 @@ export async function PATCH(
     }
 
     return NextResponse.json({ runCase: updatedRunCase })
+    */
 
   } catch (error) {
     console.error('Failed to update run case:', error)
@@ -110,6 +120,14 @@ export async function GET(
   { params }: { params: { runCaseId: string } }
 ) {
   try {
+    // TODO: Convert this complex endpoint to use MongoDB
+    return NextResponse.json({
+      success: false,
+      error: 'This endpoint needs to be converted to MongoDB',
+      message: 'Prisma has been removed, this endpoint needs MongoDB implementation'
+    }, { status: 501 });
+
+    /*
     const { runCaseId } = params
 
     const runCase = await prisma.runCase.findUnique({
@@ -145,6 +163,7 @@ export async function GET(
     }
 
     return NextResponse.json({ runCase: runCaseWithParsedData })
+    */
 
   } catch (error) {
     console.error('Failed to fetch run case:', error)

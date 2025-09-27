@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { ObjectId } from 'mongodb'
+import { mongodb } from '@/lib/mongodb-service'
 import { getCurrentUser } from '@/lib/user-storage'
 
 function parseJSONField(value: any, fallback: any) {
@@ -26,21 +27,45 @@ export async function GET(
 
     console.log('🔍 [GET /api/runs/[runId]] Fetching run:', runId);
 
-    const run = await prisma.run.findUnique({
-      where: { id: runId },
-      include: {
-        runCases: {
-          include: {
-            runSteps: {
-              orderBy: { idx: 'asc' }
-            },
-            evidence: true,
-            defects: true
-          },
-          orderBy: { createdAt: 'asc' }
-        }
+    // Find run by ID (support both string ID and ObjectId)
+    let run
+    if (ObjectId.isValid(runId)) {
+      run = await mongodb.findOne('runs', { _id: new ObjectId(runId) })
+    } else {
+      run = await mongodb.findOne('runs', { id: runId })
+    }
+
+    if (run) {
+      // Get run cases for this run
+      const runCases = await mongodb.findMany('run_cases', { runId: run._id })
+
+      // Get run steps for each case
+      const runCasesWithSteps = await Promise.all(
+        runCases.map(async (runCase: any) => {
+          const runSteps = await mongodb.findMany('run_steps',
+            { runCaseId: runCase._id },
+            { sort: { idx: 1 } }
+          )
+          return {
+            ...runCase,
+            id: runCase._id?.toString() || runCase.id,
+            runSteps: runSteps.map((step: any) => ({
+              ...step,
+              id: step._id?.toString() || step.id
+            })),
+            evidence: [], // TODO: Implement evidence collection
+            defects: []   // TODO: Implement defects collection
+          }
+        })
+      )
+
+      run = {
+        ...run,
+        id: run._id?.toString() || run.id,
+        _id: undefined,
+        runCases: runCasesWithSteps
       }
-    })
+    }
 
     console.log('🔍 [GET /api/runs/[runId]] Run found:', !!run);
     console.log('🔍 [GET /api/runs/[runId]] Run runCases count:', run?.runCases?.length || 0);
@@ -115,9 +140,12 @@ export async function PATCH(
     }
 
     // Check if run exists
-    const existingRun = await prisma.run.findUnique({
-      where: { id: runId }
-    })
+    let existingRun
+    if (ObjectId.isValid(runId)) {
+      existingRun = await mongodb.findOne('runs', { _id: new ObjectId(runId) })
+    } else {
+      existingRun = await mongodb.findOne('runs', { id: runId })
+    }
 
     if (!existingRun) {
       return NextResponse.json(
@@ -145,10 +173,12 @@ export async function PATCH(
     }
 
     // Update the run
-    const updatedRun = await prisma.run.update({
-      where: { id: runId },
-      data: updateData
-    })
+    let updatedRun
+    if (ObjectId.isValid(runId)) {
+      updatedRun = await mongodb.updateOne('runs', { _id: new ObjectId(runId) }, { $set: updateData })
+    } else {
+      updatedRun = await mongodb.updateOne('runs', { id: runId }, { $set: updateData })
+    }
 
     return NextResponse.json({ run: updatedRun })
 
@@ -178,9 +208,12 @@ export async function DELETE(
     }
 
     // Check if run exists
-    const existingRun = await prisma.run.findUnique({
-      where: { id: runId }
-    })
+    let existingRun
+    if (ObjectId.isValid(runId)) {
+      existingRun = await mongodb.findOne('runs', { _id: new ObjectId(runId) })
+    } else {
+      existingRun = await mongodb.findOne('runs', { id: runId })
+    }
 
     if (!existingRun) {
       return NextResponse.json(
@@ -189,10 +222,24 @@ export async function DELETE(
       )
     }
 
-    // Delete the run (cascade will handle related records)
-    await prisma.run.delete({
-      where: { id: runId }
-    })
+    // Get run cases for cleanup
+    const runCases = await mongodb.findMany('run_cases', { runId: existingRun._id })
+    const runCaseIds = runCases.map((rc: any) => rc._id)
+
+    // Delete run steps first
+    if (runCaseIds.length > 0) {
+      await mongodb.deleteMany('run_steps', { runCaseId: { $in: runCaseIds } })
+    }
+
+    // Delete run cases
+    await mongodb.deleteMany('run_cases', { runId: existingRun._id })
+
+    // Delete the run
+    if (ObjectId.isValid(runId)) {
+      await mongodb.deleteOne('runs', { _id: new ObjectId(runId) })
+    } else {
+      await mongodb.deleteOne('runs', { id: runId })
+    }
 
     return NextResponse.json({ success: true })
 

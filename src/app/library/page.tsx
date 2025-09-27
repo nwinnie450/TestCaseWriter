@@ -59,19 +59,42 @@ export default function TestCaseManagement() {
     description: '',
     category: 'Functional',
     priority: 'Medium',
-    testSteps: '',
-    expectedResult: '',
+    steps: [{ step: '' }],
+    testData: '',
     module: '',
     feature: '',
-    testData: '',
     requirements: '',
     tags: '',
     enhancement: '',
     ticketId: '',
-    complexity: 'Medium'
+    projectId: '',
   })
 
+  // Helper functions for step management
+  const addStep = () => {
+    setNewTestCase(prev => ({
+      ...prev,
+      steps: [...prev.steps, { step: '' }]
+    }))
+  }
 
+  const removeStep = (index: number) => {
+    if (newTestCase.steps.length > 1) {
+      setNewTestCase(prev => ({
+        ...prev,
+        steps: prev.steps.filter((_, i) => i !== index)
+      }))
+    }
+  }
+
+  const updateStep = (index: number, field: 'step', value: string) => {
+    setNewTestCase(prev => ({
+      ...prev,
+      steps: prev.steps.map((step, i) =>
+        i === index ? { ...step, [field]: value } : step
+      )
+    }))
+  }
 
   // Get current user (memoized to prevent infinite re-renders)
   const [currentUser, setCurrentUser] = useState(() => AuthService.getCurrentUser())
@@ -80,13 +103,12 @@ export default function TestCaseManagement() {
   const refreshTestCases = async () => {
     setLoading(true)
     try {
-      const { getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
-      const storedTestCases = getAllStoredTestCases()
-      const stats = getStorageStats()
+      console.log('🔄 Refreshing test cases from MongoDB API...')
 
-      setTestCases(storedTestCases)
-      setStorageStats(stats)
-      console.log('🔄 Refreshed test cases from localStorage:', storedTestCases.length)
+      // Use the existing loadTestCases function which already handles API fallback to localStorage
+      await loadTestCases()
+
+      console.log('✅ Successfully refreshed test cases')
     } catch (error) {
       console.error('❌ Failed to refresh test cases:', error)
     } finally {
@@ -110,53 +132,56 @@ export default function TestCaseManagement() {
     }
   }, [])
 
-  // Load test cases from localStorage (primary) with API fallback
-  useEffect(() => {
-    const loadTestCases = async () => {
-      try {
-        console.log('📚 Loading test cases from localStorage (primary)...')
+  // Define loadTestCases function that can be reused
+  const loadTestCases = async () => {
+    try {
+      console.log('📚 Loading test cases from MongoDB API (primary)...')
 
-        // Load from localStorage first (since we're in development)
-        const { getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
-        const storedTestCases = getAllStoredTestCases()
-        const stats = getStorageStats()
+      // Try MongoDB API first
+      const response = await fetch('/api/test-cases')
+      if (response.ok) {
+        const apiResponse = await response.json()
+        const apiTestCases = apiResponse.testCases || []
 
-        if (storedTestCases.length > 0) {
-          setTestCases(storedTestCases)
-          setStorageStats(stats)
-          setLoading(false)
-          console.log('✅ Successfully loaded test cases from localStorage:', storedTestCases.length)
-          return
-        }
-
-        // Fallback to API if no localStorage data
-        console.log('⚠️ No localStorage data, trying API...')
-        const response = await fetch('/api/test-cases')
-        if (response.ok) {
-          const apiTestCases = await response.json()
-          setTestCases(apiTestCases)
-          setStorageStats({
-            sessions: 1,
-            totalTestCases: apiTestCases.length,
-            storageSize: `${Math.round(JSON.stringify(apiTestCases).length / 1024)} KB`
-          })
-          setLoading(false)
-          console.log('✅ Successfully loaded test cases from API:', apiTestCases.length)
-          return
-        }
-
-        // No data found anywhere
-        console.log('⚠️ No test cases found in localStorage or API')
-        setTestCases([])
-        setStorageStats({ sessions: 0, totalTestCases: 0, storageSize: '0 KB' })
+        setTestCases(apiTestCases)
+        setStorageStats({
+          sessions: 1,
+          totalTestCases: apiTestCases.length,
+          storageSize: `${Math.round(JSON.stringify(apiTestCases).length / 1024)} KB`
+        })
         setLoading(false)
-
-      } catch (error) {
-        console.error('❌ Failed to load test cases:', error)
-        setLoading(false)
+        console.log('✅ Successfully loaded test cases from MongoDB API:', apiTestCases.length)
+        return
       }
-    }
 
+      // Fallback to localStorage if no API data
+      console.log('⚠️ No MongoDB data, trying localStorage...')
+      const { getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
+      const storedTestCases = getAllStoredTestCases()
+      const stats = getStorageStats()
+
+      if (storedTestCases.length > 0) {
+        setTestCases(storedTestCases)
+        setStorageStats(stats)
+        setLoading(false)
+        console.log('✅ Successfully loaded test cases from localStorage fallback:', storedTestCases.length)
+        return
+      }
+
+      // No data found anywhere
+      console.log('⚠️ No test cases found in MongoDB or localStorage')
+      setTestCases([])
+      setStorageStats({ sessions: 0, totalTestCases: 0, storageSize: '0 KB' })
+      setLoading(false)
+
+    } catch (error) {
+      console.error('❌ Failed to load test cases:', error)
+      setLoading(false)
+    }
+  }
+
+  // Load test cases on component mount
+  useEffect(() => {
     loadTestCases()
   }, [])
 
@@ -178,26 +203,50 @@ export default function TestCaseManagement() {
     }
   }, [])
 
-  // Load projects from localStorage
+  // Load projects from MongoDB API (with localStorage fallback)
   useEffect(() => {
-    try {
-      
-      const stored = localStorage.getItem('testCaseWriter_projects')
+    const loadProjects = async () => {
+      console.log('📚 Loading projects...')
 
-      if (stored) {
-        const parsedProjects = JSON.parse(stored)
+      try {
+        // Direct API call to test
+        console.log('🔍 Making direct API call...')
+        const response = await fetch('/api/projects')
+        if (response.ok) {
+          const data = await response.json()
+          console.log('🔍 Direct API response:', data)
 
-        const activeProjects = parsedProjects.filter((p: any) => p.status === 'active')
+          if (data.projects && Array.isArray(data.projects) && data.projects.length > 0) {
+            const activeProjects = data.projects.filter((p: any) => p.status === 'active')
+            console.log('🔍 Active projects from direct call:', activeProjects)
 
-        setProjects(activeProjects)
-      } else {
-        
-        setProjects([])
+            if (activeProjects.length > 0) {
+              const mappedProjects = activeProjects.map(p => ({ id: p.id, name: p.name }))
+              console.log('🔍 Setting projects to:', mappedProjects)
+              setProjects(mappedProjects)
+              console.log('✅ Successfully loaded projects directly from API:', activeProjects.length)
+              return
+            }
+          }
+        }
+
+        // Fallback projects
+        console.log('⚠️ Using fallback projects')
+        setProjects([
+          { id: 'litellm', name: 'LiteLLM' },
+          { id: 'default', name: 'Default Project' }
+        ])
+
+      } catch (error) {
+        console.error('❌ Error loading projects:', error)
+        setProjects([
+          { id: 'litellm', name: 'LiteLLM' },
+          { id: 'default', name: 'Default Project' }
+        ])
       }
-    } catch (error) {
-      console.error('Failed to load projects:', error)
-      setProjects([])
     }
+
+    loadProjects()
   }, [])
 
   // Load templates from localStorage
@@ -313,34 +362,55 @@ export default function TestCaseManagement() {
 
   const handleSaveTestCase = async (updatedTestCase: TestCase) => {
     try {
-      // Update the test case in localStorage
-      const { getAllStoredTestCases, getStoredTestCaseSessions, getStorageStats } = await import('@/lib/test-case-storage')
-      
-      // Get all sessions and update the specific test case
-      const sessions = getStoredTestCaseSessions()
-      const updatedSessions = sessions.map(session => ({
-        ...session,
-        testCases: session.testCases.map(tc => 
-          tc.id === updatedTestCase.id ? updatedTestCase : tc
-        )
-      }))
-      
-      // Save updated sessions back to localStorage
-      localStorage.setItem('testCaseWriter_generatedTestCases', JSON.stringify(updatedSessions))
-      
-      // Refresh the UI
-      const updatedTestCases = getAllStoredTestCases()
-      const updatedStats = getStorageStats()
-      
-      setTestCases(updatedTestCases)
-      setStorageStats(updatedStats)
-      
+      console.log('🔄 Saving test case updates:', updatedTestCase.id)
+
+      // Prepare update payload for API
+      const updateData = {
+        id: updatedTestCase.id,
+        title: updatedTestCase.data?.title || updatedTestCase.testCase,
+        description: updatedTestCase.data?.description || '',
+        steps: updatedTestCase.testSteps || updatedTestCase.steps || [],
+        priority: updatedTestCase.priority || 'medium',
+        type: updatedTestCase.type || 'manual',
+        tags: updatedTestCase.tags || [],
+        projectId: updatedTestCase.projectId || null,
+        // Include additional fields
+        module: updatedTestCase.module || updatedTestCase.data?.module,
+        feature: updatedTestCase.feature || updatedTestCase.data?.feature,
+        enhancement: updatedTestCase.enhancement,
+        ticketId: updatedTestCase.ticketId,
+        qa: updatedTestCase.qa,
+        remarks: updatedTestCase.remarks
+      }
+
+      // Update via API
+      const response = await fetch('/api/test-cases', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData)
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        console.log('✅ API update successful:', result)
+
+        // Refresh test cases from API
+        await loadTestCases()
+
+        alert(`✅ Test case "${updatedTestCase.data?.title || updatedTestCase.testCase}" has been updated successfully!`)
+      } else {
+        const errorData = await response.json()
+        console.error('❌ API update failed:', errorData)
+        alert(`❌ Failed to save test case: ${errorData.error || 'Unknown error'}`)
+        return
+      }
+
       // Close the edit modal
       setShowEditModal(false)
       setEditingTestCase(null)
-      
-      alert(`✅ Test case "${updatedTestCase.data?.title || updatedTestCase.testCase}" has been updated successfully!`)
-      
+
     } catch (error) {
       console.error('Failed to save test case:', error)
       alert('❌ Failed to save test case changes. Please try again.')
@@ -353,12 +423,75 @@ export default function TestCaseManagement() {
       alert('Please select test cases to delete')
       return
     }
-    
+
+    // Check if any test cases are in active execution runs
+    try {
+      const response = await fetch('/api/test-cases/check-run-usage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ testCaseIds }),
+      })
+
+      if (response.ok) {
+        const runUsageInfo = await response.json()
+        const blockedIds: string[] = []
+        const warningIds: string[] = []
+        const runDetails: { [testCaseId: string]: any[] } = {}
+
+        testCaseIds.forEach(id => {
+          const runsInUse = runUsageInfo.testCasesInRuns[id] || []
+          const canDelete = runUsageInfo.canDelete[id]
+
+          if (runsInUse.length > 0) {
+            runDetails[id] = runsInUse
+            if (!canDelete) {
+              blockedIds.push(id)
+            } else {
+              warningIds.push(id)
+            }
+          }
+        })
+
+        // Block deletion if any test cases are in active runs
+        if (blockedIds.length > 0) {
+          const blockedTestCases = testCases.filter(tc => blockedIds.includes(tc.id))
+          const testCaseNames = blockedTestCases.map(tc => `"${tc.data?.title || tc.testCase || tc.id}"`).join(', ')
+          alert(
+            `🚫 Cannot Delete Test Cases\n\nThe following test case(s) are part of active execution runs and cannot be deleted:\n\n${testCaseNames}\n\nPlease complete or cancel the execution runs first, then try again.`
+          )
+          return
+        }
+
+        // Warn about test cases in draft runs
+        if (warningIds.length > 0) {
+          const warningTestCases = testCases.filter(tc => warningIds.includes(tc.id))
+          const runsList = warningTestCases.map(tc => {
+            const runs = runDetails[tc.id]
+            const runNames = runs.map(run => `"${run.runName}" (${run.runStatus})`).join(', ')
+            return `• ${tc.data?.title || tc.testCase || tc.id}: ${runNames}`
+          }).join('\n')
+
+          const shouldProceed = confirm(
+            `⚠️ Warning: Some test cases are part of execution runs:\n\n${runsList}\n\nDeleting these test cases will remove them from their respective runs. Do you want to proceed?`
+          )
+
+          if (!shouldProceed) {
+            return
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check run usage:', error)
+      // Continue with deletion if check fails (non-critical)
+    }
+
     // Validate that we're not accidentally deleting all test cases
     if (testCaseIds.length === testCases.length) {
       const confirmed = confirm(`⚠️ WARNING: You're about to delete ALL ${testCaseIds.length} test cases! This will remove everything. Are you absolutely sure?`)
       if (!confirmed) {
-        
+
         return
       }
     }
@@ -437,64 +570,77 @@ export default function TestCaseManagement() {
 
   const handleBulkSave = async (updates: Partial<TestCase>) => {
     try {
-      console.log('Bulk updating test cases:', selectedIds, updates)
-      
-      // Import storage functions
-      const { getStoredTestCaseSessions, getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
-      
-      // Get all sessions
-      const sessions = getStoredTestCaseSessions()
-      
-      // Update selected test cases in all sessions
-      const updatedSessions = sessions.map(session => ({
-        ...session,
-        testCases: session.testCases.map(tc => {
-          if (selectedIds.includes(tc.id)) {
-            const updatedTestCase = { ...tc, ...updates }
-            
-            // Handle special tag actions
-            if ((updates as any)._tagAction && updates.tags) {
-              const existingTags = tc.tags || []
-              const newTags = updates.tags as string[]
-              
-              switch ((updates as any)._tagAction) {
-                case 'add':
-                  updatedTestCase.tags = [...existingTags, ...newTags].filter((tag: string, index: number, arr: string[]) => arr.indexOf(tag) === index)
-                  break
-                case 'replace':
-                  updatedTestCase.tags = newTags
-                  break
-                case 'remove':
-                  updatedTestCase.tags = existingTags.filter((tag: string) => !newTags.includes(tag))
-                  break
-              }
-              
-              // Remove the special action field
-              delete (updatedTestCase as any)._tagAction
-            }
-            
-            return updatedTestCase
+      console.log('🔄 Bulk updating test cases via MongoDB API:', selectedIds, updates)
+
+      // Process updates for each selected test case
+      const updatePromises = selectedIds.map(async (testCaseId) => {
+        const testCase = testCases.find(tc => tc.id === testCaseId)
+        if (!testCase) return null
+
+        let finalUpdates = { ...updates }
+
+        // Handle special tag actions
+        if ((updates as any)._tagAction && updates.tags) {
+          const existingTags = testCase.tags || []
+          const newTags = updates.tags as string[]
+
+          switch ((updates as any)._tagAction) {
+            case 'add':
+              finalUpdates.tags = [...existingTags, ...newTags].filter((tag: string, index: number, arr: string[]) => arr.indexOf(tag) === index)
+              break
+            case 'replace':
+              finalUpdates.tags = newTags
+              break
+            case 'remove':
+              finalUpdates.tags = existingTags.filter((tag: string) => !newTags.includes(tag))
+              break
           }
-          return tc
+
+          // Remove the special action field
+          delete (finalUpdates as any)._tagAction
+        }
+
+        // Prepare update payload
+        const updateData = {
+          ...finalUpdates,
+          id: testCaseId,
+          title: testCase.data?.title || testCase.testCase,
+          description: testCase.data?.description || testCase.qa || '',
+          steps: testCase.testSteps || testCase.steps || []
+        }
+
+        // Send update to API
+        const response = await fetch('/api/test-cases', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updateData)
         })
-      }))
-      
-      // Save updated sessions back to localStorage
-      localStorage.setItem('testCaseWriter_generatedTestCases', JSON.stringify(updatedSessions))
-      
-      // Refresh the UI
-      const updatedTestCases = getAllStoredTestCases()
-      const updatedStats = getStorageStats()
-      
-      setTestCases(updatedTestCases)
-      setStorageStats(updatedStats)
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(`Failed to update ${testCaseId}: ${errorData.error}`)
+        }
+
+        return response.json()
+      })
+
+      // Wait for all updates to complete
+      const results = await Promise.all(updatePromises)
+      const successCount = results.filter(r => r !== null).length
+
+      // Refresh the UI data from API
+      await loadTestCases()
+
       setShowBulkEditModal(false)
-      
-      alert(`✅ Successfully updated ${selectedIds.length} test case${selectedIds.length !== 1 ? 's' : ''}!`)
-      
+      setSelectedIds([]) // Clear selection
+
+      alert(`✅ Successfully updated ${successCount} test case${successCount !== 1 ? 's' : ''}!`)
+
     } catch (error) {
       console.error('Failed to bulk update test cases:', error)
-      alert('❌ Failed to update test cases. Please try again.')
+      alert(`❌ Failed to update test cases: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -570,36 +716,45 @@ export default function TestCaseManagement() {
 
   const handleImportTestCases = async (importedTestCases: TestCase[], options: any) => {
     try {
+      console.log('🔄 Importing test cases to MongoDB API...')
 
-      // If a project is selected, assign it to all imported test cases
-      const testCasesToSave = selectedProjectFilter
-        ? importedTestCases.map(tc => ({ ...tc, projectId: selectedProjectFilter }))
+      // If a project is selected (either from import options or filter), assign it to all imported test cases
+      const projectToAssign = options.defaultProject || selectedProjectFilter
+      const testCasesToSave = projectToAssign
+        ? importedTestCases.map(tc => ({ ...tc, projectId: projectToAssign }))
         : importedTestCases
 
-      // Use the proper storage system to save imported test cases
-      const { saveGeneratedTestCases } = await import('@/lib/test-case-storage')
+      console.log('🔍 Project assignment:', {
+        defaultProject: options.defaultProject,
+        selectedProjectFilter,
+        projectToAssign,
+        testCasesCount: testCasesToSave.length
+      })
 
-      const saveResult = saveGeneratedTestCases(
-        testCasesToSave,
-        ['imported-data'], // document names
-        'imported', // model
-        selectedProjectFilter || undefined, // project ID
-        selectedProjectFilter ? 'Imported Project' : undefined, // project name
-        undefined, // continueSessionId
-        options.skipDuplicates !== false // skipDuplicates (default to true if not specified)
-      )
+      // Save directly to MongoDB using the API
+      const response = await fetch('/api/test-cases', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(testCasesToSave)
+      })
 
-      setShowImportModal(false)
+      if (response.ok) {
+        const result = await response.json()
+        console.log('✅ Successfully imported test cases to MongoDB:', result.count)
 
-      // Refresh the page data
-      const { getAllStoredTestCases, getStorageStats } = await import('@/lib/test-case-storage')
-      const refreshedTestCases = getAllStoredTestCases()
-      const refreshedStats = getStorageStats()
+        setShowImportModal(false)
 
-      setTestCases(refreshedTestCases)
-      setStorageStats(refreshedStats)
+        // Refresh the page data from API
+        await loadTestCases()
 
-      alert(`Successfully imported ${saveResult.saved} test cases! (${saveResult.skipped} skipped as duplicates)`)
+        alert(`Successfully imported ${result.count} test cases!`)
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to import test cases')
+      }
+
     } catch (error) {
       console.error('❌ Error importing test cases:', error)
       alert(`Failed to import test cases: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -609,74 +764,67 @@ export default function TestCaseManagement() {
   // Manual test case creation
   const handleCreateTestCase = async () => {
     try {
-      const testCaseId = `TC_MANUAL_${Date.now().toString(36).toUpperCase()}`
-
-      const newTC: TestCase = {
-        id: testCaseId,
-        templateId: 'default-template',
-        projectId: newTestCase.projectId || selectedProjectFilter || 'default',
-        status: 'draft',
-        title: newTestCase.title,
-        description: newTestCase.description,
-        testCase: newTestCase.title,
-        module: newTestCase.module || 'General',
-        testSteps: newTestCase.testSteps ? newTestCase.testSteps.split('\n').filter(s => s.trim()).map((step, index) => ({
-          step: index + 1,
-          description: step.trim(),
-          expectedResult: '',
-          testData: ''
-        })) : [],
-        testData: newTestCase.testData || '',
-        testResult: newTestCase.expectedResult,
-        qa: 'Manual Creator',
-        remarks: '',
-        priority: newTestCase.priority.toLowerCase() as 'low' | 'medium' | 'high' | 'critical',
-        tags: newTestCase.tags ? newTestCase.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        createdBy: currentUser?.id || 'system',
-        version: 1,
-        data: {
-          title: newTestCase.title,
-          description: newTestCase.description,
-          preconditions: '',
-          steps: newTestCase.testSteps ? newTestCase.testSteps.split('\n').filter(s => s.trim()).map((step, index) => ({
-            step: index + 1,
-            description: step.trim(),
-            expectedResult: '',
-            testData: ''
-          })) : [],
-          expectedResult: newTestCase.expectedResult,
-          testData: newTestCase.testData || '',
-          category: newTestCase.category,
-          assignee: currentUser?.name || 'Manual Creator',
-          estimatedTime: '',
-          complexity: newTestCase.complexity,
-          requirements: newTestCase.requirements ? newTestCase.requirements.split(',').map(req => req.trim()).filter(Boolean) : [],
-          feature: newTestCase.feature,
-          enhancement: newTestCase.enhancement,
-          ticketId: newTestCase.ticketId,
-          isManuallyCreated: true,
-          source: 'Manual Creation'
+      // Save directly to MongoDB only (skip localStorage)
+      try {
+        // Ensure we have valid steps data
+        const validSteps = newTestCase.steps.filter(s => s.step.trim())
+        if (validSteps.length === 0) {
+          validSteps.push({ step: 'Default step' })
         }
+
+        // Generate running number for test case ID
+        const modulePrefix = (newTestCase.module || 'General').replace(/\s+/g, '').toLowerCase()
+        const runningNumber = Date.now().toString().slice(-6) // Use last 6 digits of timestamp as running number
+        const testCaseId = `tc_${modulePrefix}_${runningNumber}`
+
+        const apiPayload = {
+          id: testCaseId,
+          title: newTestCase.title?.trim() || 'Untitled Test Case',
+          description: newTestCase.description?.trim() || '',
+          steps: validSteps.map((stepData, index) => ({
+            id: `step_${index + 1}`,
+            step: stepData.step?.trim() || `Step ${index + 1}`,
+            expected: ''
+          })),
+          priority: (newTestCase.priority || 'medium').toLowerCase(),
+          type: 'manual',
+          tags: newTestCase.tags ? newTestCase.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
+          projectId: newTestCase.projectId || selectedProjectFilter || null,
+          enhancement: newTestCase.enhancement || '',
+          ticketId: newTestCase.ticketId || '',
+          testData: newTestCase.testData || '',
+          module: newTestCase.module || '',
+          feature: newTestCase.feature || '',
+          requirements: newTestCase.requirements || ''
+        }
+
+        console.log('📤 Sending API payload:', JSON.stringify(apiPayload, null, 2))
+
+        const response = await fetch('/api/test-cases', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(apiPayload)
+        })
+
+        if (response.ok) {
+          console.log('✅ Test case saved to MongoDB successfully')
+
+          // Refresh test cases from MongoDB API
+          await loadTestCases()
+
+          setShowCreateModal(false)
+          alert(`✅ Test case "${newTestCase.title}" created successfully!`)
+        } else {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to save test case')
+        }
+      } catch (error) {
+        console.error('❌ Failed to save test case to MongoDB:', error)
+        alert(`❌ Failed to create test case: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        return
       }
-
-      // Save to localStorage using the correct storage key
-      const { saveGeneratedTestCases } = await import('@/lib/test-case-storage')
-
-      saveGeneratedTestCases(
-        [newTC],
-        ['Manual Creation'],
-        'manual',
-        selectedProjectFilter || undefined,
-        selectedProjectFilter ? projects.find(p => p.id === selectedProjectFilter)?.name : undefined,
-        undefined, // no session continuation
-        false // don't skip duplicates for manually created test cases
-      )
-
-      // Update UI
-      setTestCases(prev => [...prev, newTC])
-      setShowCreateModal(false)
 
       // Reset form
       setNewTestCase({
@@ -684,20 +832,16 @@ export default function TestCaseManagement() {
         description: '',
         category: 'Functional',
         priority: 'Medium',
-        testSteps: '',
-        expectedResult: '',
+        steps: [{ step: '' }],
+        testData: '',
         module: '',
         feature: '',
-        testData: '',
         requirements: '',
         tags: '',
         enhancement: '',
         ticketId: '',
         projectId: '',
-        complexity: 'Medium'
-      })
-
-      alert(`✅ Test case "${newTC.testCase}" created successfully!`)
+          })
 
     } catch (error) {
       console.error('Failed to create test case:', error)
@@ -711,14 +855,16 @@ export default function TestCaseManagement() {
       description: '',
       category: 'Functional',
       priority: 'Medium',
-      testSteps: '',
-      expectedResult: '',
-      module: '',
+      steps: [{ step: '' }],
       testData: '',
+      module: '',
+      feature: '',
       requirements: '',
       tags: '',
-      complexity: 'Medium'
-    })
+      enhancement: '',
+      ticketId: '',
+      projectId: '',
+      })
     setShowCreateModal(false)
   }
 
@@ -762,7 +908,14 @@ export default function TestCaseManagement() {
     return grouped
   }
 
-  const groupedTestCases = groupTestCases(filteredTestCases, groupBy)
+  const memoizedFilteredTestCases = useMemo(() => {
+    return Array.isArray(filteredTestCases) ? filteredTestCases : []
+  }, [filteredTestCases])
+
+  const groupedTestCases = useMemo(() => {
+    return groupTestCases(memoizedFilteredTestCases, groupBy)
+  }, [memoizedFilteredTestCases, groupBy])
+
 
   const breadcrumbs = [
     { label: 'Test Library' }
@@ -878,13 +1031,9 @@ export default function TestCaseManagement() {
         <>
           <ReconcileDuplicatesButton
             projectId={selectedProjectFilter || undefined}
-            onComplete={(result) => {
-              // Refresh test cases after reconciliation
-              const { getAllStoredTestCases, getStorageStats } = require('@/lib/test-case-storage')
-              const updatedTestCases = getAllStoredTestCases()
-              const updatedStats = getStorageStats()
-              setTestCases(updatedTestCases)
-              setStorageStats(updatedStats)
+            onComplete={async (result) => {
+              // Refresh test cases after reconciliation from MongoDB API
+              await loadTestCases()
               setSelectedIds([]) // Clear selection after reconciliation
             }}
           />
@@ -925,12 +1074,12 @@ export default function TestCaseManagement() {
     </div>
   )
 
-  const stats = {
-    total: filteredTestCases.length,
-    active: filteredTestCases.filter(tc => tc.testResult === 'Pass').length,
-    draft: filteredTestCases.filter(tc => tc.testResult === 'Not Executed').length,
-    review: filteredTestCases.filter(tc => tc.testResult === 'Fail').length
-  }
+  const stats = useMemo(() => ({
+    total: memoizedFilteredTestCases.length,
+    active: memoizedFilteredTestCases.filter(tc => tc.testResult === 'Pass').length,
+    draft: memoizedFilteredTestCases.filter(tc => tc.testResult === 'Not Executed').length,
+    review: memoizedFilteredTestCases.filter(tc => tc.testResult === 'Fail').length
+  }), [memoizedFilteredTestCases])
 
   // Show loading state if data is still loading
   if (loading && testCases.length === 0) {
@@ -1135,7 +1284,7 @@ export default function TestCaseManagement() {
             {groupBy === 'none' ? (
               <div className="relative">
                 <DataGrid
-                  data={filteredTestCases}
+                  data={memoizedFilteredTestCases}
                   onSelectionChange={setSelectedIds}
                   onEdit={handleEdit}
                   onView={handleView}
@@ -1215,8 +1364,8 @@ export default function TestCaseManagement() {
             <CardContent>
               <div className="space-y-3">
                 {(['critical', 'high', 'medium', 'low'] as const).map(priority => {
-                  const count = filteredTestCases.filter(tc => tc.module?.toLowerCase().includes(priority)).length
-                  const percentage = filteredTestCases.length > 0 ? Math.round((count / filteredTestCases.length) * 100) : 0
+                  const count = memoizedFilteredTestCases.filter(tc => tc.module?.toLowerCase().includes(priority)).length
+                  const percentage = memoizedFilteredTestCases.length > 0 ? Math.round((count / memoizedFilteredTestCases.length) * 100) : 0
                   
                   return (
                     <div key={priority} className="space-y-1">
@@ -1259,13 +1408,14 @@ export default function TestCaseManagement() {
         isOpen={showEditModal}
         onClose={handleCloseEditModal}
         onSave={handleSaveTestCase}
+        projects={projects}
       />
 
       {/* Bulk Edit Modal */}
       <BulkEditModal
         isOpen={showBulkEditModal}
         onClose={() => setShowBulkEditModal(false)}
-        selectedTestCases={filteredTestCases.filter(tc => selectedIds.includes(tc.id))}
+        selectedTestCases={memoizedFilteredTestCases.filter(tc => selectedIds.includes(tc.id))}
         onSave={handleBulkSave}
       />
 
@@ -1402,18 +1552,6 @@ export default function TestCaseManagement() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Complexity</label>
-                    <select
-                      value={newTestCase.complexity}
-                      onChange={(e) => setNewTestCase(prev => ({ ...prev, complexity: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    >
-                      <option value="Low">Low</option>
-                      <option value="Medium">Medium</option>
-                      <option value="High">High</option>
-                    </select>
-                  </div>
                 </div>
 
                 {/* Test Details */}
@@ -1421,33 +1559,7 @@ export default function TestCaseManagement() {
                   <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Test Details</h3>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Test Steps <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      value={newTestCase.testSteps}
-                      onChange={(e) => setNewTestCase(prev => ({ ...prev, testSteps: e.target.value }))}
-                      rows={4}
-                      placeholder="1. Navigate to login page&#10;2. Enter valid username&#10;3. Enter valid password&#10;4. Click login button"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Expected Result <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      value={newTestCase.expectedResult}
-                      onChange={(e) => setNewTestCase(prev => ({ ...prev, expectedResult: e.target.value }))}
-                      rows={3}
-                      placeholder="User should be successfully logged in and redirected to dashboard"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Test Data</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Overall Test Data</label>
                     <textarea
                       value={newTestCase.testData}
                       onChange={(e) => setNewTestCase(prev => ({ ...prev, testData: e.target.value }))}
@@ -1455,6 +1567,49 @@ export default function TestCaseManagement() {
                       placeholder="Username: testuser@example.com&#10;Password: ValidPass123"
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Test Steps <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={addStep}
+                        className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1"
+                      >
+                        <span>+</span> Add Step
+                      </button>
+                    </div>
+
+                    {newTestCase.steps.map((stepData, index) => (
+                      <div key={index} className="border border-gray-200 rounded-md p-4 mb-4 bg-gray-50">
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="text-sm font-medium text-gray-700">Step {index + 1}</h4>
+                          {newTestCase.steps.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeStep(index)}
+                              className="px-2 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Action/Description</label>
+                          <textarea
+                            value={stepData.step}
+                            onChange={(e) => updateStep(index, 'step', e.target.value)}
+                            rows={3}
+                            placeholder="Describe what action to perform (e.g., Navigate to login page)"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
                   <div>
@@ -1469,23 +1624,19 @@ export default function TestCaseManagement() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Enhancement/Story</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Ticket</label>
                     <input
                       type="text"
-                      value={newTestCase.enhancement}
-                      onChange={(e) => setNewTestCase(prev => ({ ...prev, enhancement: e.target.value }))}
-                      placeholder="e.g., Add password reset functionality"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Ticket ID</label>
-                    <input
-                      type="text"
-                      value={newTestCase.ticketId}
-                      onChange={(e) => setNewTestCase(prev => ({ ...prev, ticketId: e.target.value }))}
-                      placeholder="e.g., JIRA-1234, TICKET-567"
+                      value={newTestCase.enhancement || newTestCase.ticketId}
+                      onChange={(e) => {
+                        // Store in both fields for backward compatibility
+                        setNewTestCase(prev => ({
+                          ...prev,
+                          enhancement: e.target.value,
+                          ticketId: e.target.value
+                        }))
+                      }}
+                      placeholder="e.g., JIRA-1234, Enhancement request, Feature story"
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     />
                   </div>
@@ -1514,7 +1665,7 @@ export default function TestCaseManagement() {
               <Button
                 variant="primary"
                 onClick={handleCreateTestCase}
-                disabled={!newTestCase.title || !newTestCase.description || !newTestCase.testSteps || !newTestCase.expectedResult}
+                disabled={!newTestCase.title || !newTestCase.description || !newTestCase.steps.some(step => step.step.trim())}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Create Test Case

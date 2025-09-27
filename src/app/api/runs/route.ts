@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-// import { getAllStoredTestCases } from '@/lib/test-case-storage'
+import { ObjectId } from 'mongodb'
 import { dataService } from '@/lib/data-service'
-// import { getCurrentUser } from '@/lib/user-storage'
+import { mongodb } from '@/lib/mongodb-service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -72,70 +71,82 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the run
-    const run = await prisma.run.create({
-      data: {
-        name,
-        projectId,
-        build: build || null,
-        environments: environments ? JSON.stringify(environments) : null,
-        filters: filters ? JSON.stringify(filters) : null,
-        dueAt: dueAt ? new Date(dueAt) : null,
-        notes: notes || null,
-        createdBy: currentUser.id
-      }
-    })
+    const runData = {
+      name,
+      projectId,
+      build: build || null,
+      environments: environments ? JSON.stringify(environments) : null,
+      filters: filters ? JSON.stringify(filters) : null,
+      dueAt: dueAt ? new Date(dueAt) : null,
+      notes: notes || null,
+      createdBy: currentUser.id,
+      status: 'draft',
+      createdAt: new Date(),
+      startedAt: null,
+      closedAt: null
+    }
+
+    const run = await mongodb.insertOne('runs', runData)
 
     // Create run cases with snapshots
     const runCasesData = testCasesToInclude.map(testCase => ({
-      runId: run.id,
+      runId: new ObjectId(run.id),
       caseId: testCase.id,
       titleSnapshot: testCase.data?.testCase || 'Untitled Test Case',
-      stepsSnapshot: JSON.stringify(testCase.data?.testSteps || []),
+      stepsSnapshot: testCase.data?.testSteps || [],
       assignee: assignees && assignees.length > 0 ? assignees[0] : null,
       priority: testCase.priority || 'medium',
       component: testCase.data?.module || null,
-      tags: testCase.tags ? JSON.stringify(testCase.tags) : null,
-      status: 'Not Run' // Explicitly set the default status to match database schema
+      tags: testCase.tags || null,
+      status: 'Not Run',
+      durationSec: null,
+      notes: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
     }))
 
-    const runCases = await prisma.runCase.createMany({
-      data: runCasesData
-    })
+    const insertedRunCases = await mongodb.insertMany('run_cases', runCasesData)
 
     // Create run steps for each case
-    for (const testCase of testCasesToInclude) {
-      const runCase = await prisma.runCase.findFirst({
-        where: {
-          runId: run.id,
-          caseId: testCase.id
-        }
-      })
+    const allRunStepsData = []
+    for (let i = 0; i < testCasesToInclude.length; i++) {
+      const testCase = testCasesToInclude[i]
+      const runCase = insertedRunCases[i]
 
       if (runCase) {
         const steps = testCase.data?.testSteps || []
         if (steps.length > 0) {
           const runStepsData = steps.map((step: any, index: number) => ({
-            runCaseId: runCase.id,
+            runCaseId: runCase._id,
             idx: index + 1,
             description: step.description || '',
-            expected: step.expectedResult || ''
+            expected: step.expectedResult || '',
+            status: 'Not Run',
+            actual: null,
+            durationSec: null,
+            createdAt: new Date(),
+            updatedAt: new Date()
           }))
-
-          await prisma.runStep.createMany({
-            data: runStepsData
-          })
+          allRunStepsData.push(...runStepsData)
         } else {
           // Create a default step if no steps exist
-          await prisma.runStep.create({
-            data: {
-              runCaseId: runCase.id,
-              idx: 1,
-              description: 'Execute test case',
-              expected: 'Test case passes successfully'
-            }
+          allRunStepsData.push({
+            runCaseId: runCase._id,
+            idx: 1,
+            description: 'Execute test case',
+            expected: 'Test case passes successfully',
+            status: 'Not Run',
+            actual: null,
+            durationSec: null,
+            createdAt: new Date(),
+            updatedAt: new Date()
           })
         }
       }
+    }
+
+    if (allRunStepsData.length > 0) {
+      await mongodb.insertMany('run_steps', allRunStepsData)
     }
 
     // Return the created run with basic stats
@@ -162,50 +173,49 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('🔍 GET /api/runs called')
     const { searchParams } = new URL(request.url)
     const projectId = searchParams.get('projectId')
     const status = searchParams.get('status')
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
-    // Build where clause
-    const where: any = {}
+    console.log('🔍 GET /api/runs params:', { projectId, status, limit, offset })
+
+    // Build filter query
+    const filter: any = {}
     if (projectId) {
-      where.projectId = projectId
+      filter.projectId = projectId
     }
     if (status && status !== 'all') {
-      where.status = status
+      filter.status = status
     }
 
-    // Get runs with basic case statistics
-    const runs = await prisma.run.findMany({
-      where,
-      include: {
-        runCases: {
-          select: {
-            status: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      take: limit,
+    console.log('🔍 GET /api/runs filter:', filter)
+
+    // Get runs using mongodb service
+    const runs = await mongodb.findMany('runs', filter, {
+      sort: { createdAt: -1 },
+      limit,
       skip: offset
     })
 
-    // Add statistics to each run
-    const runsWithStats = runs.map(run => {
-      const cases = run.runCases
-      const totalCases = cases.length
-      const passedCases = cases.filter(c => c.status === 'Pass').length
-      const failedCases = cases.filter(c => c.status === 'Fail').length
-      const blockedCases = cases.filter(c => c.status === 'Blocked').length
-      const notRunCases = cases.filter(c => c.status === 'Not Run').length
+    console.log('🔍 GET /api/runs found runs:', runs.length)
+
+    // Get run cases statistics for each run
+    const runsWithStats = await Promise.all(runs.map(async run => {
+      const runCases = await mongodb.findMany('run_cases', { runId: run._id })
+
+      const totalCases = runCases.length
+      const passedCases = runCases.filter((c: any) => c.status === 'Pass').length
+      const failedCases = runCases.filter((c: any) => c.status === 'Fail').length
+      const blockedCases = runCases.filter((c: any) => c.status === 'Blocked').length
+      const notRunCases = runCases.filter((c: any) => c.status === 'Not Run').length
 
       return {
         ...run,
-        runCases: undefined, // Remove the detailed cases from response
+        id: run._id?.toString() || run.id,
+        _id: undefined,
         stats: {
           totalCases,
           passedCases,
@@ -214,11 +224,12 @@ export async function GET(request: NextRequest) {
           notRunCases,
           passRate: totalCases > 0 ? Math.round((passedCases / totalCases) * 100) : 0
         },
-        environments: run.environments ? JSON.parse(run.environments as string) : [],
-        filters: run.filters ? JSON.parse(run.filters as string) : null
+        environments: run.environments ? JSON.parse(run.environments) : [],
+        filters: run.filters ? JSON.parse(run.filters) : null
       }
-    })
+    }))
 
+    console.log('🔍 GET /api/runs returning:', runsWithStats.length, 'runs with stats')
     return NextResponse.json({ runs: runsWithStats })
 
   } catch (error) {
@@ -242,57 +253,49 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Check if run has been started (has any executed cases)
-    const runWithCases = await prisma.run.findUnique({
-      where: { id: runId },
-      include: {
-        runCases: {
-          where: {
-            OR: [
-              { status: { not: 'Not Run' } },
-              { durationSec: { not: null } }
-            ]
-          }
-        }
-      }
-    })
+    const runObjectId = new ObjectId(runId)
 
-    if (!runWithCases) {
+    // Check if run exists
+    const run = await mongodb.findOne('runs', { _id: runObjectId })
+    if (!run) {
       return NextResponse.json(
         { error: 'Run not found' },
         { status: 404 }
       )
     }
 
-    if (runWithCases.runCases.length > 0) {
+    // Check if run has been started (has any executed cases)
+    const executedCases = await mongodb.findMany('run_cases', {
+      runId: runObjectId,
+      $or: [
+        { status: { $ne: 'Not Run' } },
+        { durationSec: { $ne: null } }
+      ]
+    })
+
+    if (executedCases.length > 0) {
       return NextResponse.json(
         { error: 'Cannot delete run that has started execution' },
         { status: 400 }
       )
     }
 
-    // Delete run steps first (cascading delete)
-    await prisma.runStep.deleteMany({
-      where: {
-        runCase: {
-          runId: runId
-        }
-      }
-    })
+    // Get all run cases for this run
+    const runCases = await mongodb.findMany('run_cases', { runId: runObjectId })
+    const runCaseIds = runCases.map((rc: any) => rc._id)
+
+    // Delete run steps first
+    if (runCaseIds.length > 0) {
+      await mongodb.deleteMany('run_steps', {
+        runCaseId: { $in: runCaseIds }
+      })
+    }
 
     // Delete run cases
-    await prisma.runCase.deleteMany({
-      where: {
-        runId: runId
-      }
-    })
+    await mongodb.deleteMany('run_cases', { runId: runObjectId })
 
     // Delete the run
-    await prisma.run.delete({
-      where: {
-        id: runId
-      }
-    })
+    await mongodb.deleteOne('runs', { _id: runObjectId })
 
     return NextResponse.json({ success: true })
 

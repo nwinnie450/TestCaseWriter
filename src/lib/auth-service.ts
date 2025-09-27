@@ -248,6 +248,27 @@ export class AuthService {
   }
 
   /**
+   * Get all users from MongoDB API (async version)
+   */
+  static async getAllUsersFromDB(): Promise<User[]> {
+    try {
+      const response = await fetch('/api/users');
+      if (!response.ok) {
+        console.error('Failed to fetch users from API');
+        // Fallback to localStorage
+        return this.getAllUsers();
+      }
+
+      const users = await response.json();
+      return users;
+    } catch (error) {
+      console.error('Error fetching users from API:', error);
+      // Fallback to localStorage
+      return this.getAllUsers();
+    }
+  }
+
+  /**
    * Get user by ID
    */
   static getUserById(id: string): User | null {
@@ -263,21 +284,48 @@ export class AuthService {
    * Update user (admin/lead only)
    */
   static async updateUser(userId: string, updates: Partial<User>): Promise<boolean> {
-    const currentUser = this.getCurrentUser();
-    if (!currentUser || !this.canAccess('user-management')) {
+    try {
+      const currentUser = this.getCurrentUser();
+      if (!currentUser || !this.canAccess('user-management')) {
+        console.error('Permission denied for user update');
+        return false;
+      }
+
+      // Update in MongoDB via API
+      const response = await fetch('/api/users', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id: userId, ...updates })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to update user in database:', error.error);
+        return false;
+      }
+
+      const updatedUser = await response.json();
+
+      // Also update in localStorage for consistency
+      const users = this.getStoredUsers();
+      const userIndex = users.findIndex(u => u.id === userId);
+      if (userIndex !== -1) {
+        // Preserve password in localStorage
+        users[userIndex] = {
+          ...users[userIndex],
+          ...updatedUser
+        };
+        this.saveUsers(users);
+      }
+
+      console.log('User updated successfully:', userId);
+      return true;
+    } catch (error) {
+      console.error('Failed to update user:', error);
       return false;
     }
-
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const users = this.getStoredUsers();
-    const userIndex = users.findIndex(u => u.id === userId);
-    if (userIndex === -1) return false;
-
-    users[userIndex] = { ...users[userIndex], ...updates };
-    this.saveUsers(users);
-    return true;
   }
 
   /**
@@ -291,43 +339,37 @@ export class AuthService {
     role: 'super-admin' | 'admin' | 'lead' | 'qa' | 'user';
   }): Promise<User | null> {
     try {
+      // First save to MongoDB via API
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(userData)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create user in database');
+      }
+
+      const dbUser = await response.json();
+
+      // Also save to localStorage for backward compatibility
       const users = this.getStoredUsers();
-
-      // Check if user already exists by email
-      const existingUserByEmail = users.find(u => u.email.toLowerCase() === userData.email.toLowerCase());
-      if (existingUserByEmail) {
-        throw new Error('User with this email already exists');
-      }
-
-      // Check if username already exists (if provided)
-      if (userData.username) {
-        const existingUserByUsername = users.find(u => u.username?.toLowerCase() === userData.username!.toLowerCase());
-        if (existingUserByUsername) {
-          throw new Error('User with this username already exists');
-        }
-      }
-
-      // Generate user ID
-      const newUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      const newUser: User & { password: string } = {
-        id: newUserId,
-        email: userData.email.toLowerCase().trim(),
-        name: userData.name.trim(),
-        username: userData.username?.trim() || userData.email.split('@')[0],
-        password: userData.password, // Store password as plain text (demo purposes)
-        role: userData.role
+      const newUserWithPassword: User & { password: string } = {
+        ...dbUser,
+        password: userData.password
       };
 
-      users.push(newUser);
+      users.push(newUserWithPassword);
       this.saveUsers(users);
 
       // Return user without password
-      const { password, ...userWithoutPassword } = newUser;
-      return userWithoutPassword;
+      return dbUser;
     } catch (error) {
       console.error('Failed to create user:', error);
-      return null;
+      throw error; // Re-throw to show error in UI
     }
   }
 
@@ -342,25 +384,24 @@ export class AuthService {
         return false;
       }
 
+      // Delete from MongoDB via API
+      const response = await fetch(`/api/users?id=${userId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to delete user from database:', error.error);
+        return false;
+      }
+
+      // Also remove from localStorage for consistency
       const users = this.getStoredUsers();
       const userIndex = users.findIndex(u => u.id === userId);
-
-      if (userIndex === -1) {
-        console.error('User not found for deletion:', userId);
-        return false;
+      if (userIndex !== -1) {
+        users.splice(userIndex, 1);
+        this.saveUsers(users);
       }
-
-      const userToDelete = users[userIndex];
-
-      // Don't allow deleting super-admin users
-      if (userToDelete.role === 'super-admin') {
-        console.error('Cannot delete super-admin user');
-        return false;
-      }
-
-      // Remove user from array
-      users.splice(userIndex, 1);
-      this.saveUsers(users);
 
       console.log('User deleted successfully:', userId);
       return true;

@@ -53,36 +53,44 @@ export function TestCaseImporter({ onImport, onClose, defaultProject }: TestCase
   const [mergeConflicts, setMergeConflicts] = useState<any[]>([])
   const [intelligentResult, setIntelligentResult] = useState<any>(null)
 
-  // Load projects and existing test cases from localStorage
+  // Load projects from API and existing test cases from API
   useEffect(() => {
-    try {
-      // Load projects
-      const storedProjects = localStorage.getItem('testCaseWriter_projects')
-      if (storedProjects) {
-        const parsedProjects = JSON.parse(storedProjects)
-        const activeProjects = parsedProjects.filter((p: any) => p.status === 'active')
-        setProjects(activeProjects)
-      } else {
-        setProjects([])
-      }
+    const loadData = async () => {
+      try {
+        // Load projects from API
+        const projectsResponse = await fetch('/api/projects')
+        if (projectsResponse.ok) {
+          const projectsData = await projectsResponse.json()
+          const activeProjects = projectsData.projects ? projectsData.projects.filter((p: any) => p.status === 'active') : []
+          setProjects(activeProjects)
+          console.log('📋 TestCaseImporter - Loaded projects from API:', activeProjects.length)
+        } else {
+          console.error('Failed to fetch projects from API')
+          setProjects([])
+        }
 
-      // Load existing test cases for duplicate detection
-      const storedTestCases = localStorage.getItem('testCaseWriter_testCases')
-      if (storedTestCases) {
-        const existingTestCases = JSON.parse(storedTestCases)
-        setImportOptions(prev => ({
-          ...prev,
-          existingTestCases: Array.isArray(existingTestCases) ? existingTestCases : []
-        }))
-        console.log('📋 TestCaseImporter - Loaded existing test cases:', existingTestCases.length)
-      } else {
-        console.log('📋 TestCaseImporter - No existing test cases found')
+        // Load existing test cases from API for duplicate detection
+        const testCasesResponse = await fetch('/api/test-cases?limit=1000')
+        if (testCasesResponse.ok) {
+          const testCasesData = await testCasesResponse.json()
+          const existingTestCases = testCasesData.testCases || []
+          setImportOptions(prev => ({
+            ...prev,
+            existingTestCases: Array.isArray(existingTestCases) ? existingTestCases : []
+          }))
+          console.log('📋 TestCaseImporter - Loaded existing test cases from API:', existingTestCases.length)
+        } else {
+          console.log('📋 TestCaseImporter - Failed to load existing test cases from API')
+          setImportOptions(prev => ({ ...prev, existingTestCases: [] }))
+        }
+      } catch (error) {
+        console.error('Failed to load data from API:', error)
+        setProjects([])
+        setImportOptions(prev => ({ ...prev, existingTestCases: [] }))
       }
-    } catch (error) {
-      console.error('Failed to load data from localStorage:', error)
-      setProjects([])
-      setImportOptions(prev => ({ ...prev, existingTestCases: [] }))
     }
+
+    loadData()
   }, [])
 
   const handleDrag = (e: React.DragEvent) => {

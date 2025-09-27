@@ -282,28 +282,51 @@ export function RunCreateWizard({
   const loadUsers = async () => {
     try {
       setLoadingUsers(true)
-      console.log('🔄 Loading users from localStorage...')
+      console.log('🔄 Loading users from MongoDB API...')
 
-      // Use localStorage directly instead of API call
-      const users = getAllUsers()
-      console.log('👥 Loaded users:', users.length)
-      console.log('👥 User details:', users.map(u => ({ id: u.id, name: u.name, email: u.email })))
+      // Try API first
+      const response = await fetch('/api/users')
+      if (response.ok) {
+        const users = await response.json()
+        console.log('👥 Loaded users from API:', users.length)
+        console.log('👥 User details:', users.map((u: any) => ({ id: u._id, name: u.name, email: u.email, role: u.role })))
 
-      // Transform users to match the expected format
-      const userList = users.map(user => ({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        username: user.name, // Use name as username fallback
-        avatar: user.avatar,
-        role: user.role
-      }))
+        // Transform users to match the expected format
+        const userList = users.map((user: any) => ({
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          username: user.username || user.name, // Use username or fallback to name
+          avatar: user.avatar,
+          role: user.role
+        }))
 
-      setAvailableUsers(userList)
+        setAvailableUsers(userList)
+      } else {
+        throw new Error('API request failed')
+      }
     } catch (error) {
-      console.error('❌ Failed to load users:', error)
-      // Fallback to empty array if users can't be loaded
-      setAvailableUsers([])
+      console.error('❌ Failed to load users from API, trying localStorage fallback:', error)
+
+      // Fallback to localStorage
+      try {
+        const users = getAllUsers()
+        console.log('👥 Loaded users from localStorage fallback:', users.length)
+
+        const userList = users.map(user => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          username: user.name,
+          avatar: user.avatar,
+          role: user.role
+        }))
+
+        setAvailableUsers(userList)
+      } catch (fallbackError) {
+        console.error('❌ Failed to load users from localStorage:', fallbackError)
+        setAvailableUsers([])
+      }
     } finally {
       setLoadingUsers(false)
     }
@@ -809,9 +832,9 @@ export function RunCreateWizard({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Play className="w-8 h-8" />
@@ -830,7 +853,7 @@ export function RunCreateWizard({
         </div>
 
         {/* Step Indicator */}
-        <div className="px-6 py-4 border-b bg-gray-50">
+        <div className="px-6 py-4 border-b bg-gray-50 flex-shrink-0">
           <div className="flex items-center justify-between">
             {steps.map((step, index) => (
               <div key={step.id} className="flex items-center">
@@ -862,12 +885,12 @@ export function RunCreateWizard({
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+        <div className="p-6 overflow-y-auto flex-1 min-h-0">
           {renderStepContent()}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t bg-gray-50">
+        <div className="px-6 py-4 border-t bg-gray-50 flex-shrink-0">
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600">
               Step {currentStep} of {steps.length}

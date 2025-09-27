@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { MongoClient, ObjectId } from 'mongodb'
 import { getCurrentUser } from '@/lib/user-storage'
 import { writeFile } from 'fs/promises'
 import { join } from 'path'
@@ -91,19 +91,27 @@ export async function POST(request: NextRequest) {
     await writeFile(filePath, buffer)
 
     // Create evidence record in database
-    const evidence = await prisma.evidence.create({
-      data: {
-        filename,
-        url: `/uploads/evidence/${filename}`,
-        type: getEvidenceType(file.type),
-        size: file.size,
-        mimeType: file.type,
-        description: description || null,
-        runCaseId: runCaseId || null,
-        runStepId: runStepId || null,
-        createdBy: currentUser.id
-      }
-    })
+    const client = new MongoClient(process.env.DATABASE_URL!);
+    await client.connect();
+    const db = client.db('testcasewriter');
+
+    const evidenceData = {
+      filename,
+      url: `/uploads/evidence/${filename}`,
+      type: getEvidenceType(file.type),
+      size: file.size,
+      mimeType: file.type,
+      description: description || null,
+      runCaseId: runCaseId ? new ObjectId(runCaseId) : null,
+      runStepId: runStepId ? new ObjectId(runStepId) : null,
+      createdBy: currentUser.id,
+      createdAt: new Date()
+    };
+
+    const result = await db.collection('evidence').insertOne(evidenceData);
+    const evidence = { id: result.insertedId.toString(), ...evidenceData };
+
+    await client.close();
 
     return NextResponse.json({
       id: evidence.id,
@@ -139,12 +147,14 @@ export async function GET(request: NextRequest) {
       where.runStepId = runStepId
     }
 
-    const evidence = await prisma.evidence.findMany({
-      where,
-      orderBy: {
-        createdAt: 'desc'
-      }
-    })
+    // Connect to MongoDB
+    const client = new MongoClient(process.env.DATABASE_URL!);
+    await client.connect();
+    const db = client.db('testcasewriter');
+
+    const evidence = await db.collection('evidence').find(where).sort({ createdAt: -1 }).toArray();
+
+    await client.close();
 
     return NextResponse.json({ evidence })
 
@@ -178,10 +188,15 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    // Connect to MongoDB
+    const client = new MongoClient(process.env.DATABASE_URL!);
+    await client.connect();
+    const db = client.db('testcasewriter');
+
     // Get evidence record
-    const evidence = await prisma.evidence.findUnique({
-      where: { id: evidenceId }
-    })
+    const evidence = await db.collection('evidence').findOne({
+      _id: new ObjectId(evidenceId)
+    });
 
     if (!evidence) {
       return NextResponse.json(
@@ -209,9 +224,11 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete evidence record
-    await prisma.evidence.delete({
-      where: { id: evidenceId }
-    })
+    await db.collection('evidence').deleteOne({
+      _id: new ObjectId(evidenceId)
+    });
+
+    await client.close();
 
     return NextResponse.json({ success: true })
 

@@ -39,9 +39,6 @@ export function ExpandableRow({ testCase, forceExpanded = false, onToggle }: Exp
           <p className={cn("font-medium text-gray-900", expanded ? "" : "line-clamp-2")}>
             {title}
           </p>
-          <p className={cn("text-sm text-gray-600", expanded ? "" : "line-clamp-1")}>
-            {description}
-          </p>
         </div>
         
         {/* Toggle Button */}
@@ -96,49 +93,10 @@ export function ExpandableRow({ testCase, forceExpanded = false, onToggle }: Exp
             )}
           </div>
 
-          {/* Test Results Section - Only show when expanded */}
-          {expanded && steps.length > 0 && (
-            <div className="space-y-1 mt-3 pt-2 border-t border-gray-200">
-              <p className="text-xs font-medium text-green-700 mb-2">✅ Expected Results:</p>
-              {steps.map((step, index) => (
-                <div key={index} className="text-green-600 pl-2 border-l-2 border-green-200">
-                  <p className="text-xs">
-                    <span className="font-medium text-green-700">Step {step.step}:</span> {step.expectedResult}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
       
-      {/* Expected Result Summary (only show when collapsed) */}
-      {!expanded && testCase.testSteps?.[0]?.expectedResult && (
-        <div className="text-xs">
-          <span className="font-medium text-green-700">Expected: </span>
-          <span className="text-green-600 line-clamp-1">
-            {testCase.testSteps[0].expectedResult}
-          </span>
-        </div>
-      )}
       
-      {/* Additional info when expanded */}
-      {expanded && (
-        <div className="space-y-2 text-xs border-t border-gray-200 pt-2">
-          {testCase.qa && (
-            <div>
-              <span className="font-medium text-yellow-700">QA Notes: </span>
-              <span className="text-yellow-600">{testCase.qa}</span>
-            </div>
-          )}
-          {testCase.remarks && (
-            <div>
-              <span className="font-medium text-gray-700">Remarks: </span>
-              <span className="text-gray-600">{testCase.remarks}</span>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }

@@ -57,9 +57,14 @@ export function TeamManagement({ onTeamsChange }: TeamManagementProps) {
     loadUsers()
   }, [])
 
-  const loadTeams = () => {
-    const allTeams = getAllTeams()
-    setTeams(allTeams)
+  const loadTeams = async () => {
+    try {
+      const allTeams = await getAllTeams()
+      setTeams(allTeams)
+    } catch (error) {
+      console.error('Failed to load teams:', error)
+      setTeams([])
+    }
   }
 
   const loadUsers = () => {
@@ -75,12 +80,17 @@ export function TeamManagement({ onTeamsChange }: TeamManagementProps) {
   const handleCreateTeam = async (teamData: Omit<QATeam, 'id' | 'createdAt' | 'updatedAt'>) => {
     setLoading(true)
     try {
-      createTeam(teamData)
-      loadTeams()
-      onTeamsChange?.()
-      setShowCreateModal(false)
+      const result = await createTeam(teamData)
+      if (result) {
+        await loadTeams()
+        onTeamsChange?.()
+        setShowCreateModal(false)
+      } else {
+        alert('Failed to create team. Please try again.')
+      }
     } catch (error) {
       console.error('Failed to create team:', error)
+      alert('Error creating team: ' + (error as Error).message)
     }
     setLoading(false)
   }
@@ -102,11 +112,17 @@ export function TeamManagement({ onTeamsChange }: TeamManagementProps) {
     if (confirm('Are you sure you want to delete this team? All members will be removed.')) {
       setLoading(true)
       try {
-        deleteTeam(teamId)
-        loadTeams()
-        onTeamsChange?.()
+        const success = await deleteTeam(teamId)
+        if (success) {
+          await loadTeams()
+          onTeamsChange?.()
+          console.log('Team deleted successfully')
+        } else {
+          alert('Failed to delete team. Please try again.')
+        }
       } catch (error) {
         console.error('Failed to delete team:', error)
+        alert('Error deleting team: ' + (error as Error).message)
       }
       setLoading(false)
     }

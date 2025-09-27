@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+// import { prisma } from '@/lib/prisma' // TODO: Convert to MongoDB
 import { getCurrentUser } from '@/lib/user-storage'
 import { getCurrentUserFromSession } from '@/lib/auth-session'
 

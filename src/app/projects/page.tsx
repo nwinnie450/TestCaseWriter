@@ -11,6 +11,7 @@ import { AddUserModal } from '@/components/projects/AddUserModal'
 import { ProjectMembersModal } from '@/components/projects/ProjectMembersModal'
 import { LoginModal } from '@/components/auth/LoginModal'
 import { getCurrentUser, addUserToProject } from '@/lib/user-storage'
+import { ProjectsAPI } from '@/lib/api-client'
 import { 
   Plus,
   Folder,
@@ -26,7 +27,6 @@ import {
   Settings,
   UserPlus
 } from 'lucide-react'
-import { withAuth } from '@/components/auth/withAuth'
 import { UserAssignment, AssignedUsersSummary } from '@/components/user-management/UserAssignment'
 
 interface Project {
@@ -63,25 +63,40 @@ function ProjectsPage() {
     status: 'active' as const
   })
 
-  // Load projects from localStorage on mount
+  // Load projects from MongoDB API on mount
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('testCaseWriter_projects')
-      if (stored) {
-        const parsedProjects = JSON.parse(stored).map((p: any) => ({
+    const loadProjects = async () => {
+      try {
+        const projectsData = await ProjectsAPI.getAll()
+        const parsedProjects = projectsData.map((p: any) => ({
           ...p,
           createdAt: new Date(p.createdAt),
           updatedAt: new Date(p.updatedAt)
         }))
         setProjects(parsedProjects)
-      } else {
-        // No default projects - start clean
-        setProjects([])
+      } catch (error) {
+        console.error('Failed to load projects:', error)
+        // Try localStorage as fallback
+        try {
+          const stored = localStorage.getItem('testCaseWriter_projects')
+          if (stored) {
+            const parsedProjects = JSON.parse(stored).map((p: any) => ({
+              ...p,
+              createdAt: new Date(p.createdAt),
+              updatedAt: new Date(p.updatedAt)
+            }))
+            setProjects(parsedProjects)
+          } else {
+            setProjects([])
+          }
+        } catch (fallbackError) {
+          console.error('Failed to load projects from fallback:', fallbackError)
+          setProjects([])
+        }
       }
-    } catch (error) {
-      console.error('Failed to load projects:', error)
-      setProjects([])
     }
+
+    loadProjects()
   }, [])
 
   // Load current user
@@ -90,7 +105,7 @@ function ProjectsPage() {
     setCurrentUser(user)
   }, [])
 
-  // Update project ownership when user is loaded
+  // Update project ownership when user is loaded (legacy cleanup)
   useEffect(() => {
     if (currentUser && projects.length > 0) {
       // Update projects to have the current user as owner if they don't have an ownerId
@@ -98,15 +113,24 @@ function ProjectsPage() {
         ...project,
         ownerId: project.ownerId === 'current-user' ? currentUser.id : project.ownerId
       }))
-      
+
       // Check if any changes were made
-      const hasChanges = updatedProjects.some((project, index) => 
+      const hasChanges = updatedProjects.some((project, index) =>
         project.ownerId !== projects[index].ownerId
       )
-      
+
       if (hasChanges) {
         setProjects(updatedProjects)
-        localStorage.setItem('testCaseWriter_projects', JSON.stringify(updatedProjects))
+        // Update in database if needed
+        updatedProjects.forEach(async (project) => {
+          if (project.ownerId !== projects.find(p => p.id === project.id)?.ownerId) {
+            try {
+              await ProjectsAPI.update(project.id, { ownerId: project.ownerId })
+            } catch (error) {
+              console.error('Failed to update project ownership:', error)
+            }
+          }
+        })
         console.log('Updated project ownership for current user:', currentUser.id)
       }
     }
@@ -164,46 +188,70 @@ function ProjectsPage() {
 
     if (!newProject.name.trim()) return
 
-    const project: Project = {
-      id: `proj-${Date.now()}`,
-      name: newProject.name.trim(),
-      description: newProject.description.trim(),
-      status: newProject.status,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      testCaseCount: 0,
-      templateCount: 0,
-      memberCount: 1,
-      ownerId: currentUser.id
-    }
-
-    const updatedProjects = [...projects, project]
-    setProjects(updatedProjects)
-    localStorage.setItem('testCaseWriter_projects', JSON.stringify(updatedProjects))
-    
-    // Add the current user as the project owner
     try {
-      await addUserToProject(project.id, currentUser.email, 'owner', currentUser.id)
+      const projectData = {
+        name: newProject.name.trim(),
+        description: newProject.description.trim(),
+        status: newProject.status,
+        ownerId: currentUser.id,
+        testCaseCount: 0,
+        templateCount: 0,
+        memberCount: 1
+      }
+
+      const createdProject = await ProjectsAPI.create(projectData)
+
+      // Update local state with the new project
+      const project: Project = {
+        ...createdProject,
+        createdAt: new Date(createdProject.createdAt),
+        updatedAt: new Date(createdProject.updatedAt)
+      }
+
+      const updatedProjects = [...projects, project]
+      setProjects(updatedProjects)
+
+      // Add the current user as the project owner
+      try {
+        await addUserToProject(project.id, currentUser.email, 'owner', currentUser.id)
+      } catch (error) {
+        console.error('Failed to add owner to project members:', error)
+      }
+
+      setNewProject({ name: '', description: '', status: 'active' })
+      setShowNewProjectModal(false)
+
+      alert(`✅ Project "${project.name}" created successfully!`)
     } catch (error) {
-      console.error('Failed to add owner to project members:', error)
+      console.error('Failed to create project:', error)
+      alert(`❌ Failed to create project: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
-    
-    setNewProject({ name: '', description: '', status: 'active' })
-    setShowNewProjectModal(false)
-    
-    alert(`✅ Project "${project.name}" created successfully!`)
   }
 
-  const handleUpdateProject = (updatedProject: Project) => {
-    const updatedProjects = projects.map(p => 
-      p.id === updatedProject.id 
-        ? { ...updatedProject, updatedAt: new Date() }
-        : p
-    )
-    setProjects(updatedProjects)
-    localStorage.setItem('testCaseWriter_projects', JSON.stringify(updatedProjects))
-    setEditingProject(null)
-    alert(`✅ Project "${updatedProject.name}" updated successfully!`)
+  const handleUpdateProject = async (updatedProject: Project) => {
+    try {
+      const updateData = {
+        name: updatedProject.name,
+        description: updatedProject.description,
+        status: updatedProject.status
+      }
+
+      const updated = await ProjectsAPI.update(updatedProject.id, updateData)
+
+      // Update local state
+      const updatedProjects = projects.map(p =>
+        p.id === updatedProject.id
+          ? { ...updated, createdAt: new Date(updated.createdAt), updatedAt: new Date(updated.updatedAt) }
+          : p
+      )
+      setProjects(updatedProjects)
+      setEditingProject(null)
+
+      alert(`✅ Project "${updatedProject.name}" updated successfully!`)
+    } catch (error) {
+      console.error('Failed to update project:', error)
+      alert(`❌ Failed to update project: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
 
   const handleDeleteProject = (projectId: string) => {
@@ -237,60 +285,66 @@ function ProjectsPage() {
     }
   }
 
-  const deleteProjectAndTestCases = (projectId: string, projectName: string, testCaseCount: number) => {
+  const deleteProjectAndTestCases = async (projectId: string, projectName: string, testCaseCount: number) => {
     try {
-      // Remove project from projects list
-      const updatedProjects = projects.filter(p => p.id !== projectId)
-      setProjects(updatedProjects)
-      localStorage.setItem('testCaseWriter_projects', JSON.stringify(updatedProjects))
+      // Delete project from database
+      const success = await ProjectsAPI.delete(projectId)
 
-      // Remove associated test cases
-      if (testCaseCount > 0) {
-        const projectTestCases = getProjectTestCases(projectId)
-        const testCaseIds = projectTestCases.map((tc: any) => tc.id)
-        
-        // Use existing delete function from test-case-storage
-        const { deleteTestCasesByIds } = require('@/lib/test-case-storage')
-        deleteTestCasesByIds(testCaseIds)
-        
-        console.log(`🗑️ Deleted ${testCaseCount} test cases from project ${projectName}`)
-      }
+      if (success) {
+        // Remove project from local state
+        const updatedProjects = projects.filter(p => p.id !== projectId)
+        setProjects(updatedProjects)
 
-      // Show success message and add notification
-      if (testCaseCount > 0) {
-        alert(`🗑️ Project "${projectName}" and ${testCaseCount} test case(s) deleted successfully!`)
-        
-        // Add notification about project deletion
-        try {
-          const { addNotification } = require('@/lib/notification-utils')
-          addNotification({
-            type: 'export_complete', // Using existing type, could add 'project_deleted' later
-            title: 'Project Deleted',
-            description: `Project "${projectName}" and ${testCaseCount} test cases were permanently deleted.`
-          })
-        } catch (error) {
-          console.warn('Could not add notification:', error)
+        // Remove associated test cases
+        if (testCaseCount > 0) {
+          const projectTestCases = getProjectTestCases(projectId)
+          const testCaseIds = projectTestCases.map((tc: any) => tc.id)
+
+          // Use existing delete function from test-case-storage
+          const { deleteTestCasesByIds } = require('@/lib/test-case-storage')
+          deleteTestCasesByIds(testCaseIds)
+
+          console.log(`🗑️ Deleted ${testCaseCount} test cases from project ${projectName}`)
         }
+
+        // Show success message and add notification
+        if (testCaseCount > 0) {
+          alert(`🗑️ Project "${projectName}" and ${testCaseCount} test case(s) deleted successfully!`)
+
+          // Add notification about project deletion
+          try {
+            const { addNotification } = require('@/lib/notification-utils')
+            addNotification({
+              type: 'export_complete', // Using existing type, could add 'project_deleted' later
+              title: 'Project Deleted',
+              description: `Project "${projectName}" and ${testCaseCount} test cases were permanently deleted.`
+            })
+          } catch (error) {
+            console.warn('Could not add notification:', error)
+          }
+        } else {
+          alert(`🗑️ Project "${projectName}" deleted successfully!`)
+
+          // Add notification about project deletion
+          try {
+            const { addNotification } = require('@/lib/notification-utils')
+            addNotification({
+              type: 'export_complete',
+              title: 'Project Deleted',
+              description: `Empty project "${projectName}" was deleted successfully.`
+            })
+          } catch (error) {
+            console.warn('Could not add notification:', error)
+          }
+        }
+
+        console.log(`✅ Project ${projectName} (${projectId}) deleted successfully`)
       } else {
-        alert(`🗑️ Project "${projectName}" deleted successfully!`)
-        
-        // Add notification about project deletion
-        try {
-          const { addNotification } = require('@/lib/notification-utils')
-          addNotification({
-            type: 'export_complete',
-            title: 'Project Deleted', 
-            description: `Empty project "${projectName}" was deleted successfully.`
-          })
-        } catch (error) {
-          console.warn('Could not add notification:', error)
-        }
+        throw new Error('Failed to delete project from database')
       }
-
-      console.log(`✅ Project ${projectName} (${projectId}) deleted successfully`)
     } catch (error) {
       console.error('Error deleting project:', error)
-      alert(`❌ Error deleting project "${projectName}". Please try again.`)
+      alert(`❌ Error deleting project "${projectName}": ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -737,4 +791,4 @@ function ProjectsPage() {
   )
 }
 
-export default withAuth(ProjectsPage)
+export default ProjectsPage

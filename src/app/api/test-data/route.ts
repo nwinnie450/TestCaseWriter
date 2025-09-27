@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+// import { prisma } from '@/lib/prisma'; // TODO: Convert to MongoDB
 
 export async function POST(request: NextRequest) {
   try {
+    // TODO: Convert this endpoint to use MongoDB
+    return NextResponse.json({
+      success: false,
+      error: 'This endpoint needs to be converted to MongoDB',
+      message: 'Prisma has been removed, this endpoint needs MongoDB implementation'
+    }, { status: 501 });
+
     // Create some sample test cases with duplicate IDs to test the fixer
     const sampleTestCases = [
       {
